@@ -125,6 +125,48 @@ pub const TOKYO_NIGHT: Palette = Palette {
     lapis: Color::Rgb(125, 207, 255),
 };
 
+/// Solarized Dark
+pub const SOLARIZED_DARK: Palette = Palette {
+    name: "solarized-dark",
+    ink: Color::Rgb(0, 31, 39),            // below base03
+    bg: Color::Rgb(0, 43, 54),             // base03
+    bg_lift: Color::Rgb(7, 54, 66),        // base02
+    fg: Color::Rgb(131, 148, 150),         // base0
+    sage: Color::Rgb(101, 123, 131),       // base00
+    shadow: Color::Rgb(88, 110, 117),      // base01
+    accent: Color::Rgb(42, 161, 152),      // cyan
+    accent_deep: Color::Rgb(27, 120, 118), // cyan, pulled toward base03
+    bright: Color::Rgb(211, 54, 130),      // magenta
+    moss: Color::Rgb(133, 153, 0),         // green
+    leaf: Color::Rgb(133, 153, 0),         // green
+    gold: Color::Rgb(181, 137, 0),         // yellow
+    coral: Color::Rgb(220, 50, 47),        // red
+    plum: Color::Rgb(108, 113, 196),       // violet
+    clay: Color::Rgb(203, 75, 22),         // orange
+    lapis: Color::Rgb(38, 139, 210),       // blue
+};
+
+/// Solarized Light
+pub const SOLARIZED_LIGHT: Palette = Palette {
+    name: "solarized-light",
+    ink: Color::Rgb(226, 219, 199),         // below base2
+    bg: Color::Rgb(253, 246, 227),          // base3
+    bg_lift: Color::Rgb(238, 232, 213),     // base2
+    fg: Color::Rgb(101, 123, 131),          // base00
+    sage: Color::Rgb(131, 148, 150),        // base0
+    shadow: Color::Rgb(147, 161, 161),      // base1
+    accent: Color::Rgb(42, 161, 152),       // cyan
+    accent_deep: Color::Rgb(116, 191, 178), // cyan, pulled toward base3
+    bright: Color::Rgb(211, 54, 130),       // magenta
+    moss: Color::Rgb(133, 153, 0),          // green
+    leaf: Color::Rgb(133, 153, 0),          // green
+    gold: Color::Rgb(181, 137, 0),          // yellow
+    coral: Color::Rgb(220, 50, 47),         // red
+    plum: Color::Rgb(108, 113, 196),        // violet
+    clay: Color::Rgb(203, 75, 22),          // orange
+    lapis: Color::Rgb(38, 139, 210),        // blue
+};
+
 /// Catppuccin Latte — Catppuccin's light variant.
 pub const LIGHT: Palette = Palette {
     name: "catppuccin-latte",
@@ -146,7 +188,15 @@ pub const LIGHT: Palette = Palette {
     lapis: Color::Rgb(31, 88, 205),
 };
 
-pub const THEMES: [&Palette; 5] = [&OSAKA_JADE, &CATPPUCCIN, &GITHUB, &TOKYO_NIGHT, &LIGHT];
+pub const THEMES: [&Palette; 7] = [
+    &OSAKA_JADE,
+    &CATPPUCCIN,
+    &GITHUB,
+    &TOKYO_NIGHT,
+    &LIGHT,
+    &SOLARIZED_DARK,
+    &SOLARIZED_LIGHT,
+];
 
 static SELECTED: AtomicUsize = AtomicUsize::new(0);
 

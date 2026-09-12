@@ -1068,6 +1068,12 @@ fn cmd_theme(name: Option<&str>) -> Result<()> {
     }
 
     let current = theme::palette().name;
+    let width = theme::THEMES
+        .iter()
+        .map(|p| p.name.len())
+        .max()
+        .unwrap_or(0);
+
     println!("\n{}\n", panel_top("THEMES"));
     for palette in theme::THEMES {
         let selected = palette.name == current;
@@ -1082,7 +1088,10 @@ fn cmd_theme(name: Option<&str>) -> Result<()> {
             .map(|i| paint("███", theme::ramp_of(palette, i)))
             .collect::<Vec<_>>()
             .join("");
-        println!("  {marker} {:<14} {swatch}", bold(palette.name));
+        println!(
+            "  {marker} {} {swatch}",
+            bold(&format!("{:<width$}", palette.name))
+        );
     }
     println!("\n  set one with {}\n", bold("craft theme <name>"));
     println!("{}\n", panel_bottom());

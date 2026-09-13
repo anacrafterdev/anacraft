@@ -300,7 +300,7 @@ craft theme tokyo-night    # switch and persist
 craft --theme github dash  # override for one run
 ```
 
-`osaka-jade` (default) · `catppuccin` · `github` · `tokyo-night` · `catppuccin-latte`
+`osaka-jade` (default) · `catppuccin` · `github` · `tokyo-night` · `catppuccin-latte` · `solarized-dark` · `solarized-light`
 
 The ore vocabulary — diamond, gold, redstone, lapis — is mapped onto whichever
 palette is selected, so the texture pack survives a theme swap.
@@ -474,5 +474,3 @@ what CI expects.
 ## License
 
 [Apache License 2.0](LICENSE)
-
-

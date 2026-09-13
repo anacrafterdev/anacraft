@@ -236,8 +236,9 @@ craft --theme github dash  # one run only
 ```
 
 `osaka-jade` (default) · `catppuccin` · `github` · `tokyo-night` ·
-`catppuccin-latte`. The ore vocabulary — diamond, gold, redstone, lapis — is
-mapped onto whichever palette is selected, so the texture pack survives a swap.
+`catppuccin-latte` · `solarized-dark` · `solarized-light`. The ore vocabulary
+— diamond, gold, redstone, lapis — is mapped onto whichever palette is selected,
+so the texture pack survives a swap.
 
 ## Configuration
 

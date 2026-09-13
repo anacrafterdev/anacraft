@@ -103,69 +103,32 @@
     }
 
     /* nav:start */
-    nav {
-      /* Not pinned: the nav is the top of the page, not a bar laid over it, so it
+  nav {
+    /* Not pinned: the nav is the top of the page, not a bar laid over it, so it
        scrolls away with everything else and takes the ground it sits on. */
-      position: relative;
-      z-index: 1;
-    }
-
-    .nav-in {
-      display: flex;
-      align-items: center;
-      gap: 32px;
-      height: 60px;
-    }
-
-    .brand {
-      font-family: 'Archivo', sans-serif;
-      font-weight: 900;
-      font-size: 20px;
-      letter-spacing: -.03em;
-      color: var(--white);
-      display: flex;
-      align-items: baseline;
-      gap: 0;
-    }
-
-    .brand .pick {
-      width: 14px;
-      height: 14px;
-      display: block;
-      margin-right: 2px;
-    }
-
-    /* Same voice as the footer: mono, lowercase, one rhythm. The casing is
+    position: relative; z-index: 1;
+  }
+  .nav-in { display: flex; align-items: center; gap: 32px; height: 60px; }
+  .brand {
+    font-family: 'Archivo', sans-serif; font-weight: 900;
+    font-size: 20px; letter-spacing: -.03em; color: var(--white);
+    display: flex; align-items: baseline; gap: 0;
+  }
+  .brand .pick { width: 14px; height: 14px; display: block; margin-right: 2px; }
+  /* Same voice as the footer: mono, lowercase, one rhythm. The casing is
      text-transform rather than typed in, so the markup still says "Quick start"
      and "Configure" for a screen reader. The brand keeps its own face —
      it is a logo, not a link in the row. */
-    .nav-links {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin-left: auto;
-      font-family: var(--mono);
-      font-size: 11.5px;
-      text-transform: lowercase;
-      letter-spacing: .01em;
-      color: var(--dim);
-    }
-
-    .nav-links a {
-      transition: color .15s;
-    }
-
-    .nav-links a:hover {
-      color: var(--white);
-    }
-
-    @media (max-width: 720px) {
-      .nav-links a:not(.mode-toggle) {
-        display: none;
-      }
-    }
-
-    /* nav:end */
+  .nav-links {
+    display: flex; align-items: center; gap: 16px; margin-left: auto;
+    font-family: var(--mono); font-size: 11.5px;
+    text-transform: lowercase; letter-spacing: .01em;
+    color: var(--dim);
+  }
+  .nav-links a { transition: color .15s; }
+  .nav-links a:hover { color: var(--white); }
+  @media (max-width: 720px) { .nav-links a:not(.mode-toggle) { display: none; } }
+  /* nav:end */
 
     /* ── hero ──────────────────────────────────────────── */
     .hero {
@@ -606,112 +569,54 @@
     }
 
     /* footer:start */
-    footer {
-      border-top: 1px solid var(--line);
-      padding: 34px 0;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 14px;
-      align-items: center;
-      color: var(--dim);
-      /* The whole row runs in the terminal voice: mono, lowercase, a little
+  footer {
+    border-top: 1px solid var(--line); padding: 34px 0;
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+    color: var(--dim);
+    /* The whole row runs in the terminal voice: mono, lowercase, a little
        tighter than the page text. The casing is done with text-transform
        rather than typed in, so the markup still says "Privacy Policy" for a
        screen reader and for anyone reading the source. Mono sets wider than
        the sans it replaces, hence the step down in size. */
-      font-family: var(--mono);
-      font-size: 11.5px;
-      text-transform: lowercase;
-      letter-spacing: .01em;
-    }
-
-    footer .r {
-      margin-left: auto;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    /* Which release the install command will actually give you. It sits in the
+    font-family: var(--mono); font-size: 11.5px;
+    text-transform: lowercase; letter-spacing: .01em;
+  }
+  footer .r { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+  /* Which release the install command will actually give you. It sits in the
      footer rather than beside the command because it is a fact people check
      against a changelog, not a version they are asked to type — `install.sh`
      resolves the latest release itself and takes no version argument. Kept a
      step quieter than the line it follows: it is a fingerprint, not news. */
-    footer .ver {
-      opacity: .72;
-    }
-
-    footer a:hover {
-      color: var(--jade);
-    }
-
-    footer .by {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    /* A chip rather than a word: the rule does the framing the brackets used to,
+  footer .ver { opacity: .72; }
+  footer a:hover { color: var(--jade); }
+  footer .by { display: inline-flex; align-items: center; gap: 8px; }
+  /* A chip rather than a word: the rule does the framing the brackets used to,
      so nothing has to be typed into the markup and a screen reader still reads
      a clean "crafted in San Francisco". */
-    footer .tag {
-      font-size: 11px;
-      letter-spacing: .04em;
-      color: var(--jade);
-      border: 1px solid var(--line-2);
-      /* A tinted rule so the chip reads as one green object rather than green
+  footer .tag {
+    font-size: 11px; letter-spacing: .04em;
+    color: var(--jade); border: 1px solid var(--line-2);
+    /* A tinted rule so the chip reads as one green object rather than green
        text in a grey box. Declared after the shorthand: a browser without
        color-mix drops just this line and keeps the neutral border. */
-      border-color: color-mix(in srgb, var(--jade) 32%, transparent);
-      padding: 2px 8px;
-      line-height: 1.6;
-    }
-
-    /* The glow rides the same curve as the beat, brightest at the top of each
+    border-color: color-mix(in srgb, var(--jade) 32%, transparent);
+    padding: 2px 8px; line-height: 1.6;
+  }
+  /* The glow rides the same curve as the beat, brightest at the top of each
      pulse, so the heart reads as lit from within rather than merely resized.
      It is drawn with var(--jade), which the light theme redefines, so the
      halo follows the palette instead of pinning one value. */
-    .heart {
-      height: 14px;
-      width: auto;
-      display: block;
-      transform-origin: center;
-      animation: beat 2.4s ease-in-out infinite;
-      filter: drop-shadow(0 0 3px var(--jade));
-    }
-
-    @keyframes beat {
-
-      0%,
-      40%,
-      100% {
-        transform: scale(1);
-        filter: drop-shadow(0 0 2px var(--jade));
-      }
-
-      10% {
-        transform: scale(1.3);
-        filter: drop-shadow(0 0 7px var(--jade));
-      }
-
-      20% {
-        transform: scale(1);
-        filter: drop-shadow(0 0 2px var(--jade));
-      }
-
-      30% {
-        transform: scale(1.18);
-        filter: drop-shadow(0 0 5px var(--jade));
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .heart {
-        animation: none;
-      }
-    }
-
-    /* footer:end */
+  .heart { height: 14px; width: auto; display: block; transform-origin: center;
+           animation: beat 2.4s ease-in-out infinite;
+           filter: drop-shadow(0 0 3px var(--jade)); }
+  @keyframes beat {
+    0%, 40%, 100% { transform: scale(1);    filter: drop-shadow(0 0 2px var(--jade)); }
+    10%           { transform: scale(1.3);  filter: drop-shadow(0 0 7px var(--jade)); }
+    20%           { transform: scale(1);    filter: drop-shadow(0 0 2px var(--jade)); }
+    30%           { transform: scale(1.18); filter: drop-shadow(0 0 5px var(--jade)); }
+  }
+  @media (prefers-reduced-motion: reduce) { .heart { animation: none; } }
+  /* footer:end */
 
     /* ── light mode overrides ──────────────────────────── */
     html.light {
@@ -782,21 +687,21 @@
 <body>
 
   <!-- nav:start -->
-  <nav>
-    <div class="wrap nav-in">
-      <a class="brand" href="/"><img class="pick" src="mark.svg?v=7b310f6e" alt="A" width="14" height="14">nacraft</a>
-      <div class="nav-links">
-        <a href="/#start">Quick start</a>
-        <a href="/#mcp">MCP</a>
-        <a href="/alerts.html">Alerts</a>
-        <a href="/setup-ga4.html">Configure</a>
-        <a href="/lovable.html">Lovable</a>
-        <a href="/burn.html">Badge</a>
-        <a href="/pricing.html">Pricing</a>
-      </div>
+<nav>
+  <div class="wrap nav-in">
+    <a class="brand" href="/"><img class="pick" src="mark.svg?v=7b310f6e" alt="A" width="14" height="14">nacraft</a>
+    <div class="nav-links">
+      <a href="/#start">Quick start</a>
+      <a href="/#mcp">MCP</a>
+      <a href="/alerts.html">Alerts</a>
+      <a href="/setup-ga4.html">Configure</a>
+      <a href="/lovable.html">Lovable</a>
+      <a href="/burn.html">Badge</a>
+      <a href="/pricing.html">Pricing</a>
     </div>
-  </nav>
-  <!-- nav:end -->
+  </div>
+</nav>
+<!-- nav:end -->
 
   <header class="hero">
     <div class="wrap hero-in">
@@ -1229,39 +1134,19 @@
   </section>
 
   <!-- footer:start -->
-  <footer>
-    <div class="wrap" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;width:100%">
-      <span class="by"><span class="tag">crafted</span> in San Francisco <svg class="heart" role="img" aria-label="love"
-          viewBox="0 0 9 8" fill="var(--jade)" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
-          <rect x="1" y="0" width="2" height="1" />
-          <rect x="6" y="0" width="2" height="1" />
-          <rect x="0" y="1" width="1" height="1" />
-          <rect x="3" y="1" width="1" height="1" />
-          <rect x="5" y="1" width="1" height="1" />
-          <rect x="8" y="1" width="1" height="1" />
-          <rect x="0" y="2" width="1" height="1" />
-          <rect x="4" y="2" width="1" height="1" />
-          <rect x="8" y="2" width="1" height="1" />
-          <rect x="0" y="3" width="1" height="1" />
-          <rect x="8" y="3" width="1" height="1" />
-          <rect x="1" y="4" width="1" height="1" />
-          <rect x="7" y="4" width="1" height="1" />
-          <rect x="2" y="5" width="1" height="1" />
-          <rect x="6" y="5" width="1" height="1" />
-          <rect x="3" y="6" width="1" height="1" />
-          <rect x="5" y="6" width="1" height="1" />
-          <rect x="4" y="7" width="1" height="1" />
-        </svg></span>
-      <span class="legal">© 2026 · All rights reserved</span>
-      <span class="ver">v0.19.0</span>
-      <span class="r">
-        <a href="/privacy.html">Privacy Policy</a>
-        <a href="/terms.html">Terms of Service</a>
-        <a href="mailto:support@anacraft.dev">support@anacraft.dev</a>
-      </span>
-    </div>
-  </footer>
-  <!-- footer:end -->
+<footer>
+  <div class="wrap" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;width:100%">
+    <span class="by"><span class="tag">crafted</span> in San Francisco <svg class="heart" role="img" aria-label="love" viewBox="0 0 9 8" fill="var(--jade)" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="0" width="2" height="1"/><rect x="6" y="0" width="2" height="1"/><rect x="0" y="1" width="1" height="1"/><rect x="3" y="1" width="1" height="1"/><rect x="5" y="1" width="1" height="1"/><rect x="8" y="1" width="1" height="1"/><rect x="0" y="2" width="1" height="1"/><rect x="4" y="2" width="1" height="1"/><rect x="8" y="2" width="1" height="1"/><rect x="0" y="3" width="1" height="1"/><rect x="8" y="3" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="7" y="4" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/><rect x="6" y="5" width="1" height="1"/><rect x="3" y="6" width="1" height="1"/><rect x="5" y="6" width="1" height="1"/><rect x="4" y="7" width="1" height="1"/></svg></span>
+    <span class="legal">© 2026 · All rights reserved</span>
+    <span class="ver">v0.20.0</span>
+    <span class="r">
+      <a href="/privacy.html">Privacy Policy</a>
+      <a href="/terms.html">Terms of Service</a>
+      <a href="mailto:support@anacraft.dev">support@anacraft.dev</a>
+    </span>
+  </div>
+</footer>
+<!-- footer:end -->
 
   <script>
     function cp(btn) {

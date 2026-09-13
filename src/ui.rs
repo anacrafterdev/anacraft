@@ -3345,6 +3345,7 @@ fn events_panel(dash: &Dash, width: u16) -> Chart<'_> {
     .right_aligned();
 
     Chart::new(datasets)
+        .style(Style::default().bg(theme::bg()))
         .block(
             framed("EVENTS", "1", ore::xp())
                 .title_top(headline)

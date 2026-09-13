@@ -66,7 +66,7 @@ cost anyone the meaning.
 
 Colors go through `src/theme.rs` rather than being written inline. Reach for an
 ore name (`ore::diamond()`, `ore::redstone()`) instead of a literal, so whatever
-you add survives a theme swap across all five palettes.
+you add survives a theme swap across all seven palettes.
 
 ## Testing UI code
 

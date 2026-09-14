@@ -66,8 +66,8 @@ const MOVER_SHARE: f64 = 0.35;
 /// palette: this is going to other people's Slack, where the theme selected on
 /// this machine is not a thing that exists. Darker than the terminal reds and
 /// golds because it has to hold against a white background too.
-const BAR_ALARM: &str = "#e03131";
-const BAR_WATCH: &str = "#c99700";
+pub(crate) const BAR_ALARM: &str = "#e03131";
+pub(crate) const BAR_WATCH: &str = "#c99700";
 
 /// Where a property lives in the GA4 web UI.
 ///
@@ -75,7 +75,7 @@ const BAR_WATCH: &str = "#c99700";
 /// interaction payload to the app's request URL, and `craft slack --install`
 /// asks for `incoming-webhook` and nothing else, so there is no endpoint to
 /// receive one. A link needs no scope and opens the same page.
-fn ga_url(property: &str) -> String {
+pub(crate) fn ga_url(property: &str) -> String {
     format!("https://analytics.google.com/analytics/web/#/p{property}/reports/dashboard")
 }
 

@@ -148,6 +148,84 @@ server still starts and its tools say which one is missing, so the client never
 reports it as disconnected. `craft mcp --demo` runs on synthetic data without
 either. More in [Ask an assistant](#ask-an-assistant).
 
+## Audit
+
+Every other command answers "what happened". `craft audit` answers the question
+before it — is this property measuring the site at all, and is what it measured
+worth trusting.
+
+```sh
+craft audit                  # twelve checks over the last 28 days
+craft audit --days 90        # a longer window
+craft audit --format json    # the findings as one object, for a script
+craft audit --format slack   # a Block Kit payload, for a webhook
+craft audit --demo           # a synthetic report — no account, no subscription
+```
+
+It reads two APIs, because measurement and configuration fail separately. The
+Data API says how often `purchase` fired; the Admin API says whether anybody
+ever told GA4 that `purchase` was the point. A property can pass the first and
+fail the second for a year without anybody noticing, and that combination —
+traffic arriving, nothing marked as an outcome — is the most common thing this
+finds.
+
+**What it checks.** Four things that make a number wrong:
+
+- nothing recorded at all, which is a tag that is not installed or a property
+  that is not the one the site reports to
+- no web data stream, so there is no measurement id to put on a site
+- nothing marked as a key event, or a key event configured and never fired —
+  GA4 matches names exactly, so `Purchase` and `purchase` are two events and
+  only one of them counts
+- `purchase` arriving without its `value`, which makes every revenue, ARPU and
+  ROAS figure on the property zero — including in any Google Ads account
+  importing conversions from it
+
+Four that distort one:
+
+- page views counted twice, which is what a gtag snippet left in the page
+  beside a GTM tag that also sends one looks like from here: bounce rate near
+  nothing, views per session doubled
+- the site referring itself, which is a visit cut in half by a domain the
+  cross-domain configuration does not cover
+- a payment or sign-in page credited with conversions, because the return trip
+  starts a new session referred by the gateway
+- an event that stopped firing between this window and the one before it, which
+  is a tag removed, renamed, or moved behind something that no longer runs
+
+And four that are worth knowing before reading anything else: two names for one
+event, sessions GA4 could not attribute at all, a direct share high enough to
+suggest campaigns going out untagged, and more than one site reporting into the
+property.
+
+**What it will not do.** It reports a symptom and names the usual cause, never
+the other way round — "bounce rate is 1.2%" is something the API said, and "you
+have two page_view tags" is a guess. It cannot see inside a GTM container, so
+it finds the tagging bugs that show up in the data and not the ones that only
+show up in the container. And every check has a floor under it: a property with
+eighty sessions has no meaningful bounce rate and no meaningful direct share,
+so those checks report as not run rather than firing on noise.
+
+**Exit codes.** `0` when the property is clean, `2` when it is not, `1` on an
+error — the same convention `craft watch` uses, so a weekly audit into Slack is
+one cron line:
+
+```sh
+0 9 * * 1  craft audit --format slack \
+             | curl -sX POST -H 'Content-Type: application/json' -d @- "$SLACK_WEBHOOK"
+```
+
+Unlike `craft watch`, a clean pass still prints: an audit is something somebody
+asked for, and "twelve checks, nothing found" is the answer they asked for. The
+line under every report says how many checks ran, because "no findings" means
+nothing without the number of ways it looked — and a check that could not run,
+because the Admin API was unreadable or the property was too quiet to judge, is
+reported as not run rather than as a pass.
+
+`craft audit` is part of the [Anacrafter plan](https://anacraft.dev/pricing.html);
+`craft audit --demo` is not, and shows the whole shape of a report before
+anything is connected.
+
 ## Alerts
 
 `craft watch` compares the most recent complete day against the mean of the
@@ -331,6 +409,7 @@ works. `which craft` gives the value to paste.
 | Tool | Answers |
 |------|---------|
 | `site_status` | Headline metrics against the period before, the daily user series, and the achievements that fired |
+| `audit_site` | Whether the property is measuring correctly: twelve graded checks over 28 days, each carrying what it means |
 | `live_visitors` | Who is on the site right now, by country |
 | `list_pages` | Most-visited pages |
 | `list_events` | Events by count, with the per-day total against the previous period |
@@ -344,7 +423,10 @@ works. `which craft` gives the value to paste.
 
 Every report tool takes an optional `property` and falls back to the saved
 default, so an assistant that knows nothing about your config still gets
-answers. `configure_site`, the one writer, takes a `domain` instead — the point
+answers. Each also carries its own `days` default rather than sharing one,
+because the window a question needs is part of the question — seven days is the
+right answer to "how are we doing" and the wrong one to "is anything broken",
+so `audit_site` advertises twenty-eight. `configure_site`, the one writer, takes a `domain` instead — the point
 is to create the property. Responses are structured JSON — labelled numbers
 carrying the property id and the date window they cover, not rendered panels.
 

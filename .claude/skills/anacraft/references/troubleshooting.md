@@ -31,6 +31,13 @@ partial, so a site that started collecting this morning has nothing to show.
 Then confirm data is arriving at all — GA4 Realtime, not its standard reports,
 which lag 24–48 hours.
 
+**The numbers arrive but look wrong.** Conversions stuck at zero, revenue
+always nothing, a bounce rate too good to be true, traffic that is almost all
+direct. Run `craft audit` before investigating any of them individually: all
+four have a common measurement cause, the audit names which, and each finding
+carries what it means and what fixes it. `craft audit --demo` shows the shape of
+the report without touching an account.
+
 **Realtime says zero but the reports are fine.** `live` is a 30-minute window.
 Zero is usually the truth about a small site.
 

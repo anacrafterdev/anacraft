@@ -413,6 +413,15 @@ pub struct WebStream {
     pub default_uri: String,
 }
 
+/// An event the property has been told to treat as an outcome.
+pub struct KeyEvent {
+    pub name: String,
+    /// Whether it was defined by hand rather than shipped by GA4. Kept because
+    /// a custom key event that never fires is a broken implementation, while a
+    /// built-in one that never fires may just not apply to this site.
+    pub custom: bool,
+}
+
 impl Ga {
     /// Every GA4 account this login can act in.
     ///
@@ -463,6 +472,45 @@ impl Ga {
                     measurement_id: web.measurement_id,
                     default_uri: web.default_uri,
                 })
+            })
+            .collect())
+    }
+
+    /// The events this property counts as key events.
+    ///
+    /// Configuration rather than measurement, and the two answer different
+    /// questions: the Data API says how often `purchase` fired, this says
+    /// whether anybody ever told GA4 that `purchase` was the point. A property
+    /// with traffic and no key events is collecting fine and reporting
+    /// nothing, which is the single most common thing `craft audit` finds.
+    ///
+    /// Unpaginated on purpose — GA4 caps a property at 30 key events, so one
+    /// page of 200 is all of them.
+    ///
+    /// v1beta answers `keyEvents`; properties that predate the rename answer
+    /// `conversionEvents` on a path of the same name and 404 the new one. Same
+    /// fallback [`Ga::report`] makes for the metric, and the same reason. When
+    /// both fail the first error is the one returned: the modern path is the
+    /// one whose message is worth reading.
+    pub async fn key_events(&self, property: &str) -> Result<Vec<KeyEvent>> {
+        let url = |path: &str| format!("{ADMIN_API}/properties/{property}/{path}?pageSize=200");
+
+        let page: KeyEventList = match self.get(&url("keyEvents")).await {
+            Ok(page) => page,
+            Err(modern) => self
+                .get(&url("conversionEvents"))
+                .await
+                .map_err(|_legacy| modern)?,
+        };
+
+        Ok(page
+            .key_events
+            .into_iter()
+            .chain(page.conversion_events)
+            .filter(|event| !event.event_name.is_empty())
+            .map(|event| KeyEvent {
+                name: event.event_name,
+                custom: event.custom,
             })
             .collect())
     }
@@ -601,6 +649,26 @@ struct WebStreamData {
     measurement_id: String,
     #[serde(default)]
     default_uri: String,
+}
+
+/// One shape for both spellings, so the fallback does not need two of these.
+/// Whichever list the API filled, the other stays empty and chains to nothing.
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct KeyEventList {
+    #[serde(default)]
+    key_events: Vec<KeyEventResource>,
+    #[serde(default)]
+    conversion_events: Vec<KeyEventResource>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct KeyEventResource {
+    #[serde(default)]
+    event_name: String,
+    #[serde(default)]
+    custom: bool,
 }
 
 #[derive(Deserialize, Default)]
@@ -755,6 +823,33 @@ mod tests {
         let data = web[0].web_stream_data.as_ref().unwrap();
         assert_eq!(data.measurement_id, "G-1A2BCD345E");
         assert_eq!(data.default_uri, "https://example.com");
+    }
+
+    #[test]
+    fn both_spellings_of_the_key_event_list_read_the_same() {
+        // v1beta renamed conversionEvents to keyEvents and kept the old path
+        // alive for properties that predate it. One struct reads both, so the
+        // fallback in `key_events` only has to change the URL.
+        let modern: KeyEventList = serde_json::from_str(
+            r#"{"keyEvents":[{"eventName":"purchase","custom":false},
+                             {"eventName":"demo_booked","custom":true}]}"#,
+        )
+        .unwrap();
+        let legacy: KeyEventList = serde_json::from_str(
+            r#"{"conversionEvents":[{"eventName":"purchase","custom":false},
+                                    {"eventName":"demo_booked","custom":true}]}"#,
+        )
+        .unwrap();
+
+        let names = |page: KeyEventList| -> Vec<String> {
+            page.key_events
+                .into_iter()
+                .chain(page.conversion_events)
+                .map(|e| e.event_name)
+                .collect()
+        };
+        assert_eq!(names(modern), vec!["purchase", "demo_booked"]);
+        assert_eq!(names(legacy), vec!["purchase", "demo_booked"]);
     }
 
     #[test]

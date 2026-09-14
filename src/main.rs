@@ -1,6 +1,7 @@
 //! anacraft — Google Analytics 4 in your terminal, wearing a texture pack.
 
 mod achievements;
+mod audit;
 mod auth;
 mod avatar;
 mod burn;
@@ -35,7 +36,7 @@ const TOP_REALMS: &str = "TOP REALMS";
 #[command(
     name = "craft",
     version,
-    about = "Your website deserves better analytics",
+    about = "Google Analytics in your terminal — set it up, audit it, read it",
     long_about = None,
     after_help = "Run `craft` with no command to open the live dashboard.\n\
                   With no property saved it runs on synthetic data, so it works \
@@ -165,6 +166,31 @@ enum Command {
         #[arg(long)]
         live_refresh: Option<u64>,
         /// Drive the dashboard from synthetic data — no Google account needed.
+        #[arg(long)]
+        demo: bool,
+    },
+    /// Check how the property is measuring, and report what is broken.
+    ///
+    /// The other commands answer "what happened". This one answers the
+    /// question before it: is this property measuring the site at all, and is
+    /// what it measured worth trusting. Twelve checks over four weeks —
+    /// whether anything is marked as a key event and whether those events ever
+    /// fire, whether purchases carry their revenue, whether page views are
+    /// being counted twice, whether the site or a payment page is referring
+    /// itself, whether an event stopped firing between releases.
+    ///
+    /// Read-only, and changes nothing anywhere. Exits 2 when it finds
+    /// something, so a script can tell.
+    Audit {
+        /// Days to look back, ending yesterday. The previous window of the
+        /// same length is what "stopped firing" is measured against.
+        #[arg(long, short, default_value_t = audit::DEFAULT_DAYS)]
+        days: u32,
+        /// How to render: panels for a person, json for a script, slack for a
+        /// webhook payload.
+        #[arg(long, short, value_enum, default_value = "panels")]
+        format: Format,
+        /// Audit synthetic data — no Google account, no subscription.
         #[arg(long)]
         demo: bool,
     },
@@ -341,6 +367,14 @@ async fn run() -> Result<()> {
             } else {
                 mcp::serve(demo, cli.property.as_deref()).await
             }
+        }
+        Command::Audit { days, format, demo } => {
+            audit::run(
+                &cfg,
+                cli.property.as_deref(),
+                audit::Options { days, format, demo },
+            )
+            .await
         }
         Command::Watch {
             baseline,

@@ -1,6 +1,6 @@
 ---
 name: anacraft
-description: Install and drive anacraft — the `craft` terminal dashboard for Google Analytics 4. Covers installing the binary, signing in and picking a property, the one-shot report commands, the dashboard's panels and keys, palettes, the config file and its environment overrides, and wiring `craft mcp` into Claude Desktop or another MCP client so an assistant can read the site's numbers. Use when the user asks how to install or use anacraft or `craft`, connect a GA4 property to it, read or configure the dashboard, set up its MCP server, or when a `craft` command fails with an error.
+description: Install and drive anacraft — the `craft` terminal dashboard for Google Analytics 4. Covers installing the binary, signing in and picking a property, the one-shot report commands, auditing whether a property is measuring correctly, the dashboard's panels and keys, palettes, the config file and its environment overrides, and wiring `craft mcp` into Claude Desktop or another MCP client so an assistant can read the site's numbers. Use when the user asks how to install or use anacraft or `craft`, connect a GA4 property to it, read or configure the dashboard, audit or debug a GA4 setup that is reporting the wrong numbers, set up its MCP server, or when a `craft` command fails with an error.
 ---
 
 # Driving anacraft
@@ -28,9 +28,10 @@ enabling the APIs — is documented in
 | Nothing installed | 1 |
 | Installed, wants to see it before signing in | 2 |
 | Installed, has a GA4 property | 3 |
-| Signed in, wants numbers | 4 / 6 |
-| Wants to be told when the numbers break | 5 |
-| Wants an assistant to read the site | 7 |
+| Signed in, wants numbers | 4 / 7 |
+| Wants to know whether the numbers can be trusted | 5 |
+| Wants to be told when the numbers break | 6 |
+| Wants an assistant to read the site | 8 |
 | A command failed | `references/troubleshooting.md` |
 
 ## 1. Install
@@ -116,7 +117,51 @@ is a cron line:
              | curl -sX POST -H 'Content-Type: application/json' -d @- "$SLACK_WEBHOOK"
 ```
 
-## 5. Alerts
+## 5. Audit
+
+`craft audit` checks how the property is measuring rather than what it
+measured. Twelve checks over 28 days, each finding graded and carrying what it
+means. This is the command to reach for when somebody says a number looks
+wrong, and before trusting any other command's output on a property you have
+not seen before.
+
+```sh
+craft audit                  # twelve checks over the last 28 days
+craft audit --days 90        # a longer window
+craft audit --format json    # the findings as one object, for a script
+craft audit --format slack   # a Block Kit payload, for a webhook
+craft audit --demo           # a synthetic report — no account, no subscription
+```
+
+It reads the Data API and the Admin API, because measurement and configuration
+fail separately: one says how often `purchase` fired, the other says whether
+anybody ever told GA4 that `purchase` was the point. A property with traffic
+and nothing marked as a key event is the most common thing it finds.
+
+Findings come in three grades. **Critical** means a number somewhere is wrong —
+nothing recorded at all, no web data stream, nothing marked as a key event, a
+key event configured and never fired, `purchase` arriving without its `value`.
+**Warning** means the numbers are real but something is distorting them — page
+views counted twice, the site or a payment page referring itself, an event that
+stopped firing since the previous window, one event under two names, sessions
+GA4 could not attribute. **Note** is context worth having before reading
+anything else, such as a direct share high enough to suggest untagged campaigns,
+or more than one site reporting into the property.
+
+Exit codes: `0` clean, `2` when something was found, `1` on an error — the same
+convention as `craft watch`, so a weekly audit into Slack is one cron line.
+
+Two things it will not do. It reports the symptom and names the usual cause,
+never the other way round, so "page views look counted twice" is a finding and
+"you have two page_view tags" is the sentence under it. And it cannot see
+inside a GTM container, so it finds the tagging bugs that reach the data and
+not the ones that only show up in the container.
+
+Part of the subscription; `--demo` is not, and shows the whole shape of a
+report. The same checks are available to an assistant as the `audit_site` MCP
+tool — see 8.
+
+## 6. Alerts
 
 `craft watch` compares the most recent complete day against the mean of the
 days before it (28 by default) and reports what moved further than it usually
@@ -162,7 +207,7 @@ delivering the alert to Slack is what **Pro** covers (`craft subscribe --plan
 pro`), and the gate around a `--webhook` run on a lower plan says exactly that.
 `--demo` is none of them and needs no subscription.
 
-## 6. The dashboard
+## 7. The dashboard
 
 `craft` (or `craft dash`). Seven panels; hiding one gives its space back to the
 rest rather than leaving a hole.
@@ -185,7 +230,7 @@ Cadence flags: `--days`, `--refresh` (seconds between reports, default 30),
 `--live-refresh` (the realtime tick, minimum 2). Each falls back to what the
 property saved, then to the default.
 
-## 7. Let an assistant read the site
+## 8. Let an assistant read the site
 
 `craft mcp` serves the same numbers over the Model Context Protocol, so Claude
 Desktop or any MCP client can answer "how is the site doing" without a human

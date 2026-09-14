@@ -306,7 +306,7 @@ impl Server {
     }
 
     async fn fetch(&self, name: &str, args: &Value) -> Result<Value> {
-        let days = days_of(args);
+        let days = days_of(args, name);
         let limit = limit_of(args);
 
         let ga = match &self.source {
@@ -338,6 +338,9 @@ impl Server {
 
         let payload = match name {
             "site_status" => site_status(ga, &property, days).await?,
+            "audit_site" => {
+                crate::audit::inspect(ga, &property, named.as_deref().unwrap_or(""), days).await?
+            }
             "live_visitors" => live_visitors(ga, &property).await?,
             "list_pages" => {
                 ranked(
@@ -552,7 +555,13 @@ struct Tool {
     title: &'static str,
     description: &'static str,
     /// Which optional arguments the tool takes, beyond `property`.
-    days: bool,
+    ///
+    /// `days` carries its own default rather than sharing one, because the
+    /// window a question needs is part of the question. Seven days is the
+    /// right answer to "how are we doing" and the wrong one to "is anything
+    /// broken" — a key event that did not fire this week may simply not have
+    /// happened.
+    days: Option<u32>,
     limit: bool,
     query: Option<&'static str>,
     /// Whether the tool only reads. `configure_site`, the one writer, is the
@@ -568,7 +577,24 @@ const TOOLS: &[Tool] = &[
                       and average session duration for the period, each against the equivalent \
                       period before it, plus the daily user series and any milestones the numbers \
                       crossed. Start here for \"how are we doing\".",
-        days: true,
+        days: Some(DEFAULT_DAYS),
+        limit: false,
+        query: None,
+        read_only: true,
+    },
+    Tool {
+        name: "audit_site",
+        title: "Audit the measurement",
+        description: "How the property is measuring, rather than what it measured. Twelve \
+                      checks: whether anything is marked as a key event and whether those \
+                      events ever fire, whether purchases carry their revenue, whether page \
+                      views are counted twice, whether the site or a payment page is \
+                      crediting itself with conversions, whether an event stopped firing \
+                      between one window and the one before. Each finding is graded and \
+                      carries what it means. Run this before trusting the numbers from any \
+                      other tool, and whenever a number looks wrong — most numbers that look \
+                      wrong are being measured wrong.",
+        days: Some(crate::audit::DEFAULT_DAYS),
         limit: false,
         query: None,
         read_only: true,
@@ -578,7 +604,7 @@ const TOOLS: &[Tool] = &[
         title: "Live visitors",
         description: "Who is on the site right now — active users in the last 30 minutes, broken \
                       down by country. Realtime, so it ignores the `days` window entirely.",
-        days: false,
+        days: None,
         limit: false,
         query: None,
         read_only: true,
@@ -587,7 +613,7 @@ const TOOLS: &[Tool] = &[
         name: "list_pages",
         title: "Top pages",
         description: "Most-visited pages over the period, ranked by page views.",
-        days: true,
+        days: Some(DEFAULT_DAYS),
         limit: true,
         query: None,
         read_only: true,
@@ -597,7 +623,7 @@ const TOOLS: &[Tool] = &[
         title: "Top events",
         description: "Events over the period, ranked by count, with the per-day total for this \
                       period and the one before it so a rise or fall is visible.",
-        days: true,
+        days: Some(DEFAULT_DAYS),
         limit: true,
         query: None,
         read_only: true,
@@ -607,7 +633,7 @@ const TOOLS: &[Tool] = &[
         title: "Top referrers",
         description: "The URLs that sent traffic, ranked by sessions. Use this for \"who is \
                       linking to us\"; use list_traffic_sources for the channel breakdown.",
-        days: true,
+        days: Some(DEFAULT_DAYS),
         limit: true,
         query: None,
         read_only: true,
@@ -617,7 +643,7 @@ const TOOLS: &[Tool] = &[
         title: "Traffic sources",
         description: "Where traffic arrives from, as GA4's source / medium pairs \
                       (google / organic, (direct) / (none), …), ranked by sessions.",
-        days: true,
+        days: Some(DEFAULT_DAYS),
         limit: true,
         query: None,
         read_only: true,
@@ -626,7 +652,7 @@ const TOOLS: &[Tool] = &[
         name: "list_countries",
         title: "Traffic by country",
         description: "Countries the period's users came from, ranked by users.",
-        days: true,
+        days: Some(DEFAULT_DAYS),
         limit: true,
         query: None,
         read_only: true,
@@ -636,7 +662,7 @@ const TOOLS: &[Tool] = &[
         title: "GA4 properties",
         description: "Every GA4 property the signed-in account can read, and which one is the \
                       saved default. Read-only: this cannot change the default.",
-        days: false,
+        days: None,
         limit: false,
         query: None,
         read_only: true,
@@ -646,7 +672,7 @@ const TOOLS: &[Tool] = &[
         title: "Search pages",
         description: "Pages whose path contains a substring, ranked by page views — \
                       \"/blog\", \"pricing\", a slug you half remember.",
-        days: true,
+        days: Some(DEFAULT_DAYS),
         limit: true,
         query: Some("Substring to match against the page path, case-insensitive."),
         read_only: true,
@@ -656,7 +682,7 @@ const TOOLS: &[Tool] = &[
         title: "Search events",
         description: "Events whose name contains a substring, ranked by count — \
                       \"signup\", \"purchase\", \"click\".",
-        days: true,
+        days: Some(DEFAULT_DAYS),
         limit: true,
         query: Some("Substring to match against the event name, case-insensitive."),
         read_only: true,
@@ -670,7 +696,7 @@ const TOOLS: &[Tool] = &[
                       returns that tag instead of creating a second property. This is the one \
                       tool that writes to the Analytics account — and it still never changes \
                       which property is the saved default.",
-        days: false,
+        days: None,
         limit: false,
         query: None,
         read_only: false,
@@ -691,13 +717,13 @@ fn tool_schemas() -> Vec<Value> {
                 );
                 required.push("query");
             }
-            if tool.days {
+            if let Some(default) = tool.days {
                 properties.insert(
                     "days".into(),
                     json!({
                         "type": "integer",
                         "description": "Days to look back, ending yesterday.",
-                        "default": DEFAULT_DAYS,
+                        "default": default,
                         "minimum": 1,
                         "maximum": 365,
                     }),
@@ -1021,10 +1047,18 @@ fn live_payload(rows: &[(String, f64)]) -> Value {
 
 // -------------------------------------------------------------- arguments ---
 
-fn days_of(args: &Value) -> u32 {
+/// The window a call is about: what it asked for, else the default the tool
+/// advertised in its own schema — never a shared one, or a client that trusted
+/// the schema would be handed a different window than the one it was promised.
+fn days_of(args: &Value, tool: &str) -> u32 {
+    let fallback = TOOLS
+        .iter()
+        .find(|t| t.name == tool)
+        .and_then(|t| t.days)
+        .unwrap_or(DEFAULT_DAYS);
     args.get("days")
         .and_then(Value::as_i64)
-        .unwrap_or(DEFAULT_DAYS as i64)
+        .unwrap_or(fallback as i64)
         .clamp(1, 365) as u32
 }
 
@@ -1268,6 +1302,7 @@ mod demo {
 
         let payload = match name {
             "site_status" => status_payload(&TOTALS, &PREVIOUS, &daily(&DAILY_USERS, days), false),
+            "audit_site" => crate::audit::inspect_demo(days),
             "live_visitors" => live_payload(&take(&LIVE, LIVE.len() as i64)),
             "list_pages" => ranked_payload("pagePath", "screenPageViews", &take(&PAGES, limit)),
             "list_referrers" => {
@@ -1736,6 +1771,65 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_tool_whose_question_needs_a_longer_window_advertises_one() {
+        // The bug this guards: one shared default ran `audit_site` over seven
+        // days, where a key event that simply has not happened yet this week
+        // reads as a key event that is broken — which is the one thing an
+        // audit must never say when it is not true.
+        let mut server = server();
+        let reply = server
+            .dispatch(request(1, "tools/list", json!({})))
+            .await
+            .unwrap();
+        let listed = reply["result"]["tools"].as_array().unwrap().clone();
+
+        let advertised = |name: &str| -> Value {
+            listed
+                .iter()
+                .find(|t| t["name"] == name)
+                .expect("tool listed")["inputSchema"]["properties"]["days"]["default"]
+                .clone()
+        };
+        assert_eq!(advertised("site_status"), json!(DEFAULT_DAYS));
+        assert_eq!(advertised("audit_site"), json!(crate::audit::DEFAULT_DAYS));
+
+        // And the server honours what it advertised, rather than the schema
+        // promising one window and the call answering over another.
+        let answered = payload(&mut server, "audit_site", json!({})).await;
+        assert_eq!(
+            answered["date_range"]["days"],
+            json!(crate::audit::DEFAULT_DAYS)
+        );
+        // An explicit argument still wins over both.
+        let asked = payload(&mut server, "audit_site", json!({ "days": 90 })).await;
+        assert_eq!(asked["date_range"]["days"], json!(90));
+    }
+
+    #[tokio::test]
+    async fn the_audit_tool_answers_with_graded_findings() {
+        let mut server = server();
+        let answered = payload(&mut server, "audit_site", json!({})).await;
+
+        assert_eq!(answered["clean"], json!(false));
+        assert_eq!(answered["checks_available"], json!(12));
+        let findings = answered["findings"].as_array().unwrap();
+        assert!(!findings.is_empty());
+        // Each finding has to carry what it means, not only that it fired —
+        // an assistant repeating "payment_handoff" at somebody has explained
+        // nothing.
+        for finding in findings {
+            for field in ["check", "grade", "headline", "detail"] {
+                assert!(
+                    finding[field].as_str().is_some_and(|s| !s.is_empty()),
+                    "{field} missing from {finding}"
+                );
+            }
+        }
+        // Worst first, so a client that reads one reads the right one.
+        assert_eq!(findings[0]["grade"], json!("critical"));
+    }
+
+    #[tokio::test]
     async fn every_tool_is_listed_with_a_schema() {
         let mut server = server();
         let reply = server
@@ -2036,7 +2130,7 @@ mod tests {
         assert_eq!(demo["args"], json!(["mcp", "--demo"]), "got {demo}");
 
         // Same key, same command: `--install` twice is an update, not a pair of
-        // servers offering the same ten tools over different data.
+        // servers offering the same tools over different data.
         assert_eq!(live["command"], demo["command"]);
     }
 

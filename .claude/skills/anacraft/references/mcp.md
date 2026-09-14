@@ -75,14 +75,17 @@ carry the reason too, so it can be relayed before anything is called.
 
 Every report tool takes an optional `property` (numeric GA4 id) and falls back
 to the saved default, so an assistant that knows nothing about the config still
-gets answers. `days` defaults to 7 and is clamped to 1–365; `limit` defaults to 10
-and is clamped to 1–100. `configure_site`, the one write, takes a `domain`
+gets answers. `days` is clamped to 1–365 and defaults to whatever the tool's own
+schema advertises — 7 for the reports, 28 for `audit_site`, because a key event
+that has not fired yet this week is not the same as one that is broken. `limit`
+defaults to 10 and is clamped to 1–100. `configure_site`, the one write, takes a `domain`
 instead — creating the property is the point, so there is none to point at yet;
 it also takes an optional `account`, `timezone` and `currency` (default `USD`).
 
 | Tool | Arguments | Answers |
 |---|---|---|
 | `site_status` | `days` | Headline metrics against the period before, the daily user series, and the achievements that fired |
+| `audit_site` | `days` (28) | Twelve graded checks on how the property is measuring — key events, revenue tagging, double counting, self-referral, events that stopped firing |
 | `live_visitors` | — | Active users in the last 30 minutes, by country |
 | `list_pages` | `days`, `limit` | Most-visited pages, by views |
 | `list_events` | `days`, `limit` | Events by count, plus the per-day total against the previous period |
@@ -100,6 +103,11 @@ it also takes an optional `account`, `timezone` and `currency` (default `USD`).
 Which tool answers which question:
 
 - "How is the site doing?" · "Are we up or down this week?" → `site_status`
+- "That number looks wrong." · "Is our tracking set up properly?" · "Why are
+  conversions zero?" → `audit_site`. Also worth running unprompted before
+  leaning hard on any other tool against a property you have not seen before:
+  a site with nothing marked as a key event reports zero conversions
+  truthfully, and saying so is a different answer from "conversions fell".
 - "Who's on it right now?" → `live_visitors`
 - "Which pages are doing well?" · "How did the blog do?" → `list_pages`,
   then `search_pages` with `/blog`
@@ -136,6 +144,14 @@ On top of that envelope:
 - **`site_status`** — `has_data`, `metrics[]` (`metric`, `label`, `unit`,
   `value`, `previous`, `change_pct`), `daily_users[]` (`date`, `users`),
   `achievements[]` (`title`, `detail`).
+- **`audit_site`** — `clean`, `checks_run`, `checks_available`, `counts`
+  (`critical` / `warning` / `note`), and `findings[]` of `check` (a stable
+  slug), `grade`, `headline`, `detail` and `evidence`, worst first. A check that
+  could not run — the Admin API unreadable, or the property too quiet for a
+  share to mean anything — lowers `checks_run` rather than passing, so `clean`
+  with `checks_run` below `checks_available` means "nothing found in the ten it
+  could do", not "nothing wrong". Report the `detail`: repeating a slug at
+  somebody explains nothing.
 - **the ranked tools** — `dimension`, `metric`, `returned_total`, and `rows[]`
   of `name` / `value` / `share_of_returned`. That share is of the rows returned,
   not of the site: a top-ten list is a slice, and a percentage that quietly

@@ -32,11 +32,29 @@ from stripe_api import call, each  # noqa: E402
 # link's id and the Basic link predates tags and keeps working alongside.
 PLANS = {"basic", "pro", "elite"}
 
+# The Basic link predates the metadata tag, so it is recognised by its URL.
+BASIC_LINK = "https://buy.stripe.com/3cIdR93sU4SbfECab79MY02"
+
 # `{CHECKOUT_SESSION_ID}` is Stripe's own placeholder and it substitutes it on
-# the way out. The page does not read it — a static page has no secret key and
-# so cannot ask Stripe anything — but it costs nothing to carry and it is what
-# turns a support email about a payment into a one-line lookup.
-SUCCESS_URL = "https://anacraft.dev/success.html?session_id={CHECKOUT_SESSION_ID}"
+# the way out. The page cannot ask Stripe anything about it — a static page has
+# no secret key — but it costs nothing to carry, it is what turns a support
+# email about a payment into a one-line lookup, and GA4 takes it as the
+# transaction id, which is what stops one payment being counted as two.
+#
+# `plan` rides along because it is the only way the confirmation page can know
+# what was bought. Stripe tells the page nothing else, and a `purchase` event
+# with no amount on it is worse than none: it would report a sale worth zero
+# and make every revenue figure on the property wrong in the direction that
+# looks like the site is failing. The page fires nothing when this is missing.
+SUCCESS_URL = "https://anacraft.dev/success.html?session_id={CHECKOUT_SESSION_ID}&plan=%s"
+
+
+def plan_of(link):
+    """Which plan a link sells, by its tag, or by name for the older one."""
+    tagged = (link.get("metadata") or {}).get("plan")
+    if tagged in PLANS:
+        return tagged
+    return "basic" if link.get("url") == BASIC_LINK else None
 
 APPLY = "--apply" in sys.argv
 
@@ -51,7 +69,7 @@ def plan_links():
     # code from src/main.rs keeps it in one place and honest.
     bearer = None
     for link in each("payment_links"):
-        if link.get("url") == "https://buy.stripe.com/3cIdR93sU4SbfECab79MY02":
+        if link.get("url") == BASIC_LINK:
             bearer = link
             break
     if bearer:
@@ -75,14 +93,22 @@ def main():
         sys.exit("no plan payment links to point at success.html")
 
     for link in links:
+        plan = plan_of(link)
+        if not plan:
+            print(f"  link      {link['id']}  {link['url']}")
+            print("  skipped   no plan on this link, and the page needs one")
+            continue
+        target = SUCCESS_URL % plan
+
         print(f"  link      {link['id']}  {link['url']}")
+        print(f"  plan      {plan}")
         print(f"  now       {describe(link)}")
-        print(f"  would be  redirects to {SUCCESS_URL}")
+        print(f"  would be  redirects to {target}")
 
         if APPLY:
             updated = call("POST", f"payment_links/{link['id']}", {
                 "after_completion[type]": "redirect",
-                "after_completion[redirect][url]": SUCCESS_URL,
+                "after_completion[redirect][url]": target,
             })
             print(f"  done      {describe(updated)}")
 

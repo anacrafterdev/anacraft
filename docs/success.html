@@ -391,6 +391,53 @@ and a person answers. Now go make the bars go up.</p>
 </div>
 
 <script>
+  /* `purchase`. The one event on this site that is worth money, fired on the
+   * one page that only loads after Stripe has taken it.
+   *
+   * Stripe tells a static page two things, both in the query string: the
+   * checkout session, and the plan the link was configured to carry (see
+   * `scripts/stripe-success-url.py`). Without the plan there is no amount, and
+   * rather than send a sale worth zero — which would drag every revenue figure
+   * on the property down and make the site look like it is failing — this
+   * sends nothing at all.
+   *
+   * The session id becomes GA4's `transaction_id`, which is what keeps one
+   * payment from being counted as two.
+   */
+  (function () {
+    var PLANS = {
+      basic: ['Anacrafter', 2.99],
+      pro: ['Anacrafter Pro', 5.99],
+      elite: ['Anacrafter Elite', 9.99]
+    };
+
+    var query = new URLSearchParams(location.search);
+    var session = query.get('session_id');
+    var plan = query.get('plan');
+    var sold = PLANS[plan];
+    if (!session || !sold || typeof gtag !== 'function') return;
+
+    gtag('event', 'purchase', {
+      transaction_id: session,
+      currency: 'USD',
+      value: sold[1],
+      items: [{ item_id: plan, item_name: sold[0], price: sold[1], quantity: 1 }]
+    });
+
+    /* Take `plan` back out of the address bar, which disarms a refresh: the
+     * guard above needs it, and without it a reload is a second sale. The
+     * session id stays where it is — somebody emailing support about a payment
+     * is the reason it is carried, and that is worth more than the tidier URL.
+     */
+    try {
+      query.delete('plan');
+      var rest = query.toString();
+      history.replaceState(null, '', location.pathname + (rest ? '?' + rest : ''));
+    } catch (e) {}
+  })();
+</script>
+
+<script>
   /* Paper, thrown once, on a canvas that sits behind the page.
    *
    * Written out rather than pulled from a CDN: it is forty lines, and the one

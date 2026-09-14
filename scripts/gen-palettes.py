@@ -151,6 +151,7 @@ def css(p):
 PAGES = [
     "index.html", "audit.html", "mcp.html", "alerts.html", "setup-ga4.html",
     "pricing.html", "burn.html", "success.html", "privacy.html", "terms.html",
+    "lovable.html",
 ]
 
 RESTORE_START = "<!-- palette-restore:start -->"
@@ -179,11 +180,14 @@ def prepare(text, name):
     """Add the markers, and the variable the chip colour needs, if absent."""
     if START not in text:
         # Straight after `:root { ... }`, so a palette block overrides it by
-        # specificity and by source order both.
-        anchor = "\n  }\n"
-        at = text.index("  :root {")
-        close = text.index(anchor, at) + len(anchor)
-        text = text[:close] + f"  {START}\n  {END}\n" + text[close:]
+        # specificity and by source order both. The indent is read off the
+        # `:root` line rather than assumed: lovable.html is indented four.
+        m = re.search(r"^([ \t]*):root\s*\{", text, re.M)
+        if not m:
+            sys.exit(f"{name}: no :root to hang the palettes off")
+        pad = m.group(1)
+        close = text.index(f"\n{pad}}}\n", m.end()) + len(f"\n{pad}}}\n")
+        text = text[:close] + f"{pad}{START}\n{pad}{END}\n" + text[close:]
     if "--on-accent:" not in text:
         text = text.replace("    --mono:", "    --on-accent: #09100d;\n    --mono:", 1)
     # `--ink` was doing double duty as an inset background and as text on an
@@ -204,7 +208,8 @@ def main():
         if not page.exists():
             sys.exit(f"{name}: not found")
         text = prepare(page.read_text(), name)
-        text = splice(text, START, END, body, indent="  ")
+        pad = re.search(r"^([ \t]*)" + re.escape(START), text, re.M).group(1)
+        text = splice(text, START, END, body, indent=pad)
         text = splice(text, RESTORE_START, RESTORE_END, RESTORE)
         page.write_text(text)
 

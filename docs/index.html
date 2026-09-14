@@ -458,12 +458,14 @@
     .row p { grid-column: 2; }
   }
 
-  .row.soon:hover { background: rgba(255,225,107,.045); }
+  .row.soon:hover { background: rgba(255,225,107,.045);
+                    background: color-mix(in srgb, var(--gold) 4.5%, transparent); }
   .row.soon:hover .arw { color: var(--gold); }
   .tag {
     font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
     text-transform: uppercase; color: var(--gold);
     border: 1px solid rgba(255,225,107,.32); padding: 3px 7px; white-space: nowrap;
+    border-color: color-mix(in srgb, var(--gold) 32%, transparent);
   }
   /* Built and shipping: the OAuth client is verified and live. */
   .tag.live { color: var(--jade); border-color: rgba(45,213,183,.32);

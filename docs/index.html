@@ -2446,10 +2446,17 @@
     var term = document.getElementById('term');
     if (isPaper) {
       if (tabs) tabs.style.display = 'none';
+      // Solarized Light, because that is what the page itself turns into:
+      // --ground is base3 and --panel is base2. Paper mode was written when
+      // catppuccin-latte was the only light palette, and showing a cool
+      // blue-grey capture inside a warm Solarized frame put three grounds
+      // that do not agree on one screen. The background is the capture's own
+      // ink, the same value the tabs use for every other palette, so the
+      // frame and the screenshot meet without a seam.
       dashEls.forEach(function (p) {
-        p.hidden = p.dataset.theme !== 'catppuccin-latte';
+        p.hidden = p.dataset.theme !== 'solarized-light';
       });
-      if (term) term.style.background = '#eee8d5';
+      if (term) term.style.background = '#e2dbc7';
     } else {
       if (tabs) tabs.style.display = '';
       var selected = document.querySelector('.tabs button[aria-selected="true"]');

@@ -9,11 +9,17 @@ use ratatui::style::Color;
 
 use crate::theme::{glyph, ore, Kind, Metric};
 
-/// Truecolor is disabled when stdout isn't a TTY, when NO_COLOR is set, or
-/// when TERM says dumb — so `anacraft pages > report.txt` stays clean.
+/// Truecolor is disabled when stdout isn't a TTY, when NO_COLOR is set,
+/// when TERM says dumb, and always under test — so `anacraft pages > report.txt`
+/// stays clean.
 fn color_enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
     *ENABLED.get_or_init(|| {
+        // Tests need to have bare strings to do their measuring checks
+        // without ANSI escape sequences throwing them off
+        if cfg!(test) {
+            return false;
+        }
         if std::env::var_os("NO_COLOR").is_some() {
             return false;
         }
@@ -28,6 +34,12 @@ pub fn paint(text: &str, color: Color) -> String {
     if !color_enabled() {
         return text.to_string();
     }
+    painted(text, color)
+}
+
+/// The escape sequence `paint` emits when color is on — split out so tests
+/// can assert on it without depending on the terminal they run in.
+fn painted(text: &str, color: Color) -> String {
     match color {
         Color::Rgb(r, g, b) => format!("\x1b[38;2;{r};{g};{b}m{text}\x1b[0m"),
         _ => text.to_string(),
@@ -263,8 +275,23 @@ mod tests {
     use super::*;
     use crate::theme::{DIAMONDS, TIME_SURVIVED, VILLAGERS};
 
-    // Tests run with stdout redirected, so color_enabled() is false and the
-    // helpers return bare text — which is what makes widths assertable.
+    // color_enabled() has a check for cfg!(test) to ensure color is
+    // disabled for tests
+
+    #[test]
+    fn tests_never_see_color() {
+        assert!(!color_enabled(), "color leaked into the test run!");
+    }
+
+    #[test]
+    fn painting_wraps_the_text_in_an_sgr_sequence() {
+        assert_eq!(
+            painted("x", Color::Rgb(1, 2, 3)),
+            "\x1b[38;2;1;2;3mx\x1b[0m"
+        );
+        // Every palette is truecolor and anything else passes through unstyled
+        assert_eq!(painted("x", Color::Green), "x");
+    }
 
     #[test]
     fn commas_groups_thousands() {

@@ -76,6 +76,9 @@ touch layout, the useful question is usually "can this overflow its panel?", and
 the answer belongs in a test that sweeps a range of widths. `the_daily_chart_fits_its_panel`
 and `header_realms_are_dropped_whole_never_sliced` are the pattern to copy.
 
+The `src/render.rs` helpers emit no color under `cfg(test)`, so assertions can compare
+bare text and count characters directly.
+
 ## Themes
 
 A new palette is a `Palette` const in `src/theme.rs` added to the `THEMES`

@@ -6,7 +6,7 @@
 
 PORT ?= 8000
 
-.PHONY: help serve open dash check fmt lint test capture partials
+.PHONY: help serve open dash check fmt lint test capture partials palettes
 
 help:  ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -36,6 +36,9 @@ test: ## Run the test suite
 
 partials: ## Splice the shared nav and footer (scripts/) into every page
 	@python3 scripts/splice-partials.py
+
+palettes: ## Regenerate the site's CSS palettes from src/theme.rs
+	@python3 scripts/gen-palettes.py
 
 capture: ## Regenerate the site's dashboard captures from the real TUI
 	@cargo run --quiet --release -- capture | python3 scripts/splice-capture.py

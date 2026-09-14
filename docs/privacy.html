@@ -50,7 +50,10 @@
     font-size: 20px; letter-spacing: -.03em; color: var(--white);
     display: flex; align-items: baseline; gap: 0;
   }
-  .brand .pick { width: 14px; height: 14px; display: block; margin-right: 2px; }
+  /* The A is the accent, so it follows whatever palette is in force.
+     Inline rather than an <img>: an image cannot inherit a colour. */
+  .brand .pick { width: 14px; height: 14px; display: block; margin-right: 2px;
+                 color: var(--jade); }
   /* Same voice as the footer: mono, lowercase, one rhythm. The casing is
      text-transform rather than typed in, so the markup still says "Quick start"
      and "Configure" for a screen reader. The brand keeps its own face —
@@ -168,7 +171,7 @@
 <!-- nav:start -->
 <nav>
   <div class="wrap nav-in">
-    <a class="brand" href="/"><img class="pick" src="mark.svg?v=7b310f6e" alt="A" width="14" height="14">nacraft</a>
+    <a class="brand" href="/"><svg class="pick" role="img" aria-label="A" width="14" height="14" viewBox="1 1 14 14" shape-rendering="crispEdges" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="1" width="4" height="1"/><rect x="5" y="2" width="6" height="1"/><rect x="4" y="3" width="8" height="1"/><rect x="4" y="4" width="8" height="1"/><rect x="3" y="5" width="4" height="1"/><rect x="9" y="5" width="4" height="1"/><rect x="3" y="6" width="4" height="1"/><rect x="9" y="6" width="4" height="1"/><rect x="2" y="7" width="4" height="1"/><rect x="10" y="7" width="4" height="1"/><rect x="2" y="8" width="4" height="1"/><rect x="10" y="8" width="4" height="1"/><rect x="1" y="9" width="4" height="1"/><rect x="11" y="9" width="4" height="1"/><rect x="1" y="10" width="14" height="1"/><rect x="1" y="11" width="14" height="1"/><rect x="1" y="12" width="4" height="1"/><rect x="11" y="12" width="4" height="1"/><rect x="1" y="13" width="4" height="1"/><rect x="11" y="13" width="4" height="1"/><rect x="1" y="14" width="4" height="1"/><rect x="11" y="14" width="4" height="1"/></svg>nacraft</a>
     <div class="nav-links">
       <a href="/#start">Quick start</a>
       <a href="/audit.html">Audit</a>

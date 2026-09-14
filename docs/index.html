@@ -66,8 +66,101 @@
     --jade-deep: #509475;
     --gold: #ffe16b;
     --coral: #ff5345;
+    --on-accent: #09100d;
     --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
+  /* palettes:start */
+  html[data-pal="solarized-dark"] {
+    --ground: #001f27;
+    --ink: #002b36;
+    --panel: #073642;
+    --line: rgba(88,110,117,.35);
+    --line-2: rgba(88,110,117,.55);
+    --fg: #9ca9ab;
+    --white: #c7cfd0;
+    --dim: #74888f;
+    --jade: #2aa198;
+    --jade-deep: #44908f;
+    --gold: #b58900;
+    --coral: #dc322f;
+    --on-accent: #001f27;
+  }
+  html[data-pal="tokyo-night"] {
+    --ground: #161823;
+    --ink: #1a1b26;
+    --panel: #24283b;
+    --line: rgba(57,63,81,.35);
+    --line-2: rgba(57,63,81,.55);
+    --fg: #c0caf5;
+    --white: #e3e7fa;
+    --dim: #898fb6;
+    --jade: #7aa2f7;
+    --jade-deep: #89dceb;
+    --gold: #e0af68;
+    --coral: #f7768e;
+    --on-accent: #161823;
+  }
+  html[data-pal="catppuccin"] {
+    --ground: #11111b;
+    --ink: #1e1e2e;
+    --panel: #313244;
+    --line: rgba(69,71,90,.35);
+    --line-2: rgba(69,71,90,.55);
+    --fg: #cdd6f4;
+    --white: #e8edfa;
+    --dim: #7b7e92;
+    --jade: #94e2d5;
+    --jade-deep: #74c7ec;
+    --gold: #f9e2af;
+    --coral: #f38ba8;
+    --on-accent: #11111b;
+  }
+  html[data-pal="github"] {
+    --ground: #010409;
+    --ink: #0d1117;
+    --panel: #161b22;
+    --line: rgba(48,54,61,.35);
+    --line-2: rgba(48,54,61,.55);
+    --fg: #c9d1d9;
+    --white: #e7eaee;
+    --dim: #8b949e;
+    --jade: #39c5cf;
+    --jade-deep: #2372eb;
+    --gold: #d29922;
+    --coral: #f85149;
+    --on-accent: #010409;
+  }
+  html[data-pal="solarized-light"] {
+    --ground: #e2dbc7;
+    --ink: #fdf6e3;
+    --panel: #eee8d5;
+    --line: rgba(147,161,161,.35);
+    --line-2: rgba(147,161,161,.55);
+    --fg: #394549;
+    --white: #2d373b;
+    --dim: #566263;
+    --jade: #1c6a64;
+    --jade-deep: #3f6760;
+    --gold: #b58900;
+    --coral: #dc322f;
+    --on-accent: #fdf6e3;
+  }
+  html[data-pal="catppuccin-latte"] {
+    --ground: #e6e9f0;
+    --ink: #fafbfe;
+    --panel: #f0f3f8;
+    --line: rgba(200,207,218,.35);
+    --line-2: rgba(200,207,218,.55);
+    --fg: #242938;
+    --white: #101219;
+    --dim: #616872;
+    --jade: #0965d1;
+    --jade-deep: #4068ae;
+    --gold: #996600;
+    --coral: #c92a2a;
+    --on-accent: #fafbfe;
+  }
+  /* palettes:end */
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { scroll-behavior: smooth; scroll-padding-top: 24px; }
   body {
@@ -96,7 +189,10 @@
     font-size: 20px; letter-spacing: -.03em; color: var(--white);
     display: flex; align-items: baseline; gap: 0;
   }
-  .brand .pick { width: 14px; height: 14px; display: block; margin-right: 2px; }
+  /* The A is the accent, so it follows whatever palette is in force.
+     Inline rather than an <img>: an image cannot inherit a colour. */
+  .brand .pick { width: 14px; height: 14px; display: block; margin-right: 2px;
+                 color: var(--jade); }
   /* Same voice as the footer: mono, lowercase, one rhythm. The casing is
      text-transform rather than typed in, so the markup still says "Quick start"
      and "Configure" for a screen reader. The brand keeps its own face —
@@ -125,7 +221,7 @@
   }
   .mode-toggle button + button { border-left: 1px solid var(--line-2); }
   .mode-toggle button[aria-pressed="true"] {
-    background: var(--jade); color: var(--ink);
+    background: var(--jade); color: var(--on-accent);
   }
 
   /* ── hero ──────────────────────────────────────────── */
@@ -471,23 +567,6 @@
     footer .r { margin-left: 0; flex-wrap: wrap; }
   }
   /* ── light mode overrides (solarized-light) ───── */
-  html.light {
-    --ground: #fdf6e3;
-    --ink: #073642;
-    --panel: #eee8d5;
-    --line: rgba(214,206,184,.35);
-    --line-2: rgba(214,206,184,.55);
-    --fg: #657b83;
-    --white: #073642;
-    --dim: #93a1a1;
-    --jade: #859900;
-    --jade-deep: #268bd2;
-    --gold: #b58900;
-    --coral: #dc322f;
-  }
-  html.light body { background: #fdf6e3; color: #073642; }
-  html.light h1 { color: #268bd2; }
-  html.light .install .c { color: #fdf6e3; }
 </style>
 <script src="/analytics.js?v=8fa4ec5f"></script>
 </head>
@@ -496,7 +575,7 @@
 <!-- nav:start -->
 <nav>
   <div class="wrap nav-in">
-    <a class="brand" href="/"><img class="pick" src="mark.svg?v=7b310f6e" alt="A" width="14" height="14">nacraft</a>
+    <a class="brand" href="/"><svg class="pick" role="img" aria-label="A" width="14" height="14" viewBox="1 1 14 14" shape-rendering="crispEdges" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="1" width="4" height="1"/><rect x="5" y="2" width="6" height="1"/><rect x="4" y="3" width="8" height="1"/><rect x="4" y="4" width="8" height="1"/><rect x="3" y="5" width="4" height="1"/><rect x="9" y="5" width="4" height="1"/><rect x="3" y="6" width="4" height="1"/><rect x="9" y="6" width="4" height="1"/><rect x="2" y="7" width="4" height="1"/><rect x="10" y="7" width="4" height="1"/><rect x="2" y="8" width="4" height="1"/><rect x="10" y="8" width="4" height="1"/><rect x="1" y="9" width="4" height="1"/><rect x="11" y="9" width="4" height="1"/><rect x="1" y="10" width="14" height="1"/><rect x="1" y="11" width="14" height="1"/><rect x="1" y="12" width="4" height="1"/><rect x="11" y="12" width="4" height="1"/><rect x="1" y="13" width="4" height="1"/><rect x="11" y="13" width="4" height="1"/><rect x="1" y="14" width="4" height="1"/><rect x="11" y="14" width="4" height="1"/></svg>nacraft</a>
     <div class="nav-links">
       <a href="#start">Quick start</a>
       <a href="/audit.html">Audit</a>
@@ -2434,39 +2513,6 @@
 <!-- footer:end -->
 
 <script>
-  function setMode(mode) {
-    var html = document.documentElement;
-    var isPaper = mode === 'paper';
-    html.classList.toggle('light', isPaper);
-    document.querySelectorAll('.mode-toggle button').forEach(function (b) {
-      b.setAttribute('aria-pressed', String(b.getAttribute('data-ground') === mode));
-    });
-    var tabs = document.querySelector('.tabs');
-    var dashEls = document.querySelectorAll('.dash');
-    var term = document.getElementById('term');
-    if (isPaper) {
-      if (tabs) tabs.style.display = 'none';
-      // Solarized Light, because that is what the page itself turns into:
-      // --ground is base3 and --panel is base2. Paper mode was written when
-      // catppuccin-latte was the only light palette, and showing a cool
-      // blue-grey capture inside a warm Solarized frame put three grounds
-      // that do not agree on one screen. The background is the capture's own
-      // ink, the same value the tabs use for every other palette, so the
-      // frame and the screenshot meet without a seam.
-      dashEls.forEach(function (p) {
-        p.hidden = p.dataset.theme !== 'solarized-light';
-      });
-      if (term) term.style.background = '#e2dbc7';
-    } else {
-      if (tabs) tabs.style.display = '';
-      var selected = document.querySelector('.tabs button[aria-selected="true"]');
-      dashEls.forEach(function (p) {
-        p.hidden = p.dataset.theme !== (selected ? selected.dataset.theme : 'osaka-jade');
-      });
-      if (term) term.style.background = selected ? selected.dataset.bg : '#09100d';
-    }
-    try { localStorage.setItem('mode', mode); } catch (e) {}
-  }
   function cp(el) {
     navigator.clipboard.writeText('curl -fsSL https://anacraft.dev/install.sh | bash').then(function () {
       el.classList.add('done');
@@ -2474,17 +2520,36 @@
     });
   }
   (function () {
+    var DEFAULT = 'osaka-jade';
     var term = document.getElementById('term');
     var tabs = document.querySelectorAll('.tabs button');
-    tabs.forEach(function (b) {
-      b.addEventListener('click', function () {
-        tabs.forEach(function (o) { o.setAttribute('aria-selected', o === b); });
-        document.querySelectorAll('.dash').forEach(function (p) {
-          p.hidden = p.dataset.theme !== b.dataset.theme;
-        });
-        term.style.background = b.dataset.bg;
+
+    function apply(name) {
+      var tab = document.querySelector('.tabs button[data-theme="' + name + '"]');
+      if (!tab) { return; }
+      tabs.forEach(function (o) { o.setAttribute('aria-selected', o === tab); });
+      document.querySelectorAll('.dash').forEach(function (p) {
+        p.hidden = p.dataset.theme !== name;
       });
+      if (term) { term.style.background = tab.dataset.bg; }
+      // osaka-jade is :root rather than a [data-pal] block, so it is the
+      // absence of the attribute — which is also what the page renders as
+      // before this script runs, so there is no flash on the way in.
+      if (name === DEFAULT) {
+        delete document.documentElement.dataset.pal;
+      } else {
+        document.documentElement.dataset.pal = name;
+      }
+      try { localStorage.setItem('palette', name); } catch (e) {}
+    }
+
+    tabs.forEach(function (b) {
+      b.addEventListener('click', function () { apply(b.dataset.theme); });
     });
+
+    var saved = null;
+    try { saved = localStorage.getItem('palette'); } catch (e) {}
+    if (saved && saved !== DEFAULT) { apply(saved); }
   })();
   /* The hero's panel: RIGHT NOW, running.
    *

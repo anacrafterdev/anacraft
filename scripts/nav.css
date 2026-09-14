@@ -9,7 +9,10 @@
     font-size: 20px; letter-spacing: -.03em; color: var(--white);
     display: flex; align-items: baseline; gap: 0;
   }
-  .brand .pick { width: 14px; height: 14px; display: block; margin-right: 2px; }
+  /* The A is the accent, so it follows whatever palette is in force.
+     Inline rather than an <img>: an image cannot inherit a colour. */
+  .brand .pick { width: 14px; height: 14px; display: block; margin-right: 2px;
+                 color: var(--jade); }
   /* Same voice as the footer: mono, lowercase, one rhythm. The casing is
      text-transform rather than typed in, so the markup still says "Quick start"
      and "Configure" for a screen reader. The brand keeps its own face —

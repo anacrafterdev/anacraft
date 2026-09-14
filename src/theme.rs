@@ -190,12 +190,12 @@ pub const LIGHT: Palette = Palette {
 
 pub const THEMES: [&Palette; 7] = [
     &OSAKA_JADE,
+    &SOLARIZED_DARK,
+    &TOKYO_NIGHT,
     &CATPPUCCIN,
     &GITHUB,
-    &TOKYO_NIGHT,
-    &LIGHT,
-    &SOLARIZED_DARK,
     &SOLARIZED_LIGHT,
+    &LIGHT,
 ];
 
 static SELECTED: AtomicUsize = AtomicUsize::new(0);

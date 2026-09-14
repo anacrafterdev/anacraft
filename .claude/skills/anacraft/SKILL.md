@@ -157,8 +157,8 @@ never the other way round, so "page views look counted twice" is a finding and
 inside a GTM container, so it finds the tagging bugs that reach the data and
 not the ones that only show up in the container.
 
-Part of the subscription; `--demo` is not, and shows the whole shape of a
-report. The same checks are available to an assistant as the `audit_site` MCP
+Part of the Anacrafter **Pro** plan ($5.99), alongside Slack alerts; `--demo`
+is not, and shows the whole shape of a report. The same checks are available to an assistant as the `audit_site` MCP
 tool — see 8.
 
 ## 6. Alerts

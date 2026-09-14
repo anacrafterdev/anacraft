@@ -44,8 +44,8 @@ use crate::config::Config;
 /// One of the three Anacraft plans, in the order somebody climbs them.
 ///
 /// Basic — $2.99 — is `craft configure` and `craft watch`. Pro — $5.99 — adds
-/// Slack alerts. Elite — $9.99 — adds `craft mcp` and the rest of the AI-tool
-/// integration. A plan contains everything below it, so every gate is one
+/// `craft audit` and Slack alerts. Elite — $9.99 — adds `craft mcp` and the
+/// rest of the AI-tool integration. A plan contains everything below it, so every gate is one
 /// `meets` comparison and every dollar figure lives here, once.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
 pub enum Tier {
@@ -873,7 +873,7 @@ fn subscribe_first(command: &str) -> String {
 fn upgrade(have: Tier, required: Tier, command: &str) -> String {
     // What the higher plan's price buys, in the words the site uses on it.
     let worth_it = match required {
-        Tier::Pro => "Slack alerts",
+        Tier::Pro => "craft audit and Slack alerts",
         Tier::Elite => "craft mcp and the AI-tool integration",
         Tier::Basic => "everything in the plan you already have",
     };

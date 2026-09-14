@@ -222,7 +222,7 @@ nothing without the number of ways it looked — and a check that could not run,
 because the Admin API was unreadable or the property was too quiet to judge, is
 reported as not run rather than as a pass.
 
-`craft audit` is part of the [Anacrafter plan](https://anacraft.dev/pricing.html);
+`craft audit` is part of the [Anacrafter Pro plan](https://anacraft.dev/pricing.html);
 `craft audit --demo` is not, and shows the whole shape of a report before
 anything is connected.
 

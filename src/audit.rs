@@ -1011,7 +1011,7 @@ pub async fn run(cfg: &Config, property: Option<&str>, opts: Options) -> Result<
 
     let tier = crate::license::sync(cfg).await;
     let cfg = &Config::load().unwrap_or_default();
-    crate::license::gate(tier, crate::license::Tier::Basic, "craft audit")
+    crate::license::gate(tier, crate::license::Tier::Pro, "craft audit")
         .map_err(|reason| anyhow::anyhow!(reason))?;
 
     let id = cfg.resolve_property(property)?;

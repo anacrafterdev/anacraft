@@ -585,15 +585,19 @@ const TOOLS: &[Tool] = &[
     Tool {
         name: "audit_site",
         title: "Audit the measurement",
-        description: "How the property is measuring, rather than what it measured. Twelve \
+        description: "How the property is measuring, rather than what it measured. Fifteen \
                       checks: whether anything is marked as a key event and whether those \
-                      events ever fire, whether purchases carry their revenue, whether page \
-                      views are counted twice, whether the site or a payment page is \
-                      crediting itself with conversions, whether an event stopped firing \
-                      between one window and the one before. Each finding is graded and \
-                      carries what it means. Run this before trusting the numbers from any \
-                      other tool, and whenever a number looks wrong — most numbers that look \
-                      wrong are being measured wrong.",
+                      events ever fire, whether outcomes are arriving unmarked, whether the \
+                      stream is measuring what it was told to and recording what it \
+                      measures, whether purchases carry their revenue, whether page views \
+                      are counted twice, whether the site or a payment page is crediting \
+                      itself with conversions, whether an event stopped firing between one \
+                      window and the one before. Each finding is graded and carries what it \
+                      means, and some carry a `fix` naming the one thing that would repair \
+                      them — `craft audit --fix` is what applies those, and this tool never \
+                      does. Run this before trusting the numbers from any other tool, and \
+                      whenever a number looks wrong — most numbers that look wrong are being \
+                      measured wrong.",
         days: Some(crate::audit::DEFAULT_DAYS),
         limit: false,
         query: None,
@@ -1805,13 +1809,18 @@ mod tests {
         assert_eq!(asked["date_range"]["days"], json!(90));
     }
 
+    /// Kept as a number rather than read from `audit::CHECKS`, so adding a
+    /// check has to be a deliberate edit here too: this is the figure an
+    /// assistant quotes when it says how hard the property was looked at.
+    const CHECKS_AVAILABLE: usize = 15;
+
     #[tokio::test]
     async fn the_audit_tool_answers_with_graded_findings() {
         let mut server = server();
         let answered = payload(&mut server, "audit_site", json!({})).await;
 
         assert_eq!(answered["clean"], json!(false));
-        assert_eq!(answered["checks_available"], json!(12));
+        assert_eq!(answered["checks_available"], json!(CHECKS_AVAILABLE));
         let findings = answered["findings"].as_array().unwrap();
         assert!(!findings.is_empty());
         // Each finding has to carry what it means, not only that it fired —

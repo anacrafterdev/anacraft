@@ -10,6 +10,40 @@ use crate::auth::Auth;
 const DATA_API: &str = "https://analyticsdata.googleapis.com/v1beta";
 const ADMIN_API: &str = "https://analyticsadmin.googleapis.com/v1beta";
 
+/// The same Admin API, one version back down the stability ladder.
+///
+/// Enhanced measurement is the only settings resource GA4 has never promoted
+/// to v1beta, and it is the one that says which events a stream was told to
+/// collect — which makes it the difference between `craft audit` guessing what
+/// a site should be sending and reading what Google was told it would send.
+/// Alpha can move under us, so everything read from here is optional: a check
+/// that cannot reach it is reported as not run, never as a pass.
+const ADMIN_ALPHA: &str = "https://analyticsadmin.googleapis.com/v1alpha";
+
+/// What GA4 puts in the site-search parameter box when it turns site search on
+/// for you. Used only when a property has never had one and a write demands
+/// the field — never to replace a value somebody chose.
+const DEFAULT_SEARCH_PARAMS: &str = "q,s,search,query,keyword";
+
+/// An update mask is snake_case; the body it masks is camelCase. The same
+/// field, spelled twice, is a typo waiting to happen — so it is spelled once
+/// and converted here.
+fn camel(snake: &str) -> String {
+    let mut out = String::with_capacity(snake.len());
+    let mut rising = false;
+    for ch in snake.chars() {
+        match ch {
+            '_' => rising = true,
+            _ if rising => {
+                out.extend(ch.to_uppercase());
+                rising = false;
+            }
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
 // ---------------------------------------------------------------- request ---
 
 #[derive(Serialize)]
@@ -311,6 +345,35 @@ impl Ga {
         serde_json::from_str(&text).context("unexpected response shape from Google")
     }
 
+    /// The one update verb this client has, and it exists for `craft audit
+    /// --fix`. Everything it can reach is listed in `docs/oauth-scopes.md` and
+    /// pinned by a test below — a `PATCH` against anything else is a widening
+    /// of what this binary told Google it does.
+    async fn patch<T: for<'de> Deserialize<'de>>(
+        &self,
+        url: &str,
+        body: &impl Serialize,
+    ) -> Result<T> {
+        let token = self.auth.access_token().await?;
+        let res = self
+            .http
+            .patch(url)
+            .bearer_auth(token)
+            .json(body)
+            .send()
+            .await
+            .context("calling the Google Analytics API")?;
+
+        let status = res.status();
+        let text = res.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            bail!("{}", explain(status.as_u16(), &text));
+        }
+
+        serde_json::from_str(&text).context("unexpected response shape from Google")
+    }
+
     async fn get<T: for<'de> Deserialize<'de>>(&self, url: &str) -> Result<T> {
         let token = self.auth.access_token().await?;
         let res = self.http.get(url).bearer_auth(token).send().await?;
@@ -409,8 +472,49 @@ impl Account {
 
 /// A web data stream: the thing that owns a measurement id.
 pub struct WebStream {
+    /// The full resource name, `properties/{p}/dataStreams/{s}`. Carried
+    /// because enhanced measurement hangs off the stream rather than the
+    /// property, and its path is this plus one segment.
+    pub name: String,
     pub measurement_id: String,
     pub default_uri: String,
+}
+
+/// The automatic events a web stream was told to collect beside `page_view`.
+///
+/// Configuration rather than measurement, and the only place GA4 states an
+/// expectation about events instead of counting them. A toggle that is on and
+/// an event count of zero is the property contradicting itself, which is the
+/// one shape an audit can call a defect rather than a shortfall.
+pub struct EnhancedMeasurement {
+    /// The master switch. With this off the toggles below are stored and
+    /// ignored, so a stream can look fully configured and collect none of it.
+    pub stream_enabled: bool,
+    pub scrolls: bool,
+    pub outbound_clicks: bool,
+    pub site_search: bool,
+    pub video_engagement: bool,
+    pub file_downloads: bool,
+    pub form_interactions: bool,
+    /// Required by the API on any write, so it is read here to be handed
+    /// straight back rather than invented.
+    pub search_query_parameter: String,
+}
+
+impl EnhancedMeasurement {
+    /// Read a toggle by the snake_case name the update mask uses, so callers
+    /// can hold one table of fields rather than a table and a match arm.
+    pub fn on(&self, field: &str) -> bool {
+        match field {
+            "scrolls_enabled" => self.scrolls,
+            "outbound_clicks_enabled" => self.outbound_clicks,
+            "site_search_enabled" => self.site_search,
+            "video_engagement_enabled" => self.video_engagement,
+            "file_downloads_enabled" => self.file_downloads,
+            "form_interactions_enabled" => self.form_interactions,
+            _ => false,
+        }
+    }
 }
 
 /// An event the property has been told to treat as an outcome.
@@ -469,6 +573,7 @@ impl Ga {
             .filter_map(|stream| {
                 let web = stream.web_stream_data?;
                 Some(WebStream {
+                    name: stream.name,
                     measurement_id: web.measurement_id,
                     default_uri: web.default_uri,
                 })
@@ -515,6 +620,100 @@ impl Ga {
             .collect())
     }
 
+    /// What a stream was told to measure automatically.
+    ///
+    /// v1alpha, because Google has never promoted this one — see
+    /// [`ADMIN_ALPHA`]. Every caller treats a failure here as a check that did
+    /// not run.
+    pub async fn enhanced_measurement(&self, stream: &str) -> Result<EnhancedMeasurement> {
+        let url = format!("{ADMIN_ALPHA}/{stream}/enhancedMeasurementSettings");
+        let res: EnhancedMeasurementResource = self.get(&url).await?;
+        Ok(EnhancedMeasurement {
+            stream_enabled: res.stream_enabled,
+            scrolls: res.scrolls_enabled,
+            outbound_clicks: res.outbound_clicks_enabled,
+            site_search: res.site_search_enabled,
+            video_engagement: res.video_engagement_enabled,
+            file_downloads: res.file_downloads_enabled,
+            form_interactions: res.form_interactions_enabled,
+            search_query_parameter: res.search_query_parameter,
+        })
+    }
+
+    /// Turn measurement toggles on. Requires `analytics.edit`.
+    ///
+    /// `fields` are the snake_case names the update mask wants, and only the
+    /// named ones move — an update mask is why this cannot reach a setting the
+    /// caller did not list, and why turning on file downloads cannot quietly
+    /// turn off anything else.
+    ///
+    /// One-way on purpose. This sets toggles true and has no way to express
+    /// false, so the worst a bug here can do is collect an event somebody did
+    /// not ask for, which the console undoes in a click. Reached only from
+    /// `craft audit --fix`.
+    pub async fn enable_measurement(
+        &self,
+        stream: &str,
+        settings: &EnhancedMeasurement,
+        fields: &[&str],
+    ) -> Result<()> {
+        if fields.is_empty() {
+            return Ok(());
+        }
+        let url = format!(
+            "{ADMIN_ALPHA}/{stream}/enhancedMeasurementSettings?updateMask={}",
+            fields.join(",")
+        );
+
+        let mut body = serde_json::Map::new();
+        for field in fields {
+            body.insert(camel(field), serde_json::Value::Bool(true));
+        }
+        // The API rejects a write that leaves this empty, and inventing a
+        // value would overwrite whichever parameters the site actually uses.
+        // Handed back as read, or seeded with Google's own default when the
+        // property has never had one.
+        if fields.contains(&"site_search_enabled") {
+            let existing = settings.search_query_parameter.trim();
+            body.insert(
+                "searchQueryParameter".into(),
+                serde_json::Value::String(if existing.is_empty() {
+                    DEFAULT_SEARCH_PARAMS.to_string()
+                } else {
+                    existing.to_string()
+                }),
+            );
+        }
+
+        let _: serde_json::Value = self.patch(&url, &serde_json::Value::Object(body)).await?;
+        Ok(())
+    }
+
+    /// Mark an event as an outcome. Requires `analytics.edit`.
+    ///
+    /// Additive and reversible: it tells GA4 that an event already arriving is
+    /// the point, and changes nothing about what the site sends or what was
+    /// collected before it. Admin → Events unmarks it again in one click.
+    ///
+    /// Same `keyEvents`/`conversionEvents` fallback [`Ga::key_events`] makes,
+    /// for the same properties.
+    pub async fn create_key_event(&self, property: &str, event: &str) -> Result<()> {
+        let url = |path: &str| format!("{ADMIN_API}/properties/{property}/{path}");
+        let body = serde_json::json!({ "eventName": event });
+
+        match self
+            .post::<serde_json::Value>(&url("keyEvents"), &body)
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(modern) => self
+                .post::<serde_json::Value>(&url("conversionEvents"), &body)
+                .await
+                .map(|_| ())
+                .map_err(|_legacy| modern),
+        }
+    }
+
     /// Create a property. Requires `analytics.edit`.
     pub async fn create_property(
         &self,
@@ -558,6 +757,7 @@ impl Ga {
              measurement id to print — check the property in the Analytics console",
         )?;
         Ok(WebStream {
+            name: created.name,
             measurement_id: web.measurement_id,
             default_uri: web.default_uri,
         })
@@ -637,6 +837,8 @@ struct DataStreamList {
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct DataStreamResource {
+    #[serde(default)]
+    name: String,
     /// Absent on app streams, which is how they get filtered out.
     #[serde(default)]
     web_stream_data: Option<WebStreamData>,
@@ -649,6 +851,27 @@ struct WebStreamData {
     measurement_id: String,
     #[serde(default)]
     default_uri: String,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct EnhancedMeasurementResource {
+    #[serde(default)]
+    stream_enabled: bool,
+    #[serde(default)]
+    scrolls_enabled: bool,
+    #[serde(default)]
+    outbound_clicks_enabled: bool,
+    #[serde(default)]
+    site_search_enabled: bool,
+    #[serde(default)]
+    video_engagement_enabled: bool,
+    #[serde(default)]
+    file_downloads_enabled: bool,
+    #[serde(default)]
+    form_interactions_enabled: bool,
+    #[serde(default)]
+    search_query_parameter: String,
 }
 
 /// One shape for both spellings, so the fallback does not need two of these.
@@ -748,21 +971,66 @@ mod tests {
     }
 
     #[test]
-    fn the_admin_api_surface_is_two_creates_and_one_named_delete() {
+    fn the_admin_api_surface_is_the_one_documented_in_the_scope_submission() {
         let source = client_source();
 
-        // Nothing here modifies a resource somebody else made. A property's
-        // settings, its streams, its user links: anacraft reads them and never
-        // writes over them.
-        for verb in [".patch(", ".put("] {
+        // Every verb this client is allowed to speak, and the exact list of
+        // resources each one may reach. `docs/oauth-scopes.md` is the
+        // submission this app is verified against, and it names these and
+        // nothing else — so a new endpoint has to pass through here, which is
+        // the only place that notices the submission has to change with it.
+        //
+        // The check is on the URL the call is built from rather than the
+        // method name, because a method can be renamed and a URL cannot be
+        // anything other than what it asks Google for.
+        let writes = [
+            // Create a property and its stream, from `craft configure`.
+            ("{ADMIN_API}/properties\"", "properties.create"),
+            (
+                "{ADMIN_API}/properties/{property}/dataStreams\"",
+                "dataStreams.create",
+            ),
+            // Mark an event as an outcome, from `craft audit --fix`. Additive
+            // and undone in the console in one click.
+            (
+                "{ADMIN_API}/properties/{property}/{path}\"",
+                "keyEvents.create",
+            ),
+            // Turn stream measurement on, from `craft audit --fix`. Masked to
+            // the fields the printed plan named, and never off.
+            (
+                "{ADMIN_ALPHA}/{stream}/enhancedMeasurementSettings?updateMask=",
+                "enhancedMeasurementSettings.patch",
+            ),
+        ];
+        for (url, what) in writes {
             assert!(
-                !source.contains(verb),
-                "a `{verb}` request appeared in the Analytics client. If that is \
-                 intentional, the scope justification in docs/oauth-scopes.md no \
-                 longer describes what this binary does, and Google was told \
-                 otherwise — update the submission before shipping it."
+                source.contains(url),
+                "{what} is documented in docs/oauth-scopes.md and its URL is no longer \
+                 built here — if it was removed, remove it from the submission too"
             );
         }
+
+        // One update verb and no replace. A `PUT` overwrites a resource whole,
+        // which is how a write meant to turn one setting on turns four others
+        // off, and nothing here has a reason to want that.
+        assert!(
+            !source.contains(".put("),
+            "a `.put(` request appeared in the Analytics client. Every write this app \
+             makes is a masked patch or a create; a whole-resource replace is not \
+             something docs/oauth-scopes.md describes."
+        );
+
+        // One caller of the patch helper, so a second endpoint cannot start
+        // being updated without this test being read. Counted on the call
+        // rather than on `.patch(`, which also matches the helper's own line.
+        assert_eq!(
+            source.matches("self.patch(").count(),
+            1,
+            "the Analytics client should make exactly one PATCH — the update-masked \
+             enhancedMeasurementSettings write behind `craft audit --fix`. Anything else \
+             is a widening of what docs/oauth-scopes.md told Google this app does."
+        );
 
         // One destructive call, and one only: `properties.delete`, behind
         // `craft delete --all`. The same warning applies to a second one.
@@ -774,21 +1042,60 @@ mod tests {
              widening of what docs/oauth-scopes.md told Google this app does."
         );
 
-        // And the write path is the documented three, not a fourth thing that
+        // And the write path is the documented five, not a sixth thing that
         // grew in beside them.
         let writes: Vec<&str> = source
             .lines()
             .map(|line| line.trim_start())
             .filter(|line| {
-                line.starts_with("pub async fn create_") || line.starts_with("pub async fn delete_")
+                line.starts_with("pub async fn create_")
+                    || line.starts_with("pub async fn delete_")
+                    || line.starts_with("pub async fn enable_")
             })
             .collect();
         assert_eq!(
             writes.len(),
-            3,
-            "expected exactly properties.create, dataStreams.create and \
-             properties.delete, got: {writes:?}"
+            5,
+            "expected exactly properties.create, dataStreams.create, keyEvents.create, \
+             enhancedMeasurementSettings.patch and properties.delete, got: {writes:?}"
         );
+    }
+
+    #[test]
+    fn nothing_the_fix_path_writes_can_turn_collection_off() {
+        let source = client_source();
+        let body = source
+            .split_once("pub async fn enable_measurement")
+            .expect("the measurement write is still called that")
+            .1;
+        let body = &body[..body.find("\n    /// ").unwrap_or(body.len())];
+
+        // The one write that touches a boolean only ever sets it true. There
+        // is no argument to this function that can express false, which is
+        // what keeps the worst case of a bug here at "collected an event
+        // nobody asked for" rather than "stopped collecting silently".
+        assert!(
+            body.contains("Value::Bool(true)"),
+            "the measurement write should set toggles true and have no way to say false"
+        );
+        assert!(
+            !body.contains("Value::Bool(false)"),
+            "the measurement write gained a way to turn collection off — that is not what \
+             docs/oauth-scopes.md describes, and not what `craft audit --fix` offers"
+        );
+    }
+
+    #[test]
+    fn an_update_mask_and_its_body_agree_on_every_field() {
+        // The mask is snake_case and the body it masks is camelCase, so the
+        // same field is spelled twice per write. Spelling it once and
+        // converting is why; this is the conversion.
+        assert_eq!(camel("stream_enabled"), "streamEnabled");
+        assert_eq!(camel("outbound_clicks_enabled"), "outboundClicksEnabled");
+        assert_eq!(camel("site_search_enabled"), "siteSearchEnabled");
+        // Already camel, or a single word: unchanged rather than mangled.
+        assert_eq!(camel("scrolls"), "scrolls");
+        assert_eq!(camel(""), "");
     }
 
     #[test]

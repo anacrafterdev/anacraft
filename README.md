@@ -155,7 +155,8 @@ before it — is this property measuring the site at all, and is what it measure
 worth trusting.
 
 ```sh
-craft audit                  # twelve checks over the last 28 days
+craft audit                  # fifteen checks over the last 28 days
+craft audit --fix            # ...and apply the ones GA4 can fix itself
 craft audit --days 90        # a longer window
 craft audit --format json    # the findings as one object, for a script
 craft audit --format slack   # a Block Kit payload, for a webhook
@@ -169,7 +170,7 @@ fail the second for a year without anybody noticing, and that combination —
 traffic arriving, nothing marked as an outcome — is the most common thing this
 finds.
 
-**What it checks.** Four things that make a number wrong:
+**What it checks.** Five things that make a number wrong:
 
 - nothing recorded at all, which is a tag that is not installed or a property
   that is not the one the site reports to
@@ -180,8 +181,10 @@ finds.
 - `purchase` arriving without its `value`, which makes every revenue, ARPU and
   ROAS figure on the property zero — including in any Google Ads account
   importing conversions from it
+- enhanced measurement switched off at the master switch, so the stream's
+  automatic events are configured, shown as on, and collected by nothing
 
-Four that distort one:
+Five that distort one:
 
 - page views counted twice, which is what a gtag snippet left in the page
   beside a GTM tag that also sends one looks like from here: bounce rate near
@@ -192,11 +195,32 @@ Four that distort one:
   starts a new session referred by the gateway
 - an event that stopped firing between this window and the one before it, which
   is a tag removed, renamed, or moved behind something that no longer runs
+- outcomes arriving unmarked — `sign_up` firing a thousand times with nothing
+  in GA4 saying it is the point, so no conversion report counts it
+- measurement that is on and silent: the stream is configured to collect
+  scrolls, site search, video or downloads and has recorded none of them for a
+  month, which is the one check with no threshold to tune, because the
+  expectation is Google's rather than ours
 
-And four that are worth knowing before reading anything else: two names for one
+And five that are worth knowing before reading anything else: two names for one
 event, sessions GA4 could not attribute at all, a direct share high enough to
-suggest campaigns going out untagged, and more than one site reporting into the
-property.
+suggest campaigns going out untagged, more than one site reporting into the
+property, and measurement the stream could be collecting and is not.
+
+**What `--fix` does.** Most of what the audit finds is on the site, and no API
+can repair it — an event that is not being sent cannot be made to arrive by
+changing a setting. Two kinds of finding are the exception, and `craft audit
+--fix` applies them: marking outcomes the property is *already recording* as
+key events, and turning on measurement the tag on the site already supports —
+scrolls, outbound clicks, video, downloads. Site search and form interactions
+are reported and never written: those record what a visitor typed, which is a
+decision about a privacy policy rather than about whether the analytics are set
+up right. Both kinds of fix are printed under the finding that motivates them
+before the flag is passed, both are additive, and both are undone from the GA4
+console in a click.
+Nothing in the fix path can turn collection off, lower retention, or change
+what the site sends. It needs Editor on the property; Viewer is enough to run
+the audit and not enough to fix it.
 
 **What it will not do.** It reports a symptom and names the usual cause, never
 the other way round — "bounce rate is 1.2%" is something the API said, and "you
@@ -207,7 +231,8 @@ eighty sessions has no meaningful bounce rate and no meaningful direct share,
 so those checks report as not run rather than firing on noise.
 
 **Exit codes.** `0` when the property is clean, `2` when it is not, `1` on an
-error — the same convention `craft watch` uses, so a weekly audit into Slack is
+error — and with `--fix`, a finding that was just repaired does not hold the
+exit code open. The same convention `craft watch` uses, so a weekly audit into Slack is
 one cron line:
 
 ```sh
@@ -216,7 +241,7 @@ one cron line:
 ```
 
 Unlike `craft watch`, a clean pass still prints: an audit is something somebody
-asked for, and "twelve checks, nothing found" is the answer they asked for. The
+asked for, and "fifteen checks, nothing found" is the answer they asked for. The
 line under every report says how many checks ran, because "no findings" means
 nothing without the number of ways it looked — and a check that could not run,
 because the Admin API was unreadable or the property was too quiet to judge, is
@@ -409,7 +434,7 @@ works. `which craft` gives the value to paste.
 | Tool | Answers |
 |------|---------|
 | `site_status` | Headline metrics against the period before, the daily user series, and the achievements that fired |
-| `audit_site` | Whether the property is measuring correctly: twelve graded checks over 28 days, each carrying what it means |
+| `audit_site` | Whether the property is measuring correctly: fifteen graded checks over 28 days, each carrying what it means |
 | `live_visitors` | Who is on the site right now, by country |
 | `list_pages` | Most-visited pages |
 | `list_events` | Events by count, with the per-day total against the previous period |

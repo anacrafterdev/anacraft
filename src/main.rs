@@ -173,14 +173,17 @@ enum Command {
     ///
     /// The other commands answer "what happened". This one answers the
     /// question before it: is this property measuring the site at all, and is
-    /// what it measured worth trusting. Twelve checks over four weeks —
+    /// what it measured worth trusting. Fifteen checks over four weeks —
     /// whether anything is marked as a key event and whether those events ever
-    /// fire, whether purchases carry their revenue, whether page views are
-    /// being counted twice, whether the site or a payment page is referring
-    /// itself, whether an event stopped firing between releases.
+    /// fire, whether outcomes are arriving unmarked, whether the stream is
+    /// measuring what it was told to and recording what it measures, whether
+    /// purchases carry their revenue, whether page views are being counted
+    /// twice, whether the site or a payment page is referring itself, whether
+    /// an event stopped firing between releases.
     ///
-    /// Read-only, and changes nothing anywhere. Exits 2 when it finds
-    /// something, so a script can tell.
+    /// Read-only unless `--fix` is passed, and then only for the settings it
+    /// printed first. Exits 2 when it finds something it did not fix, so a
+    /// script can tell.
     Audit {
         /// Days to look back, ending yesterday. The previous window of the
         /// same length is what "stopped firing" is measured against.
@@ -190,6 +193,13 @@ enum Command {
         /// webhook payload.
         #[arg(long, short, value_enum, default_value = "panels")]
         format: Format,
+        /// Apply the fixes the report offers. Only ever configuration the
+        /// property already implies — marking outcomes that are arriving,
+        /// turning on measurement the tag already supports — and every one of
+        /// them is printed before it is made and undone from the GA4 console.
+        /// Needs Editor on the property.
+        #[arg(long)]
+        fix: bool,
         /// Audit synthetic data — no Google account, no subscription.
         #[arg(long)]
         demo: bool,
@@ -368,11 +378,21 @@ async fn run() -> Result<()> {
                 mcp::serve(demo, cli.property.as_deref()).await
             }
         }
-        Command::Audit { days, format, demo } => {
+        Command::Audit {
+            days,
+            format,
+            fix,
+            demo,
+        } => {
             audit::run(
                 &cfg,
                 cli.property.as_deref(),
-                audit::Options { days, format, demo },
+                audit::Options {
+                    days,
+                    format,
+                    demo,
+                    fix,
+                },
             )
             .await
         }

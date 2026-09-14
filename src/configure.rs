@@ -708,6 +708,7 @@ pub(crate) async fn find_existing(
                 Some(Existing::Measured(
                     property,
                     WebStream {
+                        name: stream.name.clone(),
                         measurement_id: stream.measurement_id.clone(),
                         default_uri: stream.default_uri.clone(),
                     },

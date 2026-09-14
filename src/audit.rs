@@ -84,7 +84,10 @@ const NAMED: usize = 4;
 const CHECKS: &[&str] = &[
     "collecting",
     "data_stream",
+    "measurement_off",
+    "measurement_silent",
     "key_events_configured",
+    "key_events_unmarked",
     "key_events_firing",
     "revenue_tagged",
     "double_counting",
@@ -101,6 +104,8 @@ const CHECKS: &[&str] = &[
 /// reported as not run rather than as passes — nine findings saying "no data"
 /// would be nine ways of saying it once, and nine passes would be worse.
 const NEEDS_DATA: &[&str] = &[
+    "measurement_silent",
+    "key_events_unmarked",
     "key_events_firing",
     "revenue_tagged",
     "double_counting",
@@ -111,6 +116,83 @@ const NEEDS_DATA: &[&str] = &[
     "source_not_set",
     "direct_share",
 ];
+
+/// The stream's automatic measurement, as a table: the snake_case field an
+/// update mask names it by, how it reads in a sentence, the events it produces
+/// when it is on, and whether `--fix` may switch it on unasked.
+///
+/// Both halves of the pair of checks below are this table read in opposite
+/// directions. On with nothing arriving is a contradiction the property is
+/// stating about itself; off is simply a thing not being collected, which is
+/// sometimes a decision and never a defect.
+///
+/// That last column is the one worth explaining. Site search and form
+/// interactions record what a visitor typed — the query, and which fields of a
+/// form were touched — and whether a site collects that is a question about
+/// its privacy policy, not about whether its analytics are set up correctly.
+/// Somebody running `--fix` to mark a key event has not agreed to start
+/// collecting typed input, and a flag that treated the second as implied by
+/// the first would be the kind of thing that makes `--fix` unsafe to run. Both
+/// are still reported; neither is ever written from here.
+const MEASURED: &[(&str, &str, &[&str], bool)] = &[
+    ("scrolls_enabled", "scrolls", &["scroll"], true),
+    (
+        "outbound_clicks_enabled",
+        "outbound clicks",
+        &["click"],
+        true,
+    ),
+    (
+        "site_search_enabled",
+        "site search",
+        &["view_search_results"],
+        false,
+    ),
+    (
+        "video_engagement_enabled",
+        "video engagement",
+        &["video_start", "video_progress", "video_complete"],
+        true,
+    ),
+    (
+        "file_downloads_enabled",
+        "file downloads",
+        &["file_download"],
+        true,
+    ),
+    (
+        "form_interactions_enabled",
+        "form interactions",
+        &["form_start", "form_submit"],
+        false,
+    ),
+];
+
+/// Events that are an outcome wherever they appear, from GA4's own recommended
+/// event tables. Deliberately short, and deliberately not the whole of those
+/// tables: `add_to_cart` and `begin_checkout` are steps towards an outcome,
+/// and a property that marks them as key events reports a conversion rate that
+/// counts the same visitor three times.
+///
+/// Nothing here is inferred. `craft audit --fix` writes key events from this
+/// list and no other, so what it can mark is a list somebody can read in the
+/// source before they run it.
+const OUTCOMES: &[&str] = &[
+    "purchase",
+    "generate_lead",
+    "sign_up",
+    "subscribe",
+    "start_trial",
+    "contact",
+    "submit_lead_form",
+    "qualify_lead",
+    "close_convert_lead",
+];
+
+/// GA4's own ceiling on key events per property. A fix that would cross it is
+/// not attempted: the API would reject it, and half-marking a set of outcomes
+/// is worse than marking none and saying why.
+const KEY_EVENT_CAP: usize = 30;
 
 /// Hosts that have no business appearing as a referrer.
 ///
@@ -227,6 +309,37 @@ pub struct Finding {
     evidence: Option<String>,
 }
 
+/// A repair `craft audit --fix` can make to the property itself.
+///
+/// Kept beside the findings rather than inside them, because the two are
+/// different things: a finding is what is true, and a fix is what this binary
+/// is willing to do about it. Most findings have no fix and never will —
+/// an event that is not being sent cannot be made to arrive by an API call,
+/// and a report that implied otherwise would be selling a button that does
+/// nothing.
+///
+/// Everything in here is configuration, additive, and undone from the GA4
+/// console in one click. Nothing in here turns collection off, lowers
+/// retention, edits an event on its way in, or touches a setting the plan
+/// printed above it did not name.
+pub struct Fix {
+    /// The check this repairs, so the report can print it under that finding.
+    check: &'static str,
+    /// What it will do, in one line, in the same voice as the findings.
+    label: String,
+    action: Action,
+}
+
+enum Action {
+    /// Tell GA4 that events already arriving are outcomes.
+    MarkKeyEvents(Vec<String>),
+    /// Turn stream measurement toggles on, by update-mask field name.
+    Measure {
+        stream: String,
+        fields: Vec<&'static str>,
+    },
+}
+
 /// One pass over one property.
 pub struct Audit {
     property: String,
@@ -237,6 +350,9 @@ pub struct Audit {
     /// the measurement checks had nothing to measure.
     checks: usize,
     findings: Vec<Finding>,
+    /// What `--fix` would do, in the order it would do it. Empty on every
+    /// property whose problems are all on the site rather than in the console.
+    plan: Vec<Fix>,
 }
 
 impl Audit {
@@ -257,6 +373,11 @@ impl Audit {
     fn sorted(mut self) -> Audit {
         self.findings.sort_by_key(|f| f.grade);
         self
+    }
+
+    /// The fix for a given check, if this audit found one.
+    fn fix_for(&self, check: &str) -> Option<&Fix> {
+        self.plan.iter().find(|f| f.check == check)
     }
 }
 
@@ -302,6 +423,7 @@ async fn examine(ga: &Ga, property: &str, title: &str, days: u32) -> Result<Audi
     let (streams, keys) = tokio::join!(ga.web_streams(property), ga.key_events(property));
 
     let mut findings = Vec::new();
+    let mut plan: Vec<Fix> = Vec::new();
     let mut skipped: Vec<&'static str> = Vec::new();
 
     let sessions = totals.total(T_SESSIONS);
@@ -365,28 +487,265 @@ async fn examine(ga: &Ga, property: &str, title: &str, days: u32) -> Result<Audi
         Ok(_) => {}
     }
 
+    // --- measurement_off and measurement_silent ---------------------------
+    //
+    // The only place GA4 states an expectation about events rather than
+    // counting them, which is what makes this pair worth the extra round trip:
+    // every other check compares a number against a threshold somebody here
+    // chose, and these two compare the property against what the property was
+    // told to do.
+    //
+    // Read per stream and sequentially. A property has one web stream in the
+    // overwhelming case, and the one that has forty is the one where forty
+    // concurrent alpha calls is the wrong thing to do to somebody's quota.
+    let mut settings: Vec<(&WebStream, crate::ga::EnhancedMeasurement)> = Vec::new();
+    let mut unreadable = streams.is_err();
+    for stream in streams.iter().flatten() {
+        match ga.enhanced_measurement(&stream.name).await {
+            Ok(found) => settings.push((stream, found)),
+            // v1alpha, and so allowed to vanish — see `ADMIN_ALPHA`. A check
+            // that could not be read is not a check that passed.
+            Err(_) => unreadable = true,
+        }
+    }
+    if unreadable && settings.is_empty() {
+        skipped.push("measurement_off");
+        skipped.push("measurement_silent");
+    } else {
+        // --- measurement_off ----------------------------------------------
+        for (stream, found) in &settings {
+            if !found.stream_enabled {
+                findings.push(Finding {
+                    check: "measurement_off",
+                    grade: Grade::Warning,
+                    headline: "enhanced measurement is switched off".into(),
+                    detail: "the stream's automatic events — scrolls, outbound clicks, site \
+                             search, video, downloads, form interactions — are configured and \
+                             not collected, because the master switch above them is off. \
+                             Nothing in the console says so on the reports that are missing \
+                             them; the settings underneath keep showing as on."
+                        .into(),
+                    evidence: Some(stream_label(stream)),
+                });
+                plan.push(Fix {
+                    check: "measurement_off",
+                    label: format!("turn enhanced measurement on for {}", stream.measurement_id),
+                    action: Action::Measure {
+                        stream: stream.name.clone(),
+                        fields: vec!["stream_enabled"],
+                    },
+                });
+                break;
+            }
+        }
+
+        // Individual toggles, and only on streams whose master switch is on —
+        // otherwise every stream above would report six more findings saying
+        // the same thing the master switch already said.
+        if !findings.iter().any(|f| f.check == "measurement_off") {
+            for (stream, found) in &settings {
+                let off: Vec<&(&str, &str, &[&str], bool)> = MEASURED
+                    .iter()
+                    .filter(|(field, _, _, _)| !found.on(field))
+                    .collect();
+                if off.is_empty() {
+                    continue;
+                }
+                let names: Vec<&str> = off.iter().map(|(_, label, _, _)| *label).collect();
+                // Reported whole, written in part. See `MEASURED`.
+                let writable: Vec<&'static str> = off
+                    .iter()
+                    .filter(|(_, _, _, fixable)| *fixable)
+                    .map(|(field, _, _, _)| *field)
+                    .collect();
+                let offered: Vec<&str> = off
+                    .iter()
+                    .filter(|(_, _, _, fixable)| *fixable)
+                    .map(|(_, label, _, _)| *label)
+                    .collect();
+                let withheld: Vec<&str> = off
+                    .iter()
+                    .filter(|(_, _, _, fixable)| !*fixable)
+                    .map(|(_, label, _, _)| *label)
+                    .collect();
+                findings.push(Finding {
+                    check: "measurement_off",
+                    grade: Grade::Note,
+                    headline: "the stream is not measuring everything it could".into(),
+                    detail: "these are collected by the tag already on the site, with no \
+                             code to write and nothing to deploy — turning one on starts it \
+                             reporting from that moment. A note rather than a warning \
+                             because some of them are off on purpose: form interactions and \
+                             site search both record what a visitor typed, which is a \
+                             decision about a privacy policy rather than an oversight."
+                        .into(),
+                    evidence: Some(listing(&names)),
+                });
+                if !writable.is_empty() {
+                    plan.push(Fix {
+                        check: "measurement_off",
+                        label: format!(
+                            "turn on {} for {}{}",
+                            listing(&offered),
+                            stream.measurement_id,
+                            if withheld.is_empty() {
+                                String::new()
+                            } else {
+                                // Named rather than quietly dropped: a plan
+                                // that lists four of six and says nothing
+                                // about the other two reads as one that covers
+                                // everything.
+                                format!(
+                                    " · {} stay off — those are a console decision",
+                                    listing(&withheld)
+                                )
+                            },
+                        ),
+                        action: Action::Measure {
+                            stream: stream.name.clone(),
+                            fields: writable,
+                        },
+                    });
+                }
+                break;
+            }
+        }
+
+        // --- measurement_silent -------------------------------------------
+        //
+        // The contradiction, and the reason the alpha read is worth making. A
+        // toggle that is on is the property saying this event will arrive; a
+        // count of zero is it not having arrived for a month. Unlike every
+        // other threshold here there is nothing to tune — the expectation is
+        // Google's, not ours.
+        if dark || sessions < MIN_SESSIONS {
+            skipped.push("measurement_silent");
+        } else {
+            let measured: Vec<&crate::ga::EnhancedMeasurement> =
+                settings.iter().map(|(_, found)| found).collect();
+            let silent = silent_measurement(&measured, &counts);
+            if !silent.is_empty() {
+                findings.push(Finding {
+                    check: "measurement_silent",
+                    grade: Grade::Warning,
+                    headline: "measurement is on and nothing arrives".into(),
+                    detail: format!(
+                        "the stream is configured to collect these automatically and has \
+                         not recorded one of them in {days} days. Enhanced measurement \
+                         works by watching the page, so it goes quiet when there is nothing \
+                         of that shape to watch — a single-page app that never fires a real \
+                         navigation, a video embedded without the parameter that lets GA4 \
+                         read it, a search page whose query is in the path rather than a \
+                         parameter. The setting stays on and green throughout."
+                    ),
+                    evidence: Some(listing(&silent)),
+                });
+            }
+        }
+    }
+
     // --- key_events_configured --------------------------------------------
     //
     // The one that pays for the command. A property can collect flawlessly for
     // a year and still answer no question anybody has, because nothing in it
     // was ever marked as the point.
+    // Outcomes that are arriving and are not marked. The same list answers
+    // both of the checks below, and is what `--fix` writes: an event nobody
+    // has to be asked about, because the property is already recording it.
+    let unmarked: Vec<String> = match (&keys, dark) {
+        (Ok(list), false) => unmarked_outcomes(&counts, list),
+        _ => Vec::new(),
+    };
+    // GA4 rejects the thirty-first, and a fix that marked four of six outcomes
+    // and failed on the rest would leave the property in a state nobody asked
+    // for. Offered whole or not at all.
+    let room = keys
+        .as_ref()
+        .map(|list| list.len() + unmarked.len() <= KEY_EVENT_CAP)
+        .unwrap_or(false);
+
     match &keys {
         Err(_) => {
             skipped.push("key_events_configured");
+            skipped.push("key_events_unmarked");
             skipped.push("key_events_firing");
         }
-        Ok(list) if list.is_empty() => findings.push(Finding {
-            check: "key_events_configured",
-            grade: Grade::Critical,
-            headline: "nothing is marked as a key event".into(),
-            detail: "GA4 is counting traffic and nothing else. With no key event, no report \
-                     on this property can say whether any of that traffic was worth having, \
-                     and Google Ads has nothing to import or optimise against. Mark the \
-                     events that matter under Admin → Events."
-                .into(),
-            evidence: None,
-        }),
+        Ok(list) if list.is_empty() => {
+            findings.push(Finding {
+                check: "key_events_configured",
+                grade: Grade::Critical,
+                headline: "nothing is marked as a key event".into(),
+                detail: "GA4 is counting traffic and nothing else. With no key event, no \
+                         report on this property can say whether any of that traffic was \
+                         worth having, and Google Ads has nothing to import or optimise \
+                         against. Mark the events that matter under Admin → Events."
+                    .into(),
+                evidence: None,
+            });
+            // The property is already recording outcomes and has never been
+            // told they are outcomes — which makes this the one finding here
+            // that is fixed entirely from the console side.
+            if !unmarked.is_empty() && room {
+                plan.push(Fix {
+                    check: "key_events_configured",
+                    label: format!(
+                        "mark {} as {}",
+                        listing(&unmarked.iter().map(String::as_str).collect::<Vec<_>>()),
+                        plural(unmarked.len(), "a key event", "key events"),
+                    ),
+                    action: Action::MarkKeyEvents(unmarked.clone()),
+                });
+            }
+            // `key_events_unmarked` has nothing left to say once the finding
+            // above has said it louder.
+            skipped.push("key_events_unmarked");
+        }
         Ok(_) => {}
+    }
+
+    // --- key_events_unmarked ----------------------------------------------
+    //
+    // The quieter half. A property with key events already set up is not
+    // broken, but an outcome arriving thousands of times that nobody marked is
+    // a report that exists and is not being read.
+    if !skipped.contains(&"key_events_unmarked") && !unmarked.is_empty() {
+        let shown: Vec<String> = unmarked
+            .iter()
+            .map(|name| {
+                format!(
+                    "{name} {}",
+                    render::commas(counts.get(name).copied().unwrap_or(0.0))
+                )
+            })
+            .collect();
+        findings.push(Finding {
+            check: "key_events_unmarked",
+            grade: Grade::Warning,
+            headline: format!(
+                "{} arrives unmarked",
+                plural(unmarked.len(), "an outcome", "outcomes")
+            ),
+            detail: "these are events GA4's own recommended set treats as outcomes, they \
+                     are firing on this property, and none of them is marked as a key \
+                     event. Nothing is lost — the events are collected and the history is \
+                     there the moment one is marked — but until then no conversion report \
+                     counts them and Google Ads cannot import them."
+                .into(),
+            evidence: Some(listing(
+                &shown.iter().map(String::as_str).collect::<Vec<_>>(),
+            )),
+        });
+        if room {
+            plan.push(Fix {
+                check: "key_events_unmarked",
+                label: format!(
+                    "mark {} as {}",
+                    listing(&unmarked.iter().map(String::as_str).collect::<Vec<_>>()),
+                    plural(unmarked.len(), "a key event", "key events"),
+                ),
+                action: Action::MarkKeyEvents(unmarked.clone()),
+            });
+        }
     }
 
     // --- key_events_firing ------------------------------------------------
@@ -649,11 +1008,60 @@ async fn examine(ga: &Ga, property: &str, title: &str, days: u32) -> Result<Audi
         days,
         checks: CHECKS.len().saturating_sub(skipped.len()),
         findings,
+        plan,
     }
     .sorted())
 }
 
 // ------------------------------------------------------------------ helpers ---
+
+/// Outcomes that are arriving and are not marked as key events.
+///
+/// Pure, and separate from the check that reports it, because this is the list
+/// `--fix` writes to somebody's property — the thing worth being able to state
+/// the behaviour of in a test rather than inferring it from a report.
+fn unmarked_outcomes(counts: &BTreeMap<String, f64>, keys: &[KeyEvent]) -> Vec<String> {
+    OUTCOMES
+        .iter()
+        // Arriving. An outcome a site does not have is not a finding, and
+        // marking an event that has never fired creates a key event whose
+        // report is permanently empty.
+        .filter(|name| counts.get(**name).copied().unwrap_or(0.0) > 0.0)
+        // And not already the point. Exact match, because GA4's is: a property
+        // with `Purchase` marked has not marked `purchase`.
+        .filter(|name| !keys.iter().any(|k| k.name == **name))
+        .map(|name| name.to_string())
+        .collect()
+}
+
+/// Measurement that is switched on and has recorded nothing.
+///
+/// Named once per stream at most, and only for streams whose master switch is
+/// on — a stream with enhanced measurement off is not silent, it is off, and
+/// `measurement_off` has already said so.
+fn silent_measurement(
+    settings: &[&crate::ga::EnhancedMeasurement],
+    counts: &BTreeMap<String, f64>,
+) -> Vec<&'static str> {
+    let mut silent: Vec<&'static str> = Vec::new();
+    for found in settings {
+        if !found.stream_enabled {
+            continue;
+        }
+        for (field, label, events, _) in MEASURED {
+            if !found.on(field) || silent.contains(label) {
+                continue;
+            }
+            let arrived = events
+                .iter()
+                .any(|e| counts.get(*e).copied().unwrap_or(0.0) > 0.0);
+            if !arrived {
+                silent.push(label);
+            }
+        }
+    }
+    silent
+}
 
 /// A `name → count` view of a one-dimension report.
 fn tally(report: &crate::ga::Report) -> BTreeMap<String, f64> {
@@ -830,9 +1238,30 @@ fn panels(audit: &Audit) -> String {
         for line in wrap(&finding.detail, TEXT_WIDTH) {
             out.push_str(&format!("    {}\n", dim(&line)));
         }
+        // Under the detail rather than beside the headline: the finding is
+        // what is true and the fix is an offer, and a reader who disagrees
+        // with the first should not have already read a button.
+        if let Some(fix) = audit.fix_for(finding.check) {
+            for (n, line) in wrap(&format!("fix · {}", fix.label), TEXT_WIDTH)
+                .into_iter()
+                .enumerate()
+            {
+                let text = if n == 0 { line } else { format!("  {line}") };
+                out.push_str(&format!("    {}\n", paint(&text, ore::emerald())));
+            }
+        }
         out.push('\n');
     }
 
+    if !audit.plan.is_empty() {
+        out.push_str(&format!(
+            "  {}\n",
+            dim(&format!(
+                "{} of these can be fixed from here · craft audit --fix",
+                audit.plan.len(),
+            ))
+        ));
+    }
     out.push_str(&format!("  {}\n", dim(&summary(audit))));
     out.push_str(&format!("{}\n", panel_bottom()));
     out
@@ -881,21 +1310,27 @@ pub(crate) fn findings_payload(audit: &Audit) -> Value {
             "warning": audit.count(Grade::Warning),
             "note": audit.count(Grade::Note),
         },
+        "fixable": audit.plan.len(),
         "findings": audit.findings.iter().map(|f| json!({
             "check": f.check,
             "grade": f.grade.slug(),
             "headline": f.headline,
             "detail": f.detail,
             "evidence": f.evidence,
+            // Null on most of them, and that is the point: a script can tell
+            // which findings `--fix` would touch without parsing English.
+            "fix": audit.fix_for(f.check).map(|fix| fix.label.clone()),
         })).collect::<Vec<_>>(),
     })
 }
 
 /// One object, shaped the way `overview --format json` and `watch --format
 /// json` are: the findings, plus which property and when.
-fn as_json(audit: &Audit) -> Value {
+fn as_json(audit: &Audit, repaired: &[&str]) -> Value {
     let mut payload = findings_payload(audit);
     if let Some(object) = payload.as_object_mut() {
+        // Always present, empty without `--fix`, so a script reads one shape.
+        object.insert("applied".into(), json!(repaired));
         object.insert("property".into(), json!(audit.property));
         object.insert("title".into(), json!(audit.title));
         object.insert("url".into(), json!(crate::watch::ga_url(&audit.property)));
@@ -918,7 +1353,7 @@ pub(crate) fn inspect_demo(days: u32) -> Value {
 ///
 /// Unlike `watch`, this renders on a clean pass too. A watch posting "nothing
 /// happened" every hour trains people to ignore the channel; an audit is a
-/// thing somebody asked for, and "twelve checks, nothing found" is the answer
+/// thing somebody asked for, and "fifteen checks, nothing found" is the answer
 /// they asked for.
 fn as_slack(audit: &Audit) -> Value {
     let heading = if audit.clean() {
@@ -977,6 +1412,15 @@ fn as_slack(audit: &Audit) -> Value {
     })
 }
 
+/// Findings still standing once `--fix` has done what it can.
+fn outstanding(audit: &Audit, repaired: &[&str]) -> usize {
+    audit
+        .findings
+        .iter()
+        .filter(|f| !repaired.contains(&f.check))
+        .count()
+}
+
 /// Character-wise, because a Block Kit limit is in characters and slicing a
 /// multi-byte name at a byte index panics.
 fn cut(text: &str, max: usize) -> String {
@@ -995,6 +1439,139 @@ pub struct Options {
     pub days: u32,
     pub format: Format,
     pub demo: bool,
+    /// Apply the plan the report prints, instead of only printing it.
+    pub fix: bool,
+}
+
+/// Apply the plan, and say what happened to each part of it.
+///
+/// Sequential, and one line printed per write as it lands rather than a
+/// summary at the end. This is changing somebody's production property: if the
+/// third of five writes fails, the two that already succeeded are on the
+/// screen and not inside a spinner that got replaced by an error.
+///
+/// A failure does not stop the rest. Each of these is independent — marking
+/// `sign_up` has nothing to do with turning on file downloads — so stopping at
+/// the first would leave a property half-calibrated for no reason.
+/// `quiet` is for the formats that are a pipe rather than a screen. A panel
+/// printed after a JSON object is the kind of thing that works when a person
+/// runs it and breaks the first time it is put in a cron line, so under
+/// `--format json` nothing is printed here and what was repaired travels in
+/// the object instead.
+async fn apply(ga: &Ga, property: &str, audit: &Audit, quiet: bool) -> Result<Vec<&'static str>> {
+    let why = format!(
+        "fixing {} needs permission to change your Analytics settings",
+        audit.title,
+    );
+    ga.auth()
+        .ensure_scope(crate::auth::SCOPE_EDIT, &why)
+        .await?
+        .show(&crate::auth::GRANTED);
+
+    println!(
+        "\n{}\n",
+        panel_top(&format!("FIX · {}", audit.title.to_uppercase()))
+    );
+
+    let mut repaired = Vec::new();
+    let mut denied = false;
+
+    for fix in &audit.plan {
+        let outcome = match &fix.action {
+            Action::MarkKeyEvents(names) => {
+                let mut failed = None;
+                let mut marked = 0;
+                for name in names {
+                    match ga.create_key_event(property, name).await {
+                        Ok(()) => marked += 1,
+                        Err(e) => {
+                            failed = Some(e);
+                            break;
+                        }
+                    }
+                }
+                match failed {
+                    // Partial is reported as partial. The cap check in
+                    // `examine` is what should have prevented this, and if it
+                    // did not then the count that got through is the one thing
+                    // worth knowing.
+                    Some(e) if marked > 0 => Err(anyhow::anyhow!(
+                        "{e}\n  {marked} of {} were marked before this",
+                        names.len()
+                    )),
+                    Some(e) => Err(e),
+                    None => Ok(()),
+                }
+            }
+            // Read again immediately before writing. The audit above may be
+            // seconds or minutes old, and the write has to hand back the
+            // property's own site-search parameters rather than a guess at
+            // them — so the value that goes up is the one that is up there
+            // now, not the one that was when the report printed.
+            Action::Measure { stream, fields } => match ga.enhanced_measurement(stream).await {
+                Ok(current) => {
+                    ga.enable_measurement(stream, &current, &fields.to_vec())
+                        .await
+                }
+                Err(e) => Err(e),
+            },
+        };
+
+        match outcome {
+            Ok(()) => {
+                if !quiet {
+                    println!(
+                        "  {} {}",
+                        paint(&glyph::FULL.to_string(), ore::emerald()),
+                        paint(&fix.label, ore::emerald()),
+                    );
+                }
+                repaired.push(fix.check);
+            }
+            Err(e) => {
+                denied |= format!("{e}").contains("access denied");
+                if !quiet {
+                    println!(
+                        "  {} {}",
+                        paint(&glyph::PARTIAL.to_string(), ore::redstone()),
+                        paint(&fix.label, ore::redstone()),
+                    );
+                    for line in wrap(&format!("{e}"), TEXT_WIDTH) {
+                        println!("    {}", dim(&line));
+                    }
+                }
+            }
+        }
+    }
+
+    if quiet {
+        return Ok(repaired);
+    }
+
+    if denied {
+        println!();
+        for line in wrap(
+            "changing settings needs Editor or Administrator on the property. Viewer is \
+             enough to run the audit and not enough to fix it — the account that owns the \
+             property grants the role under Admin → Property access management.",
+            TEXT_WIDTH,
+        ) {
+            println!("  {}", dim(&line));
+        }
+    }
+
+    println!();
+    for line in wrap(
+        "these are settings, not data. Nothing here changes what was collected before \
+         now, and everything here is undone from the GA4 console — key events under \
+         Admin → Events, measurement under Admin → Data Streams.",
+        TEXT_WIDTH,
+    ) {
+        println!("  {}", dim(&line));
+    }
+    println!("{}\n", panel_bottom());
+
+    Ok(repaired)
 }
 
 /// Audit once and exit.
@@ -1005,8 +1582,16 @@ pub async fn run(cfg: &Config, property: Option<&str>, opts: Options) -> Result<
         // The shop window, same as everywhere else: what the report looks like,
         // before anything is paid for or connected.
         let audit = demo_audit(days).sorted();
-        emit(&audit, opts.format);
-        return finish(&audit);
+        emit(&audit, opts.format, &[]);
+        if opts.fix {
+            // The demo property is a literal in this file. Saying so beats
+            // printing a plan that appears to have been applied to something.
+            println!(
+                "  {}\n",
+                dim("--fix has nothing to write to on --demo: this property is synthetic."),
+            );
+        }
+        return finish(&audit, &[]);
     }
 
     let tier = crate::license::sync(cfg).await;
@@ -1020,23 +1605,54 @@ pub async fn run(cfg: &Config, property: Option<&str>, opts: Options) -> Result<
         .map(|p| p.display())
         .unwrap_or_else(|| format!("property {id}"));
 
-    let audit = examine(&Ga::new()?, &id, &title, days).await?;
-    emit(&audit, opts.format);
-    finish(&audit)
+    let ga = Ga::new()?;
+    let audit = examine(&ga, &id, &title, days).await?;
+
+    // Report first, then repair. The order is the whole argument for letting a
+    // command that reads also write: nobody is asked to trust a fix they have
+    // not been shown the reason for, and a `--fix` run is a `craft audit` run
+    // with the same output plus what it did about it.
+    //
+    // For a person. The other two formats are one object on stdout, and a
+    // second one after it is not something a pipe can read — so those repair
+    // first and report once, with what was repaired inside the object.
+    let to_a_screen = matches!(opts.format, Format::Panels);
+    if to_a_screen {
+        emit(&audit, opts.format, &[]);
+    }
+
+    let repaired = if opts.fix && !audit.plan.is_empty() {
+        apply(&ga, &id, &audit, !to_a_screen).await?
+    } else {
+        Vec::new()
+    };
+
+    if !to_a_screen {
+        emit(&audit, opts.format, &repaired);
+    }
+
+    finish(&audit, &repaired)
 }
 
-fn emit(audit: &Audit, format: Format) {
+fn emit(audit: &Audit, format: Format, repaired: &[&str]) {
     match format {
+        // The panel says what was repaired in its own section, printed as each
+        // write lands rather than after all of them.
         Format::Panels => print!("{}", panels(audit)),
-        Format::Json => println!("{}", as_json(audit)),
+        Format::Json => println!("{}", as_json(audit, repaired)),
         Format::Slack => println!("{}", as_slack(audit)),
     }
 }
 
 /// `0` when the property is clean, `2` when it is not, so a shell can gate on
 /// it the way it gates on `craft watch`.
-fn finish(audit: &Audit) -> Result<()> {
-    if audit.clean() {
+///
+/// A finding that `--fix` just repaired does not hold the exit code open. The
+/// alternative is a `--fix` run that always exits 2 on a property it has
+/// finished fixing, which makes the flag unusable from the CI job that is the
+/// reason to have it.
+fn finish(audit: &Audit, repaired: &[&str]) -> Result<()> {
+    if outstanding(audit, repaired) == 0 {
         return Ok(());
     }
     std::io::stdout().flush().ok();
@@ -1088,6 +1704,17 @@ fn demo_audit(days: u32) -> Audit {
                 evidence: Some("checkout.stripe.com".into()),
             },
             Finding {
+                check: "key_events_unmarked",
+                grade: Grade::Warning,
+                headline: "outcomes arrive unmarked".into(),
+                detail: "these are events GA4's own recommended set treats as outcomes, they \
+                         are firing on this property, and none of them is marked as a key \
+                         event. Until one is, no conversion report counts them and Google \
+                         Ads cannot import them."
+                    .into(),
+                evidence: Some("sign_up 1,204 · subscribe 318".into()),
+            },
+            Finding {
                 check: "direct_share",
                 grade: Grade::Note,
                 headline: "almost everything arrives as direct".into(),
@@ -1098,6 +1725,13 @@ fn demo_audit(days: u32) -> Audit {
                 evidence: Some("74% of sessions".into()),
             },
         ],
+        // One of the four is fixable from here, which is the honest ratio and
+        // the reason the demo shows it: the rest are on the site.
+        plan: vec![Fix {
+            check: "key_events_unmarked",
+            label: "mark sign_up and subscribe as key events".into(),
+            action: Action::MarkKeyEvents(vec!["sign_up".into(), "subscribe".into()]),
+        }],
     }
 }
 
@@ -1122,8 +1756,254 @@ mod tests {
             days: 28,
             checks: CHECKS.len(),
             findings,
+            plan: Vec::new(),
         }
         .sorted()
+    }
+
+    fn key(name: &str) -> KeyEvent {
+        KeyEvent {
+            name: name.to_string(),
+            custom: true,
+        }
+    }
+
+    fn counted(pairs: &[(&str, f64)]) -> BTreeMap<String, f64> {
+        pairs
+            .iter()
+            .map(|(name, n)| (name.to_string(), *n))
+            .collect()
+    }
+
+    fn measuring(on: bool) -> crate::ga::EnhancedMeasurement {
+        crate::ga::EnhancedMeasurement {
+            stream_enabled: true,
+            scrolls: on,
+            outbound_clicks: on,
+            site_search: on,
+            video_engagement: on,
+            file_downloads: on,
+            form_interactions: on,
+            search_query_parameter: "q".into(),
+        }
+    }
+
+    #[test]
+    fn an_outcome_that_is_arriving_and_unmarked_is_the_one_offered() {
+        let counts = counted(&[
+            ("purchase", 412.0),
+            ("sign_up", 90.0),
+            ("page_view", 90_000.0),
+        ]);
+        let marked = unmarked_outcomes(&counts, &[key("purchase")]);
+
+        // `purchase` is already the point, `page_view` is not an outcome, and
+        // `sign_up` is the only thing left to offer.
+        assert_eq!(marked, ["sign_up"]);
+    }
+
+    #[test]
+    fn an_outcome_that_has_never_fired_is_not_offered() {
+        // Marking it would create a key event whose report is empty for as
+        // long as the property exists — the opposite of calibration.
+        let counts = counted(&[("purchase", 0.0), ("subscribe", 3.0)]);
+        assert_eq!(unmarked_outcomes(&counts, &[]), ["subscribe"]);
+    }
+
+    #[test]
+    fn a_name_that_differs_in_case_is_not_the_event_that_was_marked() {
+        // GA4 matches exactly, so a property with `Purchase` marked has not
+        // marked `purchase`, and saying otherwise would leave it uncounted.
+        let counts = counted(&[("purchase", 412.0)]);
+        assert_eq!(unmarked_outcomes(&counts, &[key("Purchase")]), ["purchase"]);
+    }
+
+    #[test]
+    fn measurement_that_is_on_and_recorded_nothing_is_the_contradiction() {
+        let counts = counted(&[("scroll", 12_000.0), ("click", 300.0)]);
+        let silent = silent_measurement(&[&measuring(true)], &counts);
+
+        // Scrolls and outbound clicks arrived; the other four are on and have
+        // nothing to show for a month.
+        assert_eq!(
+            silent,
+            [
+                "site search",
+                "video engagement",
+                "file downloads",
+                "form interactions"
+            ]
+        );
+    }
+
+    #[test]
+    fn measurement_that_is_off_is_not_reported_as_silent() {
+        // Off and quiet is not a contradiction, it is a setting. Reporting it
+        // here would say the same thing `measurement_off` already said, in
+        // language that implies something is broken.
+        let silent = silent_measurement(&[&measuring(false)], &counted(&[]));
+        assert!(silent.is_empty(), "got {silent:?}");
+    }
+
+    #[test]
+    fn a_stream_switched_off_entirely_has_nothing_to_be_silent_about() {
+        let mut settings = measuring(true);
+        settings.stream_enabled = false;
+        let silent = silent_measurement(&[&settings], &counted(&[]));
+        assert!(silent.is_empty(), "got {silent:?}");
+    }
+
+    #[test]
+    fn two_streams_missing_the_same_thing_say_it_once() {
+        let counts = counted(&[
+            ("scroll", 1.0),
+            ("click", 1.0),
+            ("view_search_results", 1.0),
+        ]);
+        let silent = silent_measurement(&[&measuring(true), &measuring(true)], &counts);
+        assert_eq!(
+            silent,
+            ["video engagement", "file downloads", "form interactions"]
+        );
+    }
+
+    #[test]
+    fn a_fix_prints_under_the_finding_it_repairs_and_nowhere_else() {
+        let named = |check: &'static str, headline: &str| Finding {
+            check,
+            grade: Grade::Warning,
+            headline: headline.into(),
+            detail: "because".into(),
+            evidence: None,
+        };
+        let report = Audit {
+            property: "397412345".to_string(),
+            title: "Contoso Labs".to_string(),
+            days: 28,
+            checks: CHECKS.len(),
+            findings: vec![
+                named("key_events_unmarked", "outcomes arrive unmarked"),
+                named("double_counting", "page views look counted twice"),
+            ],
+            plan: vec![Fix {
+                check: "key_events_unmarked",
+                label: "mark sign_up as a key event".into(),
+                action: Action::MarkKeyEvents(vec!["sign_up".into()]),
+            }],
+        }
+        .sorted();
+
+        // Plain here: `paint` is a no-op when stdout is not a terminal, which
+        // under `cargo test` it never is.
+        let rendered = panels(&report);
+        assert_eq!(rendered.matches("fix ·").count(), 1, "{rendered}");
+
+        // Under its own finding: after the headline it repairs, and before the
+        // next one, which has no fix and must not look like it does.
+        let unmarked = rendered.find("OUTCOMES ARRIVE UNMARKED").unwrap();
+        let fix = rendered.find("fix ·").unwrap();
+        let counted_twice = rendered.find("PAGE VIEWS LOOK COUNTED TWICE").unwrap();
+        assert!(unmarked < fix && fix < counted_twice, "{rendered}");
+
+        assert!(rendered.contains("1 of these can be fixed from here"));
+    }
+
+    #[test]
+    fn a_report_with_nothing_to_fix_does_not_advertise_the_flag() {
+        let rendered = panels(&audit(vec![finding("direct_share", Grade::Note)]));
+        assert!(!rendered.contains("--fix"), "{rendered}");
+        assert!(!rendered.contains("fix ·"), "{rendered}");
+    }
+
+    #[test]
+    fn the_json_says_which_findings_a_fix_would_touch() {
+        let report = Audit {
+            property: "397412345".to_string(),
+            title: "Contoso Labs".to_string(),
+            days: 28,
+            checks: CHECKS.len(),
+            findings: vec![
+                finding("key_events_unmarked", Grade::Warning),
+                finding("double_counting", Grade::Warning),
+            ],
+            plan: vec![Fix {
+                check: "key_events_unmarked",
+                label: "mark sign_up as a key event".into(),
+                action: Action::MarkKeyEvents(vec!["sign_up".into()]),
+            }],
+        }
+        .sorted();
+
+        let payload = findings_payload(&report);
+        assert_eq!(payload["fixable"], json!(1));
+        let findings = payload["findings"].as_array().unwrap();
+        let fixed = findings
+            .iter()
+            .find(|f| f["check"] == "key_events_unmarked")
+            .unwrap();
+        assert_eq!(fixed["fix"], json!("mark sign_up as a key event"));
+        // Null rather than absent, so a script can read the field on every
+        // finding instead of testing for its existence.
+        let site_side = findings
+            .iter()
+            .find(|f| f["check"] == "double_counting")
+            .unwrap();
+        assert!(site_side["fix"].is_null());
+    }
+
+    #[test]
+    fn a_finding_that_was_just_repaired_does_not_hold_the_exit_code_open() {
+        let report = audit(vec![
+            finding("key_events_unmarked", Grade::Warning),
+            finding("double_counting", Grade::Warning),
+        ]);
+        assert_eq!(outstanding(&report, &["key_events_unmarked"]), 1);
+        assert_eq!(
+            outstanding(&report, &["key_events_unmarked", "double_counting"]),
+            0
+        );
+        // And a plain `craft audit` still reports everything it found.
+        assert_eq!(outstanding(&report, &[]), 2);
+    }
+
+    #[test]
+    fn every_outcome_the_fix_can_mark_is_an_outcome_and_not_a_step() {
+        // The cart and checkout events are the ones somebody reaches for when
+        // this list is edited, and marking them turns one visitor into three
+        // conversions. Pinned so that edit has to argue with a test.
+        for step in ["add_to_cart", "begin_checkout", "view_item", "form_submit"] {
+            assert!(
+                !OUTCOMES.contains(&step),
+                "{step} is a step towards an outcome, not one"
+            );
+        }
+        assert!(OUTCOMES.contains(&"purchase"));
+    }
+
+    #[test]
+    fn the_measurement_table_names_fields_the_update_mask_understands() {
+        // Snake case, and the suffix the API uses — a mask field it does not
+        // recognise is a write that fails after the report promised it.
+        for (field, label, events, _) in MEASURED {
+            assert!(field.ends_with("_enabled"), "{field}");
+            assert!(!field.contains(char::is_uppercase), "{field}");
+            assert!(!label.is_empty());
+            assert!(!events.is_empty(), "{field} produces no event");
+        }
+    }
+
+    #[test]
+    fn the_fix_never_switches_on_collection_of_what_a_visitor_typed() {
+        // Somebody running `--fix` to mark a key event has not agreed to start
+        // recording search queries and form input. Both are still reported;
+        // neither is ever written from here.
+        for (field, _, _, fixable) in MEASURED {
+            let typed = matches!(*field, "site_search_enabled" | "form_interactions_enabled");
+            assert_eq!(
+                !typed, *fixable,
+                "{field} is on the wrong side of the privacy line"
+            );
+        }
     }
 
     #[test]
@@ -1245,7 +2125,7 @@ mod tests {
             finding("key_events_configured", Grade::Critical),
             finding("direct_share", Grade::Note),
         ]);
-        let payload = as_json(&report);
+        let payload = as_json(&report, &[]);
 
         assert_eq!(payload["clean"], false);
         assert_eq!(payload["counts"]["critical"], 1);
@@ -1254,6 +2134,12 @@ mod tests {
         assert_eq!(payload["findings"][0]["check"], "key_events_configured");
         assert_eq!(payload["findings"][0]["grade"], "critical");
         assert!(payload["url"].as_str().unwrap().contains("397412345"));
+        // Present and empty on a plain run, so a script reads one shape
+        // whether or not `--fix` was passed.
+        assert_eq!(payload["applied"], json!([]));
+
+        let fixed = as_json(&report, &["key_events_configured"]);
+        assert_eq!(fixed["applied"], json!(["key_events_configured"]));
     }
 
     #[test]

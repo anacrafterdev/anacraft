@@ -229,6 +229,7 @@
   .hero::before {
     content: ''; position: absolute; inset: -20% -10% 40%;
     background: radial-gradient(60% 55% at 22% 30%, rgba(45,213,183,.10), transparent 70%);
+    background: radial-gradient(60% 55% at 22% 30%, color-mix(in srgb, var(--jade) 10%, transparent), transparent 70%);
     pointer-events: none;
   }
   /* The headline is capped at 15ch, which left the right half of the hero
@@ -272,6 +273,7 @@
     letter-spacing: 0; white-space: pre; user-select: none;
     color: var(--fg);
     filter: drop-shadow(0 0 34px rgba(45, 213, 183, .16));
+    filter: drop-shadow(0 0 34px color-mix(in srgb, var(--jade) 16%, transparent));
   }
   #chart .f  { color: var(--line-2); }
   #chart .ti { color: var(--jade); }
@@ -339,7 +341,8 @@
   }
   .tabs button .sw { width: 8px; height: 8px; border-radius: 0; }
   .tabs button:hover { border-color: var(--line-2); color: var(--fg); }
-  .tabs button[aria-selected="true"] { color: var(--white); border-color: var(--jade); background: rgba(45,213,183,.07); }
+  .tabs button[aria-selected="true"] { color: var(--white); border-color: var(--jade); background: rgba(45,213,183,.07);
+    background: color-mix(in srgb, var(--jade) 7%, transparent); }
 
   .term {
     border: 1px solid var(--line-2); border-radius: 0; overflow: hidden;
@@ -439,7 +442,8 @@
     padding: 26px 6px; border-bottom: 1px solid var(--line);
     transition: background .18s, padding .18s;
   }
-  .row:hover { background: rgba(45,213,183,.035); }
+  .row:hover { background: rgba(45,213,183,.035);
+               background: color-mix(in srgb, var(--jade) 3.5%, transparent); }
   .row .n { font-family: var(--mono); font-size: 12px; color: var(--jade-deep); }
   .row h3 {
     font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 20px;
@@ -462,7 +466,8 @@
     border: 1px solid rgba(255,225,107,.32); padding: 3px 7px; white-space: nowrap;
   }
   /* Built and shipping: the OAuth client is verified and live. */
-  .tag.live { color: var(--jade); border-color: rgba(45,213,183,.32); }
+  .tag.live { color: var(--jade); border-color: rgba(45,213,183,.32);
+              border-color: color-mix(in srgb, var(--jade) 32%, transparent); }
 
   /* code block */
   .code {
@@ -568,6 +573,16 @@
   }
   /* ── light mode overrides (solarized-light) ───── */
 </style>
+<!-- palette-restore:start -->
+<script>
+  (function () {
+    try {
+      var p = localStorage.getItem('palette');
+      if (p && p !== 'osaka-jade') { document.documentElement.dataset.pal = p; }
+    } catch (e) {}
+  })();
+</script>
+<!-- palette-restore:end -->
 <script src="/analytics.js?v=8fa4ec5f"></script>
 </head>
 <body>

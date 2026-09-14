@@ -144,18 +144,71 @@ def css(p):
     ])
 
 
+# Every page that carries the site chrome. A palette picked on the homepage has
+# to survive a click through to a guide, so all of them get the blocks and the
+# restore — `lovable.html` excepted, which styles itself and has no `:root` in
+# the shared shape to hang them off.
+PAGES = [
+    "index.html", "audit.html", "mcp.html", "alerts.html", "setup-ga4.html",
+    "pricing.html", "burn.html", "success.html", "privacy.html", "terms.html",
+]
+
+RESTORE_START = "<!-- palette-restore:start -->"
+RESTORE_END = "<!-- palette-restore:end -->"
+
+# Runs in <head>, before anything paints. A page reached by clicking a link
+# would otherwise render the default and repaint, which reads as a flash of
+# the wrong theme rather than as a preference being honoured.
+RESTORE = """<script>
+  (function () {
+    try {
+      var p = localStorage.getItem('palette');
+      if (p && p !== 'osaka-jade') { document.documentElement.dataset.pal = p; }
+    } catch (e) {}
+  })();
+</script>"""
+
+
+def splice(text, start, end, body, indent=""):
+    head, rest = text.split(start, 1)
+    _, tail = rest.split(end, 1)
+    return f"{head}{start}\n{body}\n{indent}{end}{tail}"
+
+
+def prepare(text, name):
+    """Add the markers, and the variable the chip colour needs, if absent."""
+    if START not in text:
+        # Straight after `:root { ... }`, so a palette block overrides it by
+        # specificity and by source order both.
+        anchor = "\n  }\n"
+        at = text.index("  :root {")
+        close = text.index(anchor, at) + len(anchor)
+        text = text[:close] + f"  {START}\n  {END}\n" + text[close:]
+    if "--on-accent:" not in text:
+        text = text.replace("    --mono:", "    --on-accent: #09100d;\n    --mono:", 1)
+    # `--ink` was doing double duty as an inset background and as text on an
+    # accent chip; those contradict on a light palette.
+    text = text.replace("background: var(--jade); color: var(--ink);",
+                        "background: var(--jade); color: var(--on-accent);")
+    if RESTORE_START not in text:
+        text = text.replace("</style>\n", f"</style>\n{RESTORE_START}\n{RESTORE_END}\n", 1)
+    return text
+
+
 def main():
     blocks = [css(p) for p in parse() if p["name"] != DEFAULT]
     body = "\n".join(blocks)
 
-    page = ROOT / "docs" / "index.html"
-    text = page.read_text()
-    if START not in text or END not in text:
-        sys.exit(f"{page.name}: missing {START} / {END} markers")
-    head, rest = text.split(START, 1)
-    _, tail = rest.split(END, 1)
-    page.write_text(f"{head}{START}\n{body}\n  {END}{tail}")
-    print(f"  index.html: {len(blocks)} palettes generated from src/theme.rs")
+    for name in PAGES:
+        page = ROOT / "docs" / name
+        if not page.exists():
+            sys.exit(f"{name}: not found")
+        text = prepare(page.read_text(), name)
+        text = splice(text, START, END, body, indent="  ")
+        text = splice(text, RESTORE_START, RESTORE_END, RESTORE)
+        page.write_text(text)
+
+    print(f"  {len(blocks)} palettes into {len(PAGES)} pages, from src/theme.rs")
 
 
 if __name__ == "__main__":

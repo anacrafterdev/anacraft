@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>anacraft — configure your analytics from the terminal</title>
-<meta name="description" content="Create a GA4 property and get its tag with one command — craft configure yoursite.com. Then a free terminal dashboard, one-shot reports and an MCP server over the numbers it collects.">
-<meta name="keywords" content="configure Google Analytics, set up GA4, create GA4 property, GA4 measurement id, gtag snippet, GA4 CLI, GA4 dashboard, GA4 terminal dashboard, Google Analytics 4, Google Analytics CLI, analytics TUI, GA4 MCP server">
+<meta name="description" content="Set up a GA4 property and get its tag with one command. Audit what it is measuring and find what is wrong with it. Then read it as a free terminal dashboard, one-shot reports and an MCP server.">
+<meta name="keywords" content="Google Analytics expert, GA4 audit, audit Google Analytics, configure Google Analytics, set up GA4, create GA4 property, GA4 measurement id, gtag snippet, GA4 CLI, GA4 dashboard, GA4 terminal dashboard, Google Analytics 4, Google Analytics CLI, analytics TUI, GA4 MCP server">
 <link rel="canonical" href="https://anacraft.dev/">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://anacraft.dev/">
 <meta property="og:title" content="anacraft — Google Analytics, mined block by block">
-<meta property="og:description" content="Create a GA4 property and get its tag with one command — craft configure yoursite.com. Then a free terminal dashboard, one-shot reports and an MCP server over the numbers it collects.">
+<meta property="og:description" content="Set up a GA4 property and get its tag with one command. Audit what it is measuring and find what is wrong with it. Then read it as a free terminal dashboard, one-shot reports and an MCP server.">
 <meta property="og:image" content="https://anacraft.dev/dash.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://anacraft.dev/dash.png">
@@ -499,7 +499,8 @@
     <a class="brand" href="/"><img class="pick" src="mark.svg?v=7b310f6e" alt="A" width="14" height="14">nacraft</a>
     <div class="nav-links">
       <a href="#start">Quick start</a>
-      <a href="#mcp">MCP</a>
+      <a href="/audit.html">Audit</a>
+      <a href="/mcp.html">MCP</a>
       <a href="/alerts.html">Alerts</a>
       <a href="/setup-ga4.html">Configure</a>
       <a href="/lovable.html">Lovable</a>
@@ -513,14 +514,16 @@
 <header class="hero">
   <div class="wrap hero-in">
    <div class="hero-say">
-    <div class="eyebrow">Analytics · set it up, then read it · written in Rust</div>
-    <h1>Your website <em>deserves better analytics.</em></h1>
+    <div class="eyebrow">Analytics · set it up, audit it, read it · written in Rust</div>
+    <h1>Your Google Analytics <em>expert, in your terminal.</em></h1>
     <p class="lede">
       <code style="font-family:var(--mono);color:var(--fg)">craft configure yoursite.com</code> sets your analytics
       up in one command — the property, its web stream, and the tag with the real
-      measurement id already in it. Then anacraft renders what it collects as a
-      full-screen terminal dashboard — seven live panels, ore-textured bars, a
-      realtime event feed, and achievement toasts when the numbers move.
+      measurement id already in it. <code style="font-family:var(--mono);color:var(--fg)">craft audit</code>
+      then checks what it is measuring and tells you what is wrong with it. The
+      numbers themselves render as a full-screen terminal dashboard — seven live
+      panels, ore-textured bars, a realtime event feed, and achievement toasts
+      when they move.
     </p>
     <div class="cta">
       <button class="install" onclick="cp(this)">
@@ -2096,14 +2099,15 @@
     </p>
     <div class="rows">
       <div class="row"><span class="n">01</span><h3>It configures your analytics</h3><p><code style="font-family:var(--mono)">craft configure yoursite.com</code> creates the Google Analytics property, adds the web stream and prints the tag with its real measurement id in it — the three console steps between a new domain and its first number. Run it twice and it hands the tag back rather than quietly creating a second property. Part of the <a href="/pricing.html">Anacrafter</a> plan, $2.99/mo — the ask arrives on the page the Google sign-in already ends on, and the terminal picks the payment up from there.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">02</span><h3>Seven toggleable panels</h3><p>Events, Right Now, Top Chunks, Daily Villagers, Realms, Vitals and Top Realms — keys <code style="font-family:var(--mono)">1</code>–<code style="font-family:var(--mono)">7</code>, or their letter aliases.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">03</span><h3>Realtime event feed</h3><p>Players online polled every few seconds, with spawn and wander-off events that fade as they age out of the window.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">04</span><h3>Achievement toasts</h3><p>Diamond Streak, Creeper Repelled, Deep Vein — unlocks pop in when a metric crosses a milestone, then get out of the way.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">05</span><h3>Seven palettes, one texture pack</h3><p>Osaka Jade, Catppuccin, GitHub, Tokyo Night, Catppuccin Latte and Solarized in both dark and light. The ore vocabulary survives the swap; <code style="font-family:var(--mono)">t</code> cycles, and the choice persists.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">06</span><h3>One-shot reports</h3><p>Not everything needs a dashboard. <code style="font-family:var(--mono)">overview</code>, <code style="font-family:var(--mono)">pages</code>, <code style="font-family:var(--mono)">portals</code>, <code style="font-family:var(--mono)">realms</code> and <code style="font-family:var(--mono)">live</code> print and exit — pipe them anywhere.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">07</span><h3>Runs before you sign in</h3><p><code style="font-family:var(--mono)">craft</code> on its own opens the dashboard, and with no property saved it drives the whole thing from synthetic data — so you see it working before touching OAuth.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">08</span><h3>Every property in one session</h3><p>Save as many GA4 properties as you like and <code style="font-family:var(--mono)">Tab</code> walks them without leaving the dashboard — each one keeping its own palette and time window.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">09</span><h3>Readable by an assistant</h3><p><code style="font-family:var(--mono)">craft mcp</code> serves the dashboard's numbers over the Model Context Protocol — eleven tools, one command to wire into <a href="#mcp">Claude Desktop</a>. Part of the <a href="/pricing.html">Anacrafter Elite</a> plan, $9.99/mo — <code style="font-family:var(--mono)">craft mcp --demo</code> is ungated.</p><span class="arw">→</span></div>
+      <div class="row"><span class="n">02</span><h3>It audits your analytics</h3><p><code style="font-family:var(--mono)">craft audit</code> checks how the property is <i>measuring</i> rather than what it measured — twelve checks over four weeks, each finding graded and carrying what it means. <a href="/audit.html">Nothing marked as a key event</a>, a key event that never fires, <code style="font-family:var(--mono)">purchase</code> arriving without its value, page views counted twice, a payment page credited with your conversions. Part of the <a href="/pricing.html">Anacrafter</a> plan, $2.99/mo — <code style="font-family:var(--mono)">craft audit --demo</code> is ungated.</p><span class="arw">→</span></div>
+      <div class="row"><span class="n">03</span><h3>Seven toggleable panels</h3><p>Events, Right Now, Top Chunks, Daily Villagers, Realms, Vitals and Top Realms — keys <code style="font-family:var(--mono)">1</code>–<code style="font-family:var(--mono)">7</code>, or their letter aliases.</p><span class="arw">→</span></div>
+      <div class="row"><span class="n">04</span><h3>Realtime event feed</h3><p>Players online polled every few seconds, with spawn and wander-off events that fade as they age out of the window.</p><span class="arw">→</span></div>
+      <div class="row"><span class="n">05</span><h3>Achievement toasts</h3><p>Diamond Streak, Creeper Repelled, Deep Vein — unlocks pop in when a metric crosses a milestone, then get out of the way.</p><span class="arw">→</span></div>
+      <div class="row"><span class="n">06</span><h3>Seven palettes, one texture pack</h3><p>Osaka Jade, Catppuccin, GitHub, Tokyo Night, Catppuccin Latte and Solarized in both dark and light. The ore vocabulary survives the swap; <code style="font-family:var(--mono)">t</code> cycles, and the choice persists.</p><span class="arw">→</span></div>
+      <div class="row"><span class="n">07</span><h3>One-shot reports</h3><p>Not everything needs a dashboard. <code style="font-family:var(--mono)">overview</code>, <code style="font-family:var(--mono)">pages</code>, <code style="font-family:var(--mono)">portals</code>, <code style="font-family:var(--mono)">realms</code> and <code style="font-family:var(--mono)">live</code> print and exit — pipe them anywhere.</p><span class="arw">→</span></div>
+      <div class="row"><span class="n">08</span><h3>Runs before you sign in</h3><p><code style="font-family:var(--mono)">craft</code> on its own opens the dashboard, and with no property saved it drives the whole thing from synthetic data — so you see it working before touching OAuth.</p><span class="arw">→</span></div>
+      <div class="row"><span class="n">09</span><h3>Every property in one session</h3><p>Save as many GA4 properties as you like and <code style="font-family:var(--mono)">Tab</code> walks them without leaving the dashboard — each one keeping its own palette and time window.</p><span class="arw">→</span></div>
+      <div class="row"><span class="n">10</span><h3>Readable by an assistant</h3><p><code style="font-family:var(--mono)">craft mcp</code> serves the dashboard's numbers over the Model Context Protocol — <a href="/mcp.html">twelve tools</a>, one command to wire into <a href="#mcp">Claude Desktop</a>. Part of the <a href="/pricing.html">Anacrafter Elite</a> plan, $9.99/mo — <code style="font-family:var(--mono)">craft mcp --demo</code> is ungated.</p><span class="arw">→</span></div>
     </div>
 
     <div class="sec-label" style="margin-top:64px">On the roadmap</div>
@@ -2234,6 +2238,7 @@
         <table class="keys">
           <tr><th>Tool</th><th>Answers</th></tr>
           <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">site_status</code></td><td><b>How the site is doing</b> — every headline metric against the period before it</td></tr>
+          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">audit_site</code></td><td><b>Whether the numbers can be trusted</b> — twelve graded checks on how the property is measuring</td></tr>
           <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">live_visitors</code></td><td>Who is on it right now, by country</td></tr>
           <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">list_pages</code></td><td>Most-visited pages</td></tr>
           <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">list_events</code></td><td>Events by count, and whether they are rising</td></tr>
@@ -2260,10 +2265,72 @@
       configure for the write;       <code style="font-family:var(--mono)">--demo</code> needs neither.
     </p>
     <p class="sec-sub" style="margin-top:16px;max-width:72ch">
+      <a href="/mcp.html" style="color:var(--jade)">How the MCP server works &rarr;</a> — wiring it
+      into Claude Desktop and Claude Code, what each tool answers, and what comes back.
+    </p>
+    <p class="sec-sub" style="margin-top:16px;max-width:72ch">
       Building with <a href="https://lovable.dev" style="color:var(--jade)">Lovable</a>?
       <a href="/lovable.html" style="color:var(--jade)">anacraft × Lovable</a> — add
       GA4 to your app, then read the numbers from Claude or any MCP client.
     </p>
+  </div>
+</section>
+
+<section id="audit">
+  <div class="wrap">
+    <div class="sec-label">Audit</div>
+    <h2>Before you trust a number.</h2>
+    <p class="sec-sub">
+      Every other command answers <i>what happened</i>.
+      <code style="font-family:var(--mono);color:var(--fg)">craft audit</code>
+      answers the one before it — <b>is this property measuring the site at all,
+      and is what it measured worth reading</b>. Twelve checks over four weeks,
+      each finding graded and carrying what it means and what fixes it. It reads
+      the reporting API and the admin API, because measurement and configuration
+      fail separately: one says how often <code style="font-family:var(--mono)">purchase</code>
+      fired, the other says whether anybody ever told Google Analytics that
+      <code style="font-family:var(--mono)">purchase</code> was the point. A site
+      can pass the first and fail the second for a year without noticing.
+    </p>
+    <div class="two">
+      <div>
+        <pre class="code"><span class="d"># twelve checks over the last 28 days</span>
+<span class="c">$</span> <span class="w">craft audit</span>
+
+<span class="d"># see the whole shape of a report, no account</span>
+<span class="c">$</span> <span class="w">craft audit --demo</span>
+
+<span class="d">█ KEY EVENTS NEVER FIRED</span>
+<span class="d">  purchase, generate_lead</span>
+<span class="d">  configured as an outcome and not recorded</span>
+<span class="d">  once in 28 days…</span>
+<span class="d">█ PURCHASES ARRIVE WITHOUT THEIR MONEY</span>
+<span class="d">  412 purchases · 0 revenue</span>
+<span class="d">▓ A PAYMENT PAGE IS CREDITED WITH CONVERSIONS</span>
+<span class="d">  checkout.stripe.com</span>
+
+<span class="d">  12 checks run · 2 critical · 1 warning</span></pre>
+      </div>
+      <div>
+        <table class="keys">
+          <tr><th>Finds</th><th>Which is</th></tr>
+          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">no key events</code></td><td><b>Traffic arriving and nothing marked as the point</b> — no report on the property can say whether any of it was worth having</td></tr>
+          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">never fired</code></td><td>A key event configured and not recorded once. Names match exactly, so <code style="font-family:var(--mono)">Purchase</code> and <code style="font-family:var(--mono)">purchase</code> are two events and only one counts</td></tr>
+          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">no revenue</code></td><td><b>Purchases arriving without their value</b> — every revenue and ROAS figure reads zero, including in an Ads account importing from here</td></tr>
+          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">counted twice</code></td><td>A bounce rate near nothing with the page views doubled — the shape a second <code style="font-family:var(--mono)">page_view</code> tag makes</td></tr>
+          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">self-referral</code></td><td>The site or a payment page credited with its own conversions, because the return trip starts a fresh session</td></tr>
+          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">went quiet</code></td><td>An event that fired last month and not this one — a tag removed, renamed, or moved behind something that no longer runs</td></tr>
+        </table>
+        <p class="sec-sub" style="margin-top:22px">
+          It reports the symptom and names the usual cause, never the other way
+          round — and every check has a floor, so a quiet property gets
+          <i>not run</i> rather than a list of things to dismiss. Exits
+          <code style="font-family:var(--mono)">2</code> when it finds something,
+          so a weekly audit into Slack is one cron line.
+          <a href="/audit.html" style="color:var(--jade)">What the audit checks &rarr;</a>
+        </p>
+      </div>
+    </div>
   </div>
 </section>
 

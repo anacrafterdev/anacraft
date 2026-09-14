@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pricing — anacraft</title>
-<meta name="description" content="The dashboard and the one-shot reports are free. craft configure and craft watch are the Anacrafter (Basic) plan, Slack alerts come with Pro, craft mcp with Elite — $2.99 to $9.99 a month, in the browser or with craft subscribe.">
+<meta name="description" content="The dashboard and the one-shot reports are free. craft configure, craft audit and craft watch are the Anacrafter (Basic) plan, Slack alerts come with Pro, craft mcp with Elite — $2.99 to $9.99 a month, in the browser or with craft subscribe.">
 <link rel="canonical" href="https://anacraft.dev/pricing.html">
 <meta name="robots" content="index, follow">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://anacraft.dev/pricing.html">
 <meta property="og:title" content="Pricing — anacraft">
-<meta property="og:description" content="The dashboard and the one-shot reports are free. craft configure and craft watch are the Anacrafter (Basic) plan, Slack alerts come with Pro, craft mcp with Elite — $2.99 to $9.99 a month, in the browser or with craft subscribe.">
+<meta property="og:description" content="The dashboard and the one-shot reports are free. craft configure, craft audit and craft watch are the Anacrafter (Basic) plan, Slack alerts come with Pro, craft mcp with Elite — $2.99 to $9.99 a month, in the browser or with craft subscribe.">
 <link rel="icon" type="image/svg+xml" href="favicon.svg?v=2dd77504">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -312,7 +312,8 @@
     <a class="brand" href="/"><img class="pick" src="mark.svg?v=7b310f6e" alt="A" width="14" height="14">nacraft</a>
     <div class="nav-links">
       <a href="/#start">Quick start</a>
-      <a href="/#mcp">MCP</a>
+      <a href="/audit.html">Audit</a>
+      <a href="/mcp.html">MCP</a>
       <a href="/alerts.html">Alerts</a>
       <a href="/setup-ga4.html">Configure</a>
       <a href="/lovable.html">Lovable</a>
@@ -333,9 +334,11 @@
   <div class="h">Where the line is</div>
   <p>Everything that <b>reads</b> your numbers is free, and stays free — the dashboard, the realtime
   feed, and every one-shot report. No account, no card, no expiry.</p>
-  <p>Three things do more than read. <code>craft configure</code> <b>creates</b> the GA4 property for
-  a domain and hands you its tag; <code>craft watch</code> checks the numbers against their own recent
-  normal and tells you what broke; <code>craft mcp</code> lets an assistant read the site for you.
+  <p>Four things do more than show you the numbers. <code>craft configure</code> <b>creates</b> the
+  GA4 property for a domain and hands you its tag; <code>craft audit</code> checks how the property is
+  measuring and tells you what is wrong with it; <code>craft watch</code> checks the numbers against
+  their own recent normal and tells you what broke; <code>craft mcp</code> lets an assistant read the
+  site for you.
   Those are the subscription, read as a ladder: Basic is what the original $2.99 plan was, Pro adds
   Slack delivery of a watch, and Elite adds the MCP server. Every plan includes the ones below it, and
   moving up is billed going forward, never charged again.</p>
@@ -363,14 +366,18 @@
     <ul>
       <li><b>craft configure</b> — creates the GA4 property and its web stream,
         prints the tag</li>
+      <li><b>craft audit</b> — twelve checks on how the property is measuring,
+        each finding graded and carrying what it means</li>
+      <li><b>craft watch</b> — what moved further than it usually does, in the
+        terminal</li>
       <li>Everything in Miner, which is most of it</li>
       <li>One subscription, every machine you sign in on</li>
     </ul>
     <a class="buy" href="https://buy.stripe.com/3cIdR93sU4SbfECab79MY02">Subscribe — $2.99/month</a>
     <p class="then">Pay with your Google sign-in email, then <code>craft login</code> on any
       machine.</p>
-    <div class="foot"><code>craft watch</code> has a <code>--demo</code> mode that needs
-      no subscription.</div>
+    <div class="foot"><code>craft audit</code> and <code>craft watch</code> both have a
+      <code>--demo</code> mode that needs no subscription.</div>
   </div>
 
   <div class="plan paid two">
@@ -402,7 +409,7 @@
     <a class="buy" href="https://buy.stripe.com/3cI7sL4wY98r8caern9MY04">Subscribe — $9.99/month</a>
     <p class="then"><code>craft subscribe --plan elite</code> opens the same
       Stripe page.</p>
-    <div class="foot"><code>craft mcp</code> is eleven tools; the assistant reads your
+    <div class="foot"><code>craft mcp</code> is twelve tools; the assistant reads your
       reports and can set a new site up, but never changes your default property.</div>
   </div>
 </div>
@@ -416,6 +423,7 @@
   <tr><td>craft login · props · use</td><td class="free">Free</td><td>Sign in, list properties, pick the default</td></tr>
   <tr><td>craft overview · pages · portals · realms · live</td><td class="free">Free</td><td>One-shot reports that print and exit</td></tr>
   <tr><td>craft theme · demo</td><td class="free">Free</td><td>Palettes, and the whole dashboard on synthetic data</td></tr>
+  <tr><td>craft audit</td><td class="sub">★ Anacrafter</td><td>Twelve checks on how the property is measuring rather than what it measured — key events that were never marked or never fire, purchases without revenue, page views counted twice, a payment page credited with conversions</td></tr>
   <tr><td>craft watch</td><td class="sub">★ Anacrafter</td><td>Compares the last complete day against its own normal and reports what moved — to the terminal</td></tr>
   <tr><td>craft slack</td><td class="sub">★ Pro</td><td>Picks the channel a watch posts to. Free to set up; the delivery <code>craft watch</code> makes of it is what Pro covers</td></tr>
   <tr><td>craft mcp</td><td class="sub">★ Elite</td><td>Serves the same numbers over the Model Context Protocol, for Claude Desktop or any MCP client</td></tr>

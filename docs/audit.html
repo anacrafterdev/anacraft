@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GA4 audit in one command — anacraft</title>
+<meta name="description" content="craft audit runs twelve checks on how a Google Analytics 4 property is measuring: key events never marked or never firing, purchases without revenue, page views counted twice, a payment page credited with your conversions. Graded findings in the terminal.">
+<link rel="canonical" href="https://anacraft.dev/audit.html">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://anacraft.dev/audit.html">
+<meta property="og:title" content="GA4 audit in one command — anacraft">
+<meta property="og:description" content="craft audit runs twelve checks on how a Google Analytics 4 property is measuring: key events never marked or never firing, purchases without revenue, page views counted twice, a payment page credited with your conversions. Graded findings in the terminal.">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "GA4 audit",
+      "url": "https://anacraft.dev/audit.html",
+      "author": {
+        "@type": "Organization",
+        "name": "anacraft"
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What does a GA4 audit check?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Whether the property is collecting at all, whether anything in it is marked as a key event, whether those key events ever fire, whether purchases carry their revenue, whether page views are being counted twice, whether the site or a payment page is credited with its own conversions, whether an event stopped firing, whether one event is arriving under two names, and how much traffic cannot be attributed to any source. craft audit runs twelve such checks over four weeks and grades each finding."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why does my GA4 show zero conversions?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Usually because nothing on the property is marked as a key event, or because the key event is configured under a name nothing is sending. GA4 matches event names exactly, so Purchase and purchase are two unrelated events and only one of them counts. Both cases report as zero conversions, and neither is visible from inside the reports."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why is my GA4 revenue zero when purchases are firing?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The purchase event is arriving without its value and currency parameters. GA4 records the event and has no money to attach to it, so every revenue, ARPU and ROAS figure reads zero \u2014 including in any Google Ads account importing conversions from that property."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why is my GA4 bounce rate so low?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "A bounce rate near zero alongside doubled page views per session is the shape a duplicate page_view tag makes \u2014 typically a gtag.js snippet left in the page beside a Google Tag Manager tag that also sends one. The second view engages every session that would otherwise have bounced."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can it find Google Tag Manager problems?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Only the ones that reach the data. craft audit reads the Google Analytics reporting and admin APIs, not the GTM container, so it finds a tag firing twice, a tag that stopped firing and a tag sending the wrong event name \u2014 and not a trigger misconfigured in a way that produces plausible data."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
+<link rel="icon" type="image/svg+xml" href="favicon.svg?v=2dd77504">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  @font-face {
+    font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400;
+    font-display: block; src: url('fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  }
+  :root {
+    --ground: #060a09; --ink: #09100d; --panel: #0d1512;
+    --line: rgba(193,196,151,.11); --line-2: rgba(193,196,151,.20);
+    --fg: #c1c497; --white: #eef1dc; --dim: #6c7f73;
+    --jade: #2dd5b7; --jade-deep: #509475; --gold: #ffe16b; --coral: #ff5345;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--ground); color: var(--fg); line-height: 1.7;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden;
+  }
+  a { color: inherit; text-decoration: none; }
+  ::selection { background: var(--jade); color: #04120e; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+  /* nav:start */
+  nav {
+    /* Not pinned: the nav is the top of the page, not a bar laid over it, so it
+       scrolls away with everything else and takes the ground it sits on. */
+    position: relative; z-index: 1;
+  }
+  .nav-in { display: flex; align-items: center; gap: 32px; height: 60px; }
+  .brand {
+    font-family: 'Archivo', sans-serif; font-weight: 900;
+    font-size: 20px; letter-spacing: -.03em; color: var(--white);
+    display: flex; align-items: baseline; gap: 0;
+  }
+  .brand .pick { width: 14px; height: 14px; display: block; margin-right: 2px; }
+  /* Same voice as the footer: mono, lowercase, one rhythm. The casing is
+     text-transform rather than typed in, so the markup still says "Quick start"
+     and "Configure" for a screen reader. The brand keeps its own face —
+     it is a logo, not a link in the row. */
+  .nav-links {
+    display: flex; align-items: center; gap: 16px; margin-left: auto;
+    font-family: var(--mono); font-size: 11.5px;
+    text-transform: lowercase; letter-spacing: .01em;
+    color: var(--dim);
+  }
+  .nav-links a { transition: color .15s; }
+  .nav-links a:hover { color: var(--white); }
+  @media (max-width: 720px) { .nav-links a:not(.mode-toggle) { display: none; } }
+  /* nav:end */
+
+  /* ── document ──────────────────────────────────────── */
+  .doc { max-width: 760px; margin: 0 auto; padding: 72px 28px 96px; }
+  .eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: .16em;
+             text-transform: uppercase; color: var(--jade); margin-bottom: 18px; }
+  h1 { font-family: 'Archivo', sans-serif; font-weight: 900; font-size: clamp(34px, 6vw, 50px);
+       line-height: 1.05; letter-spacing: -.035em; color: var(--white); margin-bottom: 14px; }
+  .stamp { font-family: var(--mono); font-size: 12.5px; color: var(--dim); margin-bottom: 40px; }
+  h2 { font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 21px;
+       letter-spacing: -.02em; color: var(--white); margin: 52px 0 14px; }
+  h2 .n { color: var(--jade-deep); font-family: var(--mono); font-size: 15px;
+          font-weight: 400; margin-right: 10px; }
+  h3 { font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 15.5px;
+       color: var(--white); margin: 28px 0 8px; }
+  p { margin-bottom: 15px; font-size: 15.5px; }
+  ul { margin: 0 0 15px 0; padding-left: 22px; }
+  li { margin-bottom: 8px; font-size: 15.5px; }
+  li::marker { color: var(--jade-deep); }
+  b, strong { color: var(--white); font-weight: 600; }
+  code { font-family: var(--mono); font-size: .88em; color: var(--jade);
+         background: var(--panel); border: 1px solid var(--line);
+         padding: 1.5px 5px; white-space: nowrap; }
+  .doc a:not(.brand) { color: var(--jade); border-bottom: 1px solid rgba(45,213,183,.3); }
+  .doc a:not(.brand):hover { border-bottom-color: var(--jade); }
+
+  .tldr { border: 1px solid var(--line-2); border-left: 3px solid var(--jade);
+          background: var(--panel); padding: 22px 24px; margin-bottom: 8px; }
+  .tldr p:last-child { margin-bottom: 0; }
+  .tldr .h { font-family: var(--mono); font-size: 11.5px; letter-spacing: .14em;
+             text-transform: uppercase; color: var(--jade); margin-bottom: 10px; }
+
+  .tbl { width: 100%; border-collapse: collapse; margin-bottom: 18px;
+         font-size: 13.5px; display: block; overflow-x: auto; }
+  .tbl th, .tbl td { text-align: left; padding: 9px 12px;
+                     border-bottom: 1px solid var(--line); vertical-align: top; }
+  .tbl th { font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+            text-transform: uppercase; color: var(--dim); font-weight: 400;
+            border-bottom-color: var(--line-2); }
+  .tbl td:first-child { font-family: var(--mono); color: var(--jade); white-space: nowrap; }
+
+  /* the legal pages never needed a code block; this guide does */
+  pre.code { font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+             background: var(--panel); border: 1px solid var(--line);
+             border-left: 3px solid var(--jade-deep);
+             padding: 16px 18px; margin: 0 0 18px; overflow-x: auto; color: var(--fg); }
+  pre.code .d { color: var(--dim); }
+  pre.code .k { color: var(--jade); }
+  .step { font-size: 15.5px; margin: 0 0 14px; padding-left: 16px;
+          border-left: 2px solid var(--line-2); }
+
+  /* footer:start */
+  footer {
+    border-top: 1px solid var(--line); padding: 34px 0;
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+    color: var(--dim);
+    /* The whole row runs in the terminal voice: mono, lowercase, a little
+       tighter than the page text. The casing is done with text-transform
+       rather than typed in, so the markup still says "Privacy Policy" for a
+       screen reader and for anyone reading the source. Mono sets wider than
+       the sans it replaces, hence the step down in size. */
+    font-family: var(--mono); font-size: 11.5px;
+    text-transform: lowercase; letter-spacing: .01em;
+  }
+  footer .r { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+  /* Which release the install command will actually give you. It sits in the
+     footer rather than beside the command because it is a fact people check
+     against a changelog, not a version they are asked to type — `install.sh`
+     resolves the latest release itself and takes no version argument. Kept a
+     step quieter than the line it follows: it is a fingerprint, not news. */
+  footer .ver { opacity: .72; }
+  footer a:hover { color: var(--jade); }
+  footer .by { display: inline-flex; align-items: center; gap: 8px; }
+  /* A chip rather than a word: the rule does the framing the brackets used to,
+     so nothing has to be typed into the markup and a screen reader still reads
+     a clean "crafted in San Francisco". */
+  footer .tag {
+    font-size: 11px; letter-spacing: .04em;
+    color: var(--jade); border: 1px solid var(--line-2);
+    /* A tinted rule so the chip reads as one green object rather than green
+       text in a grey box. Declared after the shorthand: a browser without
+       color-mix drops just this line and keeps the neutral border. */
+    border-color: color-mix(in srgb, var(--jade) 32%, transparent);
+    padding: 2px 8px; line-height: 1.6;
+  }
+  /* The glow rides the same curve as the beat, brightest at the top of each
+     pulse, so the heart reads as lit from within rather than merely resized.
+     It is drawn with var(--jade), which the light theme redefines, so the
+     halo follows the palette instead of pinning one value. */
+  .heart { height: 14px; width: auto; display: block; transform-origin: center;
+           animation: beat 2.4s ease-in-out infinite;
+           filter: drop-shadow(0 0 3px var(--jade)); }
+  @keyframes beat {
+    0%, 40%, 100% { transform: scale(1);    filter: drop-shadow(0 0 2px var(--jade)); }
+    10%           { transform: scale(1.3);  filter: drop-shadow(0 0 7px var(--jade)); }
+    20%           { transform: scale(1);    filter: drop-shadow(0 0 2px var(--jade)); }
+    30%           { transform: scale(1.18); filter: drop-shadow(0 0 5px var(--jade)); }
+  }
+  @media (prefers-reduced-motion: reduce) { .heart { animation: none; } }
+  /* footer:end */
+
+  @media (max-width: 560px) {
+    .wrap { padding: 0 18px; }
+    .doc { padding: 48px 18px 72px; }
+    footer .r { margin-left: 0; flex-wrap: wrap; }
+  }
+</style>
+<script src="/analytics.js?v=8fa4ec5f"></script>
+</head>
+<body>
+<!-- nav:start -->
+<nav>
+  <div class="wrap nav-in">
+    <a class="brand" href="/"><img class="pick" src="mark.svg?v=7b310f6e" alt="A" width="14" height="14">nacraft</a>
+    <div class="nav-links">
+      <a href="/#start">Quick start</a>
+      <a href="/audit.html">Audit</a>
+      <a href="/mcp.html">MCP</a>
+      <a href="/alerts.html">Alerts</a>
+      <a href="/setup-ga4.html">Configure</a>
+      <a href="/lovable.html">Lovable</a>
+      <a href="/burn.html">Badge</a>
+      <a href="/pricing.html">Pricing</a>
+    </div>
+  </div>
+</nav>
+<!-- nav:end -->
+
+<main class="doc">
+
+<div class="eyebrow">Guide</div>
+<h1>GA4 audit</h1>
+<div class="stamp">craft audit · part of the <a href="/pricing.html">Anacrafter</a> plan · <code>--demo</code> needs no account</div>
+
+<div class="tldr">
+  <div class="h">What it does</div>
+  <p>Every other command answers <i>what happened</i>. <code>craft audit</code> answers the question
+  before it: <b>is this property measuring the site at all, and is what it measured worth reading</b>.</p>
+  <p>Twelve checks over four weeks. Each finding is graded and carries what it means and what fixes
+  it. One command, no console, nothing to configure.</p>
+</div>
+
+<h2><span class="n">01</span>What an audit is actually looking for</h2>
+<p>A Google Analytics 4 property can collect flawlessly for a year and still answer no question anybody
+has. Traffic arrives, the charts move, every number in them is real — and nothing in the property was
+ever marked as the point, so no report can say whether any of that traffic was worth having.</p>
+<p>That failure is invisible from inside the reports, which is why it survives so long. A conversion
+count of zero looks identical whether nobody converted or nobody ever told GA4 what a conversion is.
+The same is true of revenue that reads zero because <code>purchase</code> arrives without a value, and
+of a bounce rate that looks wonderful because a second tag is engaging every session.</p>
+<p>So the audit reads <b>two</b> APIs, because measurement and configuration fail separately. The
+reporting API says how often <code>purchase</code> fired. The admin API says whether anybody ever
+declared <code>purchase</code> a key event. Only the pair of answers is worth anything, and a site can
+pass one and fail the other for a year without noticing.</p>
+
+<h2><span class="n">02</span>The twelve checks</h2>
+<p>Four of them mean a number somewhere is <b>wrong</b>, not merely unflattering:</p>
+<table class="tbl">
+  <tr><th>Check</th><th>Finds</th></tr>
+  <tr><td>collecting</td><td><b>Nothing recorded at all.</b> The tag is not on the site, or this is not the property the site reports to — a measurement id copied from a second property looks exactly like this</td></tr>
+  <tr><td>data_stream</td><td><b>No web data stream.</b> There is no measurement id to put on a site, so nothing can ever report in</td></tr>
+  <tr><td>key_events_configured</td><td><b>Nothing marked as a key event.</b> GA4 is counting traffic and nothing else; Google Ads has nothing to import or optimise against</td></tr>
+  <tr><td>key_events_firing</td><td><b>A key event configured and never fired.</b> Either it is not being sent, or it is being sent under a different name — names match exactly, so <code>Purchase</code> and <code>purchase</code> are two events</td></tr>
+  <tr><td>revenue_tagged</td><td><b>Purchases without their money.</b> <code>purchase</code> is firing and the property has no revenue, which is the event arriving without <code>value</code> and <code>currency</code></td></tr>
+</table>
+<p>Four mean the numbers are real but something is <b>distorting</b> them:</p>
+<table class="tbl">
+  <tr><th>Check</th><th>Finds</th></tr>
+  <tr><td>double_counting</td><td><b>Page views counted twice.</b> A bounce rate near nothing with views per session doubled — the shape a gtag snippet left beside a GTM tag makes</td></tr>
+  <tr><td>self_referral</td><td><b>The site referring itself.</b> A visit cut in half by a domain the cross-domain configuration does not cover, crediting the site for its own traffic</td></tr>
+  <tr><td>payment_handoff</td><td><b>A payment or sign-in page credited with conversions.</b> The return trip starts a new session referred by the gateway, and whatever actually brought the visitor loses the conversion to it</td></tr>
+  <tr><td>event_silence</td><td><b>An event that stopped firing</b> between this window and the one before — a tag removed, renamed, or moved behind something that no longer runs</td></tr>
+</table>
+<p>And four are context worth having before reading anything else:</p>
+<table class="tbl">
+  <tr><th>Check</th><th>Finds</th></tr>
+  <tr><td>event_names</td><td><b>One event under two names.</b> <code>sign_up</code> and <code>signUp</code> are collected, reported and marked as key events separately</td></tr>
+  <tr><td>source_not_set</td><td><b>Sessions with no source at all.</b> <code>(not set)</code> is GA4 saying it could not attribute the session to anything — these can never be credited to a channel</td></tr>
+  <tr><td>direct_share</td><td><b>Almost everything arriving as direct.</b> Normal for a site people reach by typing its name; otherwise untagged campaigns, a referrer-dropping redirect, or a consent banner holding the tag back</td></tr>
+  <tr><td>data_stream</td><td><b>More than one site reporting in.</b> Every number is the sum of all streams — right for one site on several domains, wrong for staging sharing a property with production</td></tr>
+</table>
+
+<h2><span class="n">03</span>Run it</h2>
+<pre class="code"><span class="d"># twelve checks over the last 28 days</span>
+<span class="k">$</span> craft audit
+
+<span class="d"># a longer window</span>
+<span class="k">$</span> craft audit --days 90
+
+<span class="d"># see the whole shape of a report — no account, no subscription</span>
+<span class="k">$</span> craft audit --demo</pre>
+<p>Twenty-eight days is the default because a key event that did not fire <i>this week</i> may simply
+not have happened, and one that did not fire in a month is broken. Four weeks also covers every weekday
+the same number of times, so a site that is quiet at weekends does not read as a site that stopped.</p>
+
+<h2><span class="n">04</span>Three grades</h2>
+<table class="tbl">
+  <tr><th>Grade</th><th>Means</th></tr>
+  <tr><td>critical</td><td>A number somewhere is wrong, not just unflattering. Reading the reports before fixing this produces confident conclusions about nothing</td></tr>
+  <tr><td>warning</td><td>The numbers are real, and something is distorting them. Worth knowing which way before quoting one</td></tr>
+  <tr><td>note</td><td>Context to have before reading anything else. Not necessarily a defect</td></tr>
+</table>
+<p>Each finding carries the symptom, the evidence behind it, and a sentence on what it means and what
+fixes it — so the report is readable by whoever runs it rather than by whoever wrote it.</p>
+
+<h2><span class="n">05</span>What it will not do</h2>
+<p>It reports the <b>symptom</b> and names the usual cause, never the other way round. “Page views look
+counted twice” is a finding; “you have two page_view tags” is the sentence under it. A report that
+states guesses as findings gets believed once and then ignored.</p>
+<p>It cannot see inside a <b>Google Tag Manager container</b>. It reads the reporting and admin APIs,
+so it finds the tagging bugs that reach the data — a tag firing twice, a tag that stopped, a tag
+sending the wrong name — and not a trigger misconfigured in a way that produces plausible numbers.</p>
+<p>And every check has a <b>floor</b> under it. A property with eighty sessions has no meaningful bounce
+rate and no meaningful direct share, so those checks report as <i>not run</i> rather than firing on
+noise. The line under every report says how many of the twelve actually ran, because “no findings”
+means nothing without the number of ways it looked.</p>
+
+<h2><span class="n">06</span>Scripting it</h2>
+<table class="tbl">
+  <tr><th>Exit</th><th>Means</th></tr>
+  <tr><td>0</td><td>Checked, nothing found</td></tr>
+  <tr><td>2</td><td>Something was found</td></tr>
+  <tr><td>1</td><td>The audit itself failed</td></tr>
+</table>
+<p>The same convention <a href="/alerts.html"><code>craft watch</code></a> uses, so a weekly audit into
+Slack is one cron line:</p>
+<pre class="code">0 9 * * 1  craft audit --format slack \
+             | curl -sX POST -H <span class="k">'Content-Type: application/json'</span> -d @- <span class="k">"$SLACK_WEBHOOK"</span></pre>
+<p><code>--format json</code> prints one object carrying every finding with a stable slug, its grade,
+its evidence and its explanation — plus how many checks ran out of how many exist. Unlike a watch, a
+clean audit still prints: it is something somebody asked for, and “twelve checks, nothing found” is the
+answer they asked for.</p>
+
+<h2><span class="n">07</span>Ask an assistant to run it</h2>
+<p>The same twelve checks are an MCP tool. With
+<a href="/mcp.html">the Google Analytics MCP server</a> wired up, <code>audit_site</code> hands the
+graded findings to Claude — which is the difference between an assistant that reports a number and one
+that can tell you the number is not to be trusted.</p>
+<pre class="code"><span class="d">"Why are our conversions zero this month?"</span>
+<span class="d">→ audit_site → nothing on this property is marked as a key event</span></pre>
+
+<h2><span class="n">08</span>Look at it first</h2>
+<p><code>craft audit --demo</code> runs on synthetic data: no Google account, no subscription, and one
+finding of every grade, so the whole shape of a report is visible before anything is connected.</p>
+<pre class="code"><span class="k">$</span> craft audit --demo</pre>
+<p>The audit itself is part of the <a href="/pricing.html">Anacrafter</a> ($2.99) plan, alongside
+<code>craft configure</code> and <a href="/alerts.html"><code>craft watch</code></a>. The dashboard and
+the one-shot reports stay free.</p>
+
+<h2><span class="n">09</span>Questions</h2>
+<h3>What does a GA4 audit check?</h3>
+<p>Whether the property is collecting at all, whether anything in it is marked as a key event, whether those key events ever fire, whether purchases carry their revenue, whether page views are being counted twice, whether the site or a payment page is credited with its own conversions, whether an event stopped firing, whether one event is arriving under two names, and how much traffic cannot be attributed to any source. craft audit runs twelve such checks over four weeks and grades each finding.</p>
+<h3>Why does my GA4 show zero conversions?</h3>
+<p>Usually because nothing on the property is marked as a key event, or because the key event is configured under a name nothing is sending. GA4 matches event names exactly, so Purchase and purchase are two unrelated events and only one of them counts. Both cases report as zero conversions, and neither is visible from inside the reports.</p>
+<h3>Why is my GA4 revenue zero when purchases are firing?</h3>
+<p>The purchase event is arriving without its value and currency parameters. GA4 records the event and has no money to attach to it, so every revenue, ARPU and ROAS figure reads zero — including in any Google Ads account importing conversions from that property.</p>
+<h3>Why is my GA4 bounce rate so low?</h3>
+<p>A bounce rate near zero alongside doubled page views per session is the shape a duplicate page_view tag makes — typically a gtag.js snippet left in the page beside a Google Tag Manager tag that also sends one. The second view engages every session that would otherwise have bounced.</p>
+<h3>Can it find Google Tag Manager problems?</h3>
+<p>Only the ones that reach the data. craft audit reads the Google Analytics reporting and admin APIs, not the GTM container, so it finds a tag firing twice, a tag that stopped firing and a tag sending the wrong event name — and not a trigger misconfigured in a way that produces plausible data.</p>
+
+</main>
+
+<div class="wrap">
+<!-- footer:start -->
+<footer>
+  <div class="wrap" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;width:100%">
+    <span class="by"><span class="tag">crafted</span> in San Francisco <svg class="heart" role="img" aria-label="love" viewBox="0 0 9 8" fill="var(--jade)" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="0" width="2" height="1"/><rect x="6" y="0" width="2" height="1"/><rect x="0" y="1" width="1" height="1"/><rect x="3" y="1" width="1" height="1"/><rect x="5" y="1" width="1" height="1"/><rect x="8" y="1" width="1" height="1"/><rect x="0" y="2" width="1" height="1"/><rect x="4" y="2" width="1" height="1"/><rect x="8" y="2" width="1" height="1"/><rect x="0" y="3" width="1" height="1"/><rect x="8" y="3" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="7" y="4" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/><rect x="6" y="5" width="1" height="1"/><rect x="3" y="6" width="1" height="1"/><rect x="5" y="6" width="1" height="1"/><rect x="4" y="7" width="1" height="1"/></svg></span>
+    <span class="legal">© 2026 · All rights reserved</span>
+    <span class="ver">v0.20.0</span>
+    <span class="r">
+      <a href="/privacy.html">Privacy Policy</a>
+      <a href="/terms.html">Terms of Service</a>
+      <a href="mailto:support@anacraft.dev">support@anacraft.dev</a>
+    </span>
+  </div>
+</footer>
+<!-- footer:end -->
+</div>
+
+</body>
+</html>

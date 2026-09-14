@@ -25,6 +25,8 @@ import sys
 PAGES = [
     "index.html",
     "alerts.html",
+    "audit.html",
+    "mcp.html",
     "setup-ga4.html",
     "pricing.html",
     "lovable.html",

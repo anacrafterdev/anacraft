@@ -5,7 +5,7 @@
 //! dashboard. Everything the rest of the program draws with goes through the
 //! ore names below, which map onto whichever palette is selected.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use ratatui::style::Color;
 
@@ -199,6 +199,27 @@ pub const THEMES: [&Palette; 7] = [
 ];
 
 static SELECTED: AtomicUsize = AtomicUsize::new(0);
+static BORING: AtomicBool = AtomicBool::new(false);
+
+/// Whether the dashboard is speaking plain GA4 rather than wearing a pack
+pub fn boring() -> bool {
+    BORING.load(Ordering::Relaxed)
+}
+
+/// Flips the vocabulary, returning what it landed on. Wiring for `b`.
+pub fn toggle_boring() -> bool {
+    !BORING.fetch_xor(true, Ordering::Relaxed)
+}
+
+/// Picks between the two vocabularies. Call sites read as a pair, which is
+/// also the rule: nothing craft themed without a plain twin.
+pub fn say(craft: &'static str, plain: &'static str) -> &'static str {
+    if boring() {
+        plain
+    } else {
+        craft
+    }
+}
 
 /// The palette in force. Every color accessor goes through here.
 pub fn palette() -> &'static Palette {
@@ -367,6 +388,35 @@ pub struct Metric {
     pub color: fn() -> Color,
     pub glyph: char,
     pub kind: Kind,
+}
+
+impl Metric {
+    /// The headline name. Boring mode just shows the standard GA4 names
+    pub fn label(&self) -> String {
+        if boring() {
+            self.plain.to_uppercase()
+        } else {
+            self.craft.to_string()
+        }
+    }
+
+    /// The dimmed detail beside the title — the GA4 field in boring mode.
+    pub fn sub(&self) -> &'static str {
+        if boring() {
+            self.api
+        } else {
+            self.plain
+        }
+    }
+
+    /// The glyph a bar is drawn from. Boring is a full block, never a diamond.
+    pub fn bar_glyph(&self) -> char {
+        if boring() {
+            glyph::FULL
+        } else {
+            self.glyph
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq)]

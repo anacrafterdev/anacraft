@@ -390,6 +390,7 @@ reflows to fill the terminal.
 | `tab` | Next property, when more than one is configured |
 | `shift`+`D` | Forget the property on screen — drops it from the rotation, leaves it in Google |
 | `t` | Cycle the palette, and save it |
+| `b` | Boring mode — plain GA4 names instead of the texture pack |
 | `s` | Demo only — preview the Anacrafter look |
 | `r` | Rebuild — force a refetch now |
 | `?` / `h` | Help overlay |

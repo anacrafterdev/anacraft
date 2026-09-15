@@ -55,12 +55,19 @@ const FLASH: Duration = Duration::from_millis(1400);
 const FEED_TTL: Duration = Duration::from_secs(90);
 /// The smallest terminal the dashboard will draw in.
 ///
-/// Width comes from the vitals rows, which start clipping their deltas below
-/// 80. Height is what the frame itself costs — a 3-row header, the supporter
-/// box, the footer, the gutters between them, and the 10 rows the body is never
+/// Width is one readable tile and the border around it: the grid drops to a
+/// single stacked column rather than squeezing tiles under `MIN_TILE_COLS`,
+/// and the header gives up its day span and its badge to match, so a phone-
+/// sized terminal gets the dashboard instead of a notice. It used to be 80 —
+/// the width the vitals rows needed before they learned to size their bars to
+/// the panel and drop the subtitle — which is why the site's own narrow
+/// capture, taken at 74 columns for phones, was an error card.
+///
+/// Height is what the frame itself costs — a 3-row header, the supporter box,
+/// the footer, the gutters between them, and the 10 rows the body is never
 /// given less than. Under either, the panels don't degrade so much as
 /// disintegrate, so the dashboard says what it needs and waits instead.
-const MIN_COLS: u16 = 80;
+const MIN_COLS: u16 = 60;
 const MIN_ROWS: u16 = 24;
 /// The supporter box: one line and its borders.
 const SUPPORTER_ROWS: u16 = 3;
@@ -100,6 +107,16 @@ const REALMS_RANKED_ROWS: u16 = 10;
 /// Ranked portals: the same shape, and the same eight rows of it.
 const PORTALS_ROWS: u16 = 10;
 /// The map's box: nine rows of world, a caption, and borders.
+/// The narrowest a tile may be squeezed and still be worth reading. Under it
+/// the panel headers drop their figure, the lists cut their labels mid-word
+/// and the map loses its caption — so the grid gives up a column before it
+/// gives up the reading.
+const MIN_TILE_COLS: u16 = 36;
+
+/// The room the map's caption keeps for a realm name before it gives up the
+/// online tally behind it.
+const CAPTION_NAME: usize = 12;
+
 const MAP_ROWS: u16 = 12;
 /// The most rows the map can put to use: the template is `WORLD.len()` rows
 /// tall and `map_panel` clamps to it, so every row past this one is drawn as
@@ -412,9 +429,32 @@ struct Dash {
     /// service has none to give — an older one, or an account that has never
     /// paid — and the line simply reads as it always did.
     founder: Option<u32>,
+    /// When each panel joined the board, by `Tile::index`. A tile takes its
+    /// place the way a new window joins a tiling manager's stack — at the
+    /// back, in the order it was switched on, not back in the slot its key
+    /// would suggest. Hiding 3 from `1 3 8` and bringing it back leaves
+    /// `1 8 3`.
+    joined: [u32; 8],
+    /// The next place at the back of the board.
+    next_join: u32,
 }
 
 impl Dash {
+    /// Flips a panel, and when it comes on puts it at the back of the board.
+    ///
+    /// Every toggle goes through here, so the order the tiles are drawn in is
+    /// the order they were switched on. A tile that has just been brought
+    /// back is the newest tile, not the one its key number says it is: from
+    /// `1 3 8`, hiding 3 leaves `1 8`, and pressing 3 again gives `1 8 3`.
+    fn toggle(&mut self, tile: Tile) {
+        let switch = tile.switch(&mut self.panels);
+        *switch = !*switch;
+        if *switch {
+            self.joined[tile.index()] = self.next_join;
+            self.next_join += 1;
+        }
+    }
+
     fn new(
         title: String,
         days: u32,
@@ -425,6 +465,9 @@ impl Dash {
         live_every: Duration,
     ) -> Dash {
         let mut dash = Dash {
+            // Nothing has been pressed yet, so the board opens in key order.
+            joined: [0, 1, 2, 3, 4, 5, 6, 7],
+            next_join: 8,
             title,
             days,
             metrics: Vec::new(),
@@ -1507,32 +1550,16 @@ async fn event_loop(
                         // Ctrl+digit and the bare digit do the same thing: the
                         // titles advertise Ctrl, but not every terminal can
                         // send it.
-                        KeyCode::Char('1') | KeyCode::Char('e') => {
-                            dash.panels.events = !dash.panels.events
-                        }
-                        KeyCode::Char('2') | KeyCode::Char('l') => {
-                            dash.panels.live = !dash.panels.live
-                        }
-                        KeyCode::Char('3') | KeyCode::Char('m') => {
-                            dash.panels.map = !dash.panels.map
-                        }
-                        KeyCode::Char('4') | KeyCode::Char('p') => {
-                            dash.panels.chunks = !dash.panels.chunks
-                        }
-                        KeyCode::Char('5') | KeyCode::Char('v') => {
-                            dash.panels.vitals = !dash.panels.vitals
-                        }
-                        KeyCode::Char('6') | KeyCode::Char('g') => {
-                            dash.panels.realms_ranked = !dash.panels.realms_ranked
-                        }
-                        KeyCode::Char('7') | KeyCode::Char('d') => {
-                            dash.panels.trend = !dash.panels.trend
-                        }
+                        KeyCode::Char('1') | KeyCode::Char('e') => dash.toggle(Tile::Events),
+                        KeyCode::Char('2') | KeyCode::Char('l') => dash.toggle(Tile::Live),
+                        KeyCode::Char('3') | KeyCode::Char('m') => dash.toggle(Tile::Map),
+                        KeyCode::Char('4') | KeyCode::Char('p') => dash.toggle(Tile::Chunks),
+                        KeyCode::Char('5') | KeyCode::Char('v') => dash.toggle(Tile::Vitals),
+                        KeyCode::Char('6') | KeyCode::Char('g') => dash.toggle(Tile::RealmsRanked),
+                        KeyCode::Char('7') | KeyCode::Char('d') => dash.toggle(Tile::Trend),
                         // `o`, not `p`: the chunk list took that one, and a
                         // portal is a thing you come thrOugh.
-                        KeyCode::Char('8') | KeyCode::Char('o') => {
-                            dash.panels.portals = !dash.panels.portals
-                        }
+                        KeyCode::Char('8') | KeyCode::Char('o') => dash.toggle(Tile::Portals),
                         // Shift, not a bare `d`: that one toggles the daily
                         // users panel and always has. A key people press to
                         // look at a chart is the wrong place to put anything
@@ -2035,7 +2062,10 @@ fn too_small(area: Rect) -> Paragraph<'static> {
 ///
 /// Both states use the same box, because the answer to "am I an Anacrafter" is
 /// worth stating either way — one line is a thank-you, the other is an ask.
-fn supporter_box(dash: &Dash) -> Paragraph<'static> {
+fn supporter_box(dash: &Dash, width: u16) -> Paragraph<'static> {
+    // Its borders, and one cell held back so the line never ends flush
+    // against the closing one.
+    let room = width.saturating_sub(3) as usize;
     let star = Span::styled(
         format!("  {} ", glyph::STAR),
         Style::default()
@@ -2044,7 +2074,7 @@ fn supporter_box(dash: &Dash) -> Paragraph<'static> {
     );
 
     let line = if dash.supporter {
-        Line::from(vec![
+        let spans = vec![
             star,
             Span::styled(
                 "ANACRAFTER",
@@ -2083,7 +2113,11 @@ fn supporter_box(dash: &Dash) -> Paragraph<'static> {
                 },
                 Style::default().fg(ore::stone()),
             ),
-        ])
+        ];
+        // The badge is the point of the box; the line beside it is the gloss.
+        // A narrow terminal gives up the gloss rather than handing the border
+        // half a word to cut — "none of the invo".
+        Line::from(fits(spans, room, 3))
     } else {
         let mut spans = vec![
             star,
@@ -2121,7 +2155,7 @@ fn supporter_box(dash: &Dash) -> Paragraph<'static> {
                 Style::default().fg(ore::stone()),
             ));
         }
-        Line::from(spans)
+        Line::from(fits(spans, room, 4))
     };
 
     Paragraph::new(line).block(
@@ -2255,6 +2289,13 @@ fn draw(frame: &mut Frame, dash: &Dash) {
     // Every layout below leaves a one-cell gutter. That gap is the ink ground
     // showing through, which is what makes the panels read as floating on it
     // rather than as one tiled surface.
+    // The grid's shape is the *terminal's* shape, not the body's: the header,
+    // box and footer between them ate the rows that would keep the body's
+    // aspect honest, so measuring it here would call a 4:3 window "wide" and
+    // never go two-across. The whole frame — half as tall again as it is wide
+    // (16:9 and beyond) runs three across; 4:3 and squarer runs two.
+    let wide = (area.width as u32) * 2 >= (area.height as u32) * 3;
+
     // An 80-column terminal has nothing to spare: the vitals rows clip their
     // delta first, so at that width the dashboard drops its outer margin and
     // widens the left panel rather than losing the numbers.
@@ -2272,9 +2313,9 @@ fn draw(frame: &mut Frame, dash: &Dash) {
         .split(area);
 
     frame.render_widget(header(dash, chunks[0].width), chunks[0]);
-    body(frame, dash, chunks[1], narrow);
-    frame.render_widget(supporter_box(dash), chunks[2]);
-    frame.render_widget(footer(dash), chunks[3]);
+    body(frame, dash, chunks[1], narrow, wide);
+    frame.render_widget(supporter_box(dash, chunks[2].width), chunks[2]);
+    frame.render_widget(footer(dash, chunks[3].width), chunks[3]);
 
     // The confirmation sits above the help, because it is a question waiting
     // on an answer and the help is not.
@@ -2288,7 +2329,7 @@ fn draw(frame: &mut Frame, dash: &Dash) {
 /// Lays out whichever panels are switched on. A hidden panel doesn't leave a
 /// hole — the remaining ones take its space, so `2` on a wide terminal turns
 /// the dashboard into vitals beside a full-height chunk list.
-fn body(frame: &mut Frame, dash: &Dash, area: Rect, narrow: bool) {
+fn body(frame: &mut Frame, dash: &Dash, area: Rect, narrow: bool, wide: bool) {
     if !dash.panels.any() {
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
@@ -2301,6 +2342,344 @@ fn body(frame: &mut Frame, dash: &Dash, area: Rect, narrow: bool) {
         return;
     }
 
+    // The grid picks its shape from the body's aspect: a body half as tall
+    // again as it is wide — 16:9 and beyond — runs the tiles three across,
+    // two rows of them. A squarer body, 4:3 and down, runs two across so the
+    // taller body earns a third row. Only a body more than twice as tall as
+    // it is wide falls back to the columns, where tiles would be too narrow
+    // to read.
+    if area.height as u32 > (area.width as u32) * 2 {
+        columns(frame, dash, area, narrow);
+    } else {
+        grid(frame, dash, area, wide);
+    }
+}
+
+/// Which panel occupies a tile in the body grid, in key order — the order the
+/// keys list them and the order a reader scans a page. The tiles fill the
+/// grid in that same order, so the dashboard reads the way the keys list it:
+/// the first handful of switched-on panels up front, then the rest of the
+/// queue waiting behind them.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Tile {
+    Events,
+    Live,
+    Map,
+    Chunks,
+    Vitals,
+    RealmsRanked,
+    Trend,
+    Portals,
+}
+
+impl Tile {
+    fn on(&self, panels: &Panels) -> bool {
+        match self {
+            Tile::Events => panels.events,
+            Tile::Live => panels.live,
+            Tile::Map => panels.map,
+            Tile::Chunks => panels.chunks,
+            Tile::Vitals => panels.vitals,
+            Tile::RealmsRanked => panels.realms_ranked,
+            Tile::Trend => panels.trend,
+            Tile::Portals => panels.portals,
+        }
+    }
+
+    /// Where the tile sits in `Dash::joined`, which is key order: 1 to 8.
+    fn index(self) -> usize {
+        match self {
+            Tile::Events => 0,
+            Tile::Live => 1,
+            Tile::Map => 2,
+            Tile::Chunks => 3,
+            Tile::Vitals => 4,
+            Tile::RealmsRanked => 5,
+            Tile::Trend => 6,
+            Tile::Portals => 7,
+        }
+    }
+
+    /// The switch behind the tile, to flip.
+    fn switch(self, panels: &mut Panels) -> &mut bool {
+        match self {
+            Tile::Events => &mut panels.events,
+            Tile::Live => &mut panels.live,
+            Tile::Map => &mut panels.map,
+            Tile::Chunks => &mut panels.chunks,
+            Tile::Vitals => &mut panels.vitals,
+            Tile::RealmsRanked => &mut panels.realms_ranked,
+            Tile::Trend => &mut panels.trend,
+            Tile::Portals => &mut panels.portals,
+        }
+    }
+
+    /// The share of its row the tile asks for. The chart and the map read
+    /// across: a time series and a world map both turn width into detail,
+    /// where a list turns it into trailing space beside the same numbers.
+    fn weight(&self) -> u32 {
+        match self {
+            Tile::Events | Tile::Map => 5,
+            _ => 4,
+        }
+    }
+
+    /// The least the tile can be and still be that panel — all its borders.
+    fn min_rows(&self) -> u16 {
+        match self {
+            Tile::Events => EVENTS_ROWS,
+            Tile::Live => LIVE_ROWS,
+            Tile::Map => MAP_ROWS,
+            Tile::Chunks => CHUNKS_ROWS,
+            Tile::Vitals => VITALS_MIN_ROWS,
+            Tile::RealmsRanked => REALMS_RANKED_ROWS,
+            Tile::Trend => TREND_ROWS,
+            Tile::Portals => PORTALS_ROWS,
+        }
+    }
+
+    /// The most rows a tile can put to use. `u16::MAX` marks a panel that
+    /// grows — the lists show longer lists, the chart just gets taller.
+    fn max_rows(&self) -> u16 {
+        match self {
+            Tile::Map => MAP_MAX_ROWS,
+            Tile::Vitals => VITALS_ROWS,
+            Tile::Events | Tile::Chunks | Tile::RealmsRanked | Tile::Portals => u16::MAX,
+            _ => self.min_rows(),
+        }
+    }
+}
+
+/// The body as a grid of tiles, filled in the order the panels come. The
+/// terminal's aspect names the widest a row may be — three tiles across on a
+/// body half as tall again as it is wide (16:9 and beyond), two on 4:3 and
+/// squarer — and the body's own width can name fewer still. The panels fill
+/// the cells top row first, left to right, in the order they were switched
+/// on — key order until something is pressed — and every one that is on gets
+/// a cell: switching one on takes another row and pushes the rest of the
+/// board down to pay for it.
+///
+/// However many are on, the board is balanced: the rows carry within one tile
+/// of each other, so four panels make a 2×2 and not a row of three over a
+/// lone stretched fourth. Switching one off re-tiles the rest over the space
+/// it gave up, the way closing a window in a tiling manager does.
+///
+/// A tile that a row cannot fit is dropped from the last row up: the grid
+/// gives up the panel, never the dashboard. Spare rows go to the panels that
+/// can spend them — the vitals first, which turn them into bars and gaps,
+/// then the lists and the chart. A row grows only as far as *every* tile in
+/// it can spend the extra row; the least-fillable tile sets its ceiling, so
+/// a row's height does not swing when a neighbour joins it.
+fn grid(frame: &mut Frame, dash: &Dash, area: Rect, wide: bool) {
+    // Shape the grid by the terminal: three across and two rows when the
+    // terminal is half again as wide as it is tall; two across and three rows
+    // when it is squarer.
+    //
+    // The aspect only ever asks for columns — the body's width is what grants
+    // them. A 60-column terminal is wider than it is tall and so asked for
+    // three, which left tiles seventeen cells across with their headers cut
+    // mid-word; the grid now drops to as many columns as `MIN_TILE_COLS` will
+    // actually fit, down to a single stack. However the columns fall, the rows
+    // a narrower body runs make up for the columns it gave up.
+    let fits = (1..=3u16)
+        .rev()
+        .find(|n| n * MIN_TILE_COLS + (n - 1) <= area.width)
+        .unwrap_or(1) as usize;
+    let cells = if wide { 3 } else { 2 }.min(fits);
+
+    // The panels the board could hold, in key order — which is the order an
+    // untouched board draws them in. A switched-off panel is skipped; the
+    // cells that stay left spread across their row's width, so an empty cell
+    // widens its neighbours instead of leaving a hole.
+    //
+    // Every panel that is on gets a cell. There used to be a ceiling of six,
+    // which is why pressing 8 on a full board did nothing at all: the panel
+    // came on and found nowhere to be drawn. A tile makes room for itself
+    // instead — the board takes another row and everything already on it
+    // gives up the height to pay for it. Only a body with no room left for
+    // the tile's own borders drops one, from the bottom row up.
+    let order = [
+        Tile::Events,
+        Tile::Live,
+        Tile::Map,
+        Tile::Chunks,
+        Tile::Vitals,
+        Tile::RealmsRanked,
+        Tile::Trend,
+        Tile::Portals,
+    ];
+    let mut on: Vec<Tile> = order
+        .iter()
+        .copied()
+        .filter(|tile| tile.on(&dash.panels))
+        .collect();
+    // Key order is only where the board starts. What fixes a tile's place is
+    // when it was switched on, so a panel brought back joins at the back
+    // rather than shuffling into the middle and moving everything after it.
+    on.sort_by_key(|tile| dash.joined[tile.index()]);
+    if on.is_empty() {
+        return;
+    }
+
+    // The board is balanced rather than filled a row at a time. Four panels
+    // on a three-across grid used to run three along the top and stretch the
+    // fourth across the whole row beneath, leaving the cell beside it bare;
+    // they make a 2×2 instead. `cells` is the widest a row may be, not the
+    // width every row must be — the rows carry within one tile of each other,
+    // the fuller ones first, the way a tiling window manager splits its space.
+    let rows_deep = on.len().div_ceil(cells);
+    let per = on.len() / rows_deep;
+    let wider = on.len() % rows_deep;
+
+    let mut rows: Vec<Vec<Tile>> = Vec::with_capacity(rows_deep);
+    let mut queue = on.as_slice();
+    for depth in 0..rows_deep {
+        let (row, rest) = queue.split_at(per + usize::from(depth < wider));
+        rows.push(row.to_vec());
+        queue = rest;
+    }
+
+    // Each row's height is its tallest tile at minimum. Dropped tiles come
+    // off the bottom row until the whole grid fits the screen.
+    let mut row_min: Vec<u16> = rows
+        .iter()
+        .map(|row| row.iter().map(Tile::min_rows).max().unwrap_or(0))
+        .collect();
+    loop {
+        let gutter = rows.len().saturating_sub(1) as u16;
+        if gutter + row_min.iter().sum::<u16>() <= area.height {
+            break;
+        }
+        let last = rows.len() - 1;
+        rows[last].pop();
+        if rows[last].is_empty() {
+            rows.pop();
+            row_min.pop();
+        } else {
+            row_min[last] = rows[last].iter().map(Tile::min_rows).max().unwrap_or(0);
+        }
+        if rows.is_empty() {
+            return;
+        }
+    }
+
+    // Leftover rows go to the first panel in priority order that can spend
+    // them: the figures turn rows into bars and gaps, the map has a ceiling,
+    // and the lists and the chart grow without one. A row grows only as far
+    // as *every* tile in it can spend the extra row — the least-fillable tile
+    // sets the ceiling, or the boxes with short content would show a ground
+    // of their own between their borders.
+    let row_cap: Vec<u16> = rows
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(Tile::max_rows)
+                .min()
+                .unwrap_or(0)
+                .min(VITALS_ROWS)
+        })
+        .collect();
+    let mut slack =
+        area.height - (rows.len().saturating_sub(1) as u16 + row_min.iter().sum::<u16>());
+    let mut grown = row_min.clone();
+    for tile in [
+        Tile::Vitals,
+        Tile::Map,
+        Tile::Chunks,
+        Tile::RealmsRanked,
+        Tile::Events,
+    ] {
+        let Some(spot) = rows.iter().position(|row| row.contains(&tile)) else {
+            continue;
+        };
+        let headroom = tile
+            .max_rows()
+            .saturating_sub(grown[spot])
+            .min(row_cap[spot].saturating_sub(grown[spot]));
+        let take = slack.min(headroom);
+        grown[spot] += take;
+        slack -= take;
+        if slack == 0 {
+            break;
+        }
+    }
+
+    // Whatever the panels would not spend is spread over the rows regardless.
+    // The capped pass above stops as soon as no tile can *use* another row,
+    // which left the grid ending short of the body and a band of bare ground
+    // above the supporter box — four rows of it on a 132-column terminal, the
+    // size the site is captured at. A panel carrying a little room under its
+    // last line reads as a panel; a gap between the panels and the footer
+    // reads as the dashboard having stopped drawing. The grid ends where the
+    // body ends.
+    if slack > 0 {
+        let count = grown.len() as u16;
+        let each = slack / count;
+        let extra = slack % count;
+        for (i, row) in grown.iter_mut().enumerate() {
+            *row += each + u16::from((i as u16) < extra);
+        }
+    }
+
+    let constraints: Vec<Constraint> = grown.iter().map(|rows| Constraint::Length(*rows)).collect();
+    let row_rects = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(constraints)
+        .spacing(1)
+        .split(area);
+
+    for (row, rect) in rows.iter().zip(row_rects.iter()) {
+        // The chart and the map take the wider share of their row — but only
+        // where the row can pay for it. The extra a wide tile gains comes off
+        // its neighbour, and a neighbour pushed under `MIN_TILE_COLS` loses
+        // its labels, which costs the row more than the map gains. So a phone-
+        // sized row goes back to equal shares and everything stays readable.
+        let weights: Vec<u32> = row.iter().map(Tile::weight).collect();
+        let asked: u32 = weights.iter().sum();
+        let leanest = weights.iter().copied().min().unwrap_or(1);
+        let span = rect.width.saturating_sub(row.len() as u16 - 1) as u32;
+        let constraints: Vec<Constraint> = if span * leanest / asked >= MIN_TILE_COLS as u32 {
+            weights
+                .iter()
+                .map(|weight| Constraint::Ratio(*weight, asked))
+                .collect()
+        } else {
+            std::iter::repeat(Constraint::Ratio(1, row.len() as u32))
+                .take(row.len())
+                .collect()
+        };
+
+        let cols = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(constraints)
+            .spacing(1)
+            .split(*rect);
+
+        for (tile, cell) in row.iter().zip(cols.iter()) {
+            match tile {
+                Tile::Events => frame.render_widget(events_panel(dash, cell.width), *cell),
+                Tile::Live => frame.render_widget(live_panel(dash, cell.width), *cell),
+                Tile::Map => frame.render_widget(map_panel(dash, cell.width, cell.height), *cell),
+                Tile::Chunks => {
+                    frame.render_widget(pages_panel(dash, cell.width, cell.height), *cell)
+                }
+                Tile::Vitals => {
+                    frame.render_widget(metrics_panel(dash, cell.width, cell.height), *cell)
+                }
+                Tile::RealmsRanked => {
+                    frame.render_widget(realms_ranked_panel(dash, cell.width, cell.height), *cell)
+                }
+                Tile::Trend => frame.render_widget(trend_panel(dash, cell.width), *cell),
+                Tile::Portals => {
+                    frame.render_widget(portals_panel(dash, cell.width, cell.height), *cell)
+                }
+            }
+        }
+    }
+}
+
+/// The two stacked columns, for terminals too narrow for a tile grid.
+fn columns(frame: &mut Frame, dash: &Dash, area: Rect, narrow: bool) {
     // Each column is drawn if anything in it is on, and whichever is alone
     // takes the whole body. Hiding a panel hides that panel: the ones left in
     // its column take the rows it was using, in the order they sit in.
@@ -2372,7 +2751,9 @@ fn body(frame: &mut Frame, dash: &Dash, area: Rect, narrow: bool) {
             match panel {
                 Stack::Map => frame.render_widget(map_panel(dash, area.width, area.height), *area),
                 Stack::Events => frame.render_widget(events_panel(dash, area.width), *area),
-                Stack::Vitals => frame.render_widget(metrics_panel(dash, area.height), *area),
+                Stack::Vitals => {
+                    frame.render_widget(metrics_panel(dash, area.width, area.height), *area)
+                }
             }
         }
     }
@@ -2622,6 +3003,10 @@ const AVATAR_COLUMN: usize = avatar::CELLS as usize + AVATAR_INSET + 2;
 /// brand is given on the left.
 const AVATAR_INSET: usize = 1;
 
+/// Cells the day span leaves in hand for the property name beside it. Enough
+/// for a short name and its ellipsis — under that the day span goes instead.
+const TITLE_STUB: usize = 8;
+
 /// A short label for a realm chip.
 ///
 /// Truncating to three characters renders "United States" and "United Kingdom"
@@ -2675,9 +3060,52 @@ fn header(dash: &Dash, width: u16) -> Paragraph<'static> {
     let breath = (phase * 2.2).sin() * 0.5 + 0.5;
     let dot = glyph::PULSE[((breath * 2.99) as usize).min(2)];
 
+    // The bar gives its pieces up in tiers rather than running off the edge.
+    // A narrow terminal used to draw every span whatever the room and let the
+    // border crop the last one, which is how a 60-column window ended up
+    // saying "◉ 130 on". What goes first is the day span — the header below
+    // repeats the window anyway — then the property name is truncated. The
+    // brand, the live dot and the count it belongs to are never cut.
+    let brand = format!(" {} ANACRAFT ", glyph::PICKAXE);
+    let star = if dash.supporter {
+        format!("{} ", glyph::STAR)
+    } else {
+        String::new()
+    };
+    let pulse = format!("· {dot} ");
+    let online = format!("{} online now", commas(dash.live.shown.round()));
+    // One cell short of the border, not flush against it: a line that ends on
+    // the last cell inside the frame reads as a line that ran out of room,
+    // whether or not anything was actually lost.
+    let room = width.saturating_sub(3) as usize;
+    let fixed = brand.chars().count()
+        + star.chars().count()
+        + pulse.chars().count()
+        + online.chars().count();
+
+    // The day span keeps a few cells in hand for a name beside it: a bar that
+    // spends its last cells saying "last 7 days" and then has nothing left to
+    // name the property with has kept the wrong half.
+    let days = format!("· last {} days ", dash.days);
+    let days = if fixed + days.chars().count() + TITLE_STUB <= room {
+        days
+    } else {
+        String::new()
+    };
+    // Truncated with its trailing space added after, not before: cutting the
+    // formatted string takes the space with it and the ellipsis ends up butted
+    // against the next span — "CONTOSO LAB…· last 7 days".
+    let title = format!(
+        "{} ",
+        truncate(
+            &dash.title.to_uppercase(),
+            room.saturating_sub(fixed + days.chars().count() + 1),
+        )
+    );
+
     let mut spans = vec![
         Span::styled(
-            format!(" {} ANACRAFT ", glyph::PICKAXE),
+            brand,
             Style::default()
                 .fg(ore::grass())
                 .add_modifier(Modifier::BOLD),
@@ -2686,31 +3114,24 @@ fn header(dash: &Dash, width: u16) -> Paragraph<'static> {
         // brand rather than out at the end of the line, where the realm chips
         // spend whatever room is left and would eventually push it off screen.
         Span::styled(
-            if dash.supporter {
-                format!("{} ", glyph::STAR)
-            } else {
-                String::new()
-            },
+            star,
             Style::default()
                 .fg(ore::gold())
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
-            format!("{} ", dash.title.to_uppercase()),
+            title,
             Style::default()
                 .fg(ore::diamond())
                 .add_modifier(Modifier::BOLD),
         ),
+        Span::styled(days, Style::default().fg(ore::stone())),
         Span::styled(
-            format!("· last {} days ", dash.days),
-            Style::default().fg(ore::stone()),
-        ),
-        Span::styled(
-            format!("· {dot} "),
+            pulse,
             Style::default().fg(theme::mix(theme::accent_deep(), theme::bright(), breath)),
         ),
         Span::styled(
-            format!("{} online now", commas(dash.live.shown.round())),
+            online,
             Style::default().fg(ore::xp()).add_modifier(Modifier::BOLD),
         ),
     ];
@@ -2751,18 +3172,21 @@ fn header(dash: &Dash, width: u16) -> Paragraph<'static> {
     // whatever is left over — which also keeps the badge still while the chips
     // behind it change width.
     let used: usize = spans.iter().map(|span| span.width()).sum();
-    let gap = (width as usize)
-        .saturating_sub(2)
-        .saturating_sub(used)
-        .saturating_sub(avatar::CELLS as usize + AVATAR_INSET);
-    spans.push(Span::raw(" ".repeat(gap)));
-    spans.push(Span::styled(
-        dash.avatar.glyphs(),
-        Style::default()
-            .fg(dash.avatar.color())
-            .add_modifier(Modifier::BOLD),
-    ));
-    spans.push(Span::raw(" ".repeat(AVATAR_INSET)));
+    let inner = width.saturating_sub(2) as usize;
+    let badge = avatar::CELLS as usize + AVATAR_INSET;
+    // On a narrow bar there is no gap left to hold it away from the text, and
+    // a badge butted against the count is worse than no badge: it reads as
+    // part of the number. Below that it steps off the bar entirely.
+    if used + badge < inner {
+        spans.push(Span::raw(" ".repeat(inner - used - badge)));
+        spans.push(Span::styled(
+            dash.avatar.glyphs(),
+            Style::default()
+                .fg(dash.avatar.color())
+                .add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::raw(" ".repeat(AVATAR_INSET)));
+    }
 
     Paragraph::new(Line::from(spans)).block(
         Block::default()
@@ -2772,17 +3196,27 @@ fn header(dash: &Dash, width: u16) -> Paragraph<'static> {
     )
 }
 
-/// The vitals, drawn to fit the rows the column handed over.
+/// The vitals, drawn to fit the rows the layout handed over.
 ///
 /// Three densities rather than one: the panel with its gaps, the same panel
 /// closed up, and — where the chart and the map have taken what they need — a
 /// line of numbers per metric with the bars given up. Every density says the
 /// same six numbers; what goes first is the space around them, then the shape
 /// of them, and never the number itself.
-fn metrics_panel(dash: &Dash, height: u16) -> Paragraph<'static> {
+fn metrics_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
     let bars = height >= VITALS_TIGHT_ROWS;
     let gaps = height >= VITALS_ROWS;
     let phase = dash.phase();
+
+    // Each metric is one row of `name (plain)  value  delta`. The plain
+    // subtitle is the first column to give way on a narrow tile: it is the
+    // reassurance, and the number it sits beside is the point. A three-wide
+    // grid tile keeps the name and the number, and the two stacked columns can
+    // keep the subtitle. The bar is sized to the panel rather than its old
+    // fixed thirty, so it never runs under the border of a short tile.
+    let inner = width.saturating_sub(2) as usize;
+    let subtitle = inner >= 47;
+    let bar_cells = inner.saturating_sub(2).min(30);
     let mut lines: Vec<Line> = Vec::new();
 
     for (i, metric) in OVERVIEW.iter().enumerate() {
@@ -2794,28 +3228,33 @@ fn metrics_panel(dash: &Dash, height: u16) -> Paragraph<'static> {
         // so a refresh is visible even when the number barely moves.
         let label = theme::brighten((metric.color)(), flash * 0.7);
 
-        lines.push(Line::from(vec![
-            Span::styled(
-                format!("{:<14}", metric.craft),
-                Style::default().fg(label).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
+        let mut spans = vec![Span::styled(
+            format!("{:<14}", metric.craft),
+            Style::default().fg(label).add_modifier(Modifier::BOLD),
+        )];
+        if subtitle {
+            spans.push(Span::styled(
                 format!("{:<14}", format!("({})", metric.plain)),
                 Style::default().fg(ore::stone()),
-            ),
-            Span::styled(
-                format!("{:>10}  ", value(metric, row.value.shown)),
-                Style::default()
-                    .fg(theme::mix(theme::fg(), theme::bright(), flash))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            delta_span(row.value.target, row.previous, metric.api == "bounceRate"),
-        ]));
+            ));
+        }
+        spans.push(Span::styled(
+            format!("{:>10}  ", value(metric, row.value.shown)),
+            Style::default()
+                .fg(theme::mix(theme::fg(), theme::bright(), flash))
+                .add_modifier(Modifier::BOLD),
+        ));
+        spans.push(delta_span(
+            row.value.target,
+            row.previous,
+            metric.api == "bounceRate",
+        ));
+        lines.push(Line::from(spans));
 
         if bars {
             lines.push(Line::from(bar_spans(
                 row.frac.shown,
-                30,
+                bar_cells,
                 metric.glyph,
                 (metric.color)(),
                 phase,
@@ -3197,8 +3636,17 @@ fn map_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
         .iter()
         .filter(|(_, users)| *users > 0.0)
         .count();
+    // The tally of realms with someone in them rides at the end, but only
+    // while a name can still sit in front of it: on a narrow tile the names
+    // are the caption's job and the tally is what it trims.
     let suffix = format!(" · {online} online now");
-    let budget = (width as usize).saturating_sub(4 + suffix.chars().count());
+    let inner = (width as usize).saturating_sub(4);
+    let suffix = if suffix.chars().count() + CAPTION_NAME <= inner {
+        suffix
+    } else {
+        String::new()
+    };
+    let budget = inner.saturating_sub(suffix.chars().count());
 
     let mut named = String::new();
     for (name, users) in top.iter().take(4) {
@@ -3214,7 +3662,13 @@ fn map_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
         named = candidate;
     }
     if named.is_empty() {
-        named = "no realms in this window".to_string();
+        named = match top.first() {
+            // Nothing fit whole. The leading realm goes in cut rather than the
+            // caption telling a narrow tile the map is empty when it is not —
+            // which is what a 74-column terminal was reading.
+            Some((name, users)) => truncate(&format!("{name} {}", commas(*users)), budget),
+            None => truncate("no realms in this window", budget),
+        };
     }
 
     lines.push(Line::from(Span::styled(
@@ -3846,10 +4300,16 @@ fn portals_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
     Paragraph::new(lines).block(framed("PORTALS", "8", ore::emerald()))
 }
 
-fn footer(dash: &Dash) -> Paragraph<'static> {
+fn footer(dash: &Dash, width: u16) -> Paragraph<'static> {
+    // Everything the bar can say, less its borders and one cell held back so
+    // the last slot never ends flush against the closing one.
+    let room = width.saturating_sub(3) as usize;
     if let Some(err) = &dash.error {
         return Paragraph::new(Line::from(Span::styled(
-            format!(" ⚠ {} (showing last good data)", truncate(err, 70)),
+            format!(
+                " ⚠ {} (showing last good data)",
+                truncate(err, room.saturating_sub(28).max(8))
+            ),
             Style::default().fg(ore::redstone()),
         )))
         .block(
@@ -3888,40 +4348,60 @@ fn footer(dash: &Dash) -> Paragraph<'static> {
         )
     };
 
-    let mut spans = vec![Span::raw(" ")];
+    // The bar is built a slot at a time so a narrow terminal can take slots
+    // off the end instead of letting the border cut one in half — the last
+    // one used to arrive as "· updated" with the clock behind the wall. What
+    // goes first is the timestamp, then the live lamp, then the palette name:
+    // the keys are the reason the bar is there and they are what it keeps.
+    let mut slots: Vec<Vec<Span<'static>>> = vec![vec![Span::raw(" ")]];
 
     // Each key is a hotbar slot: [key]label separated by netherite walls.
     for (k, label) in [("q", "quit"), ("r", "rebuild"), ("?", "help")] {
-        spans.push(wall());
-        spans.extend(slot(k, label));
+        let mut group = vec![wall()];
+        group.extend(slot(k, label));
+        slots.push(group);
     }
     // Theme slot — the pack name is the item.
-    spans.push(wall());
-    spans.extend(slot("t", ""));
-    spans.push(Span::styled(
+    let mut group = vec![wall()];
+    group.extend(slot("t", ""));
+    group.push(Span::styled(
         theme::palette().name.to_string(),
         Style::default()
             .fg(theme::accent())
             .add_modifier(Modifier::BOLD),
     ));
+    slots.push(group);
 
     // Live indicator in its own slot.
-    spans.push(wall());
-    spans.push(pulse);
-    spans.push(Span::styled(
-        " live",
-        Style::default()
-            .fg(theme::accent())
-            .add_modifier(Modifier::BOLD),
-    ));
-    spans.push(Span::raw(" "));
+    slots.push(vec![
+        wall(),
+        pulse,
+        Span::styled(
+            " live",
+            Style::default()
+                .fg(theme::accent())
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" "),
+    ]);
 
     // Timestamp behind a final wall.
-    spans.push(wall());
-    spans.push(Span::styled(
-        format!("· updated {}", dash.updated),
-        Style::default().fg(ore::stone()),
-    ));
+    slots.push(vec![
+        wall(),
+        Span::styled(
+            format!("· updated {}", dash.updated),
+            Style::default().fg(ore::stone()),
+        ),
+    ]);
+
+    // The keys themselves — the leading pad and the three [key] slots — stay
+    // whatever the width. Under that there is no bar worth drawing anyway.
+    let width_of =
+        |group: &Vec<Span<'static>>| group.iter().map(|span| span.width()).sum::<usize>();
+    while slots.len() > 4 && slots.iter().map(width_of).sum::<usize>() > room {
+        slots.pop();
+    }
+    let spans: Vec<Span<'static>> = slots.into_iter().flatten().collect();
 
     Paragraph::new(Line::from(spans)).block(
         Block::default()
@@ -4032,6 +4512,19 @@ fn delta_span(current: f64, previous: f64, lower_is_better: bool) -> Span<'stati
             ore::redstone()
         }),
     )
+}
+
+/// Drops spans off the end of a line until what is left fits the room it has,
+/// never cutting into the `keep` at the front that carry the point of it.
+///
+/// A bar that runs past its border does not degrade — the border simply cuts
+/// the last span wherever it happens to fall, mid-word and mid-number. Losing
+/// a whole trailing span says the same thing honestly.
+fn fits(mut spans: Vec<Span<'static>>, room: usize, keep: usize) -> Vec<Span<'static>> {
+    while spans.len() > keep && spans.iter().map(|span| span.width()).sum::<usize>() > room {
+        spans.pop();
+    }
+    spans
 }
 
 fn truncate(text: &str, max: usize) -> String {
@@ -4594,7 +5087,7 @@ mod tests {
         let inked = |height: u16| -> usize {
             let area = Rect::new(0, 0, 90, height);
             let mut buf = Buffer::empty(area);
-            metrics_panel(&capture_dash(), height).render(area, &mut buf);
+            metrics_panel(&capture_dash(), 90, height).render(area, &mut buf);
             (1..height - 1)
                 .filter(|&y| (1..area.width - 1).any(|x| !buf[(x, y)].symbol().trim().is_empty()))
                 .count()
@@ -4633,7 +5126,7 @@ mod tests {
 
         for supporter in [false, true] {
             dash.supporter = supporter;
-            let box_ = rendered(74, SUPPORTER_ROWS, supporter_box(&dash)).join("\n");
+            let box_ = rendered(74, SUPPORTER_ROWS, supporter_box(&dash, 74)).join("\n");
             assert!(box_.contains(&want), "supporter {supporter}: {box_}");
         }
     }
@@ -4645,7 +5138,7 @@ mod tests {
         let mut dash = capture_dash();
 
         dash.supporter = false;
-        let text = render_to_string(supporter_box(&dash));
+        let text = render_to_string(supporter_box(&dash, 132));
         assert!(text.contains("craft subscribe"), "no ask: {text:?}");
         assert!(
             text.contains("not an Anacrafter yet"),
@@ -4653,7 +5146,7 @@ mod tests {
         );
 
         dash.supporter = true;
-        let text = render_to_string(supporter_box(&dash));
+        let text = render_to_string(supporter_box(&dash, 132));
         assert!(text.contains("ANACRAFTER"), "no status: {text:?}");
         assert!(!text.contains("craft subscribe"), "still asking: {text:?}");
     }
@@ -4702,17 +5195,13 @@ mod tests {
 
         let dash = capture_dash();
         let column = |height: u16| -> Vec<String> {
-            let mut terminal = Terminal::new(TestBackend::new(120, height)).unwrap();
+            let mut terminal = Terminal::new(TestBackend::new(88, height)).unwrap();
             terminal
-                .draw(|frame| body(frame, &dash, Rect::new(0, 0, 120, height), false))
+                .draw(|frame| columns(frame, &dash, Rect::new(0, 0, 88, height), false))
                 .unwrap();
             let buffer = terminal.backend().buffer().clone();
             (0..height)
-                .map(|y| {
-                    (0..120)
-                        .map(|x| buffer[(x, y)].symbol())
-                        .collect::<String>()
-                })
+                .map(|y| (0..88).map(|x| buffer[(x, y)].symbol()).collect::<String>())
                 .collect()
         };
 
@@ -4744,6 +5233,687 @@ mod tests {
             "the column stops short of its own bottom:\n{}",
             rows.join("\n")
         );
+    }
+
+    #[test]
+    fn the_wide_grid_runs_the_tiles_three_across_in_key_order() {
+        // A 16:9-shaped body runs the tiles three across, filled in the order
+        // the panels come. Every panel that is on gets a cell: all eight are
+        // on here, so the board takes a third row rather than turning two of
+        // them away.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let dash = capture_dash();
+        let mut terminal = Terminal::new(TestBackend::new(132, 38)).unwrap();
+        terminal
+            .draw(|frame| body(frame, &dash, Rect::new(0, 0, 132, 38), false, true))
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let rows: Vec<String> = (0..38)
+            .map(|y| {
+                (0..132)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect();
+        let at = |needle: &str| -> (usize, usize) {
+            rows.iter()
+                .enumerate()
+                .find_map(|(y, row)| row.find(needle).map(|x| (x, y)))
+                .unwrap_or_else(|| panic!("{needle} was not drawn"))
+        };
+
+        for needle in [
+            "^2 RIGHT NOW",
+            "^3 COUNTRIES",
+            "^4 TOP PAGES",
+            "^5 VITALS",
+            "^6 TOP COUNTRIES",
+        ] {
+            at(needle);
+        }
+
+        // The rows are `KEY ORDER / 3`, so the first three tiles line up along
+        // the top, each column's header further right than the last.
+        let (x1, y1) = at("^1 EVENTS");
+        let (x2, y2) = at("^2 RIGHT NOW");
+        let (x3, y3) = at("^3 COUNTRIES");
+        assert_eq!(y1, y2, "tiles did not line up on one row");
+        assert_eq!(y1, y3, "tiles did not line up on one row");
+        assert!(x1 < x2 && x2 < x3, "tiles are not three across");
+
+        // The seventh and eighth are drawn too, on a row of their own beneath
+        // the six — a panel that is on is a panel that is shown.
+        let (_, y7) = at("^7 DAILY USERS");
+        let (_, y8) = at("^8 PORTALS");
+        assert_eq!(y7, y8, "the last two tiles are not sharing a row");
+        assert!(y7 > y1, "the third row climbed onto the first");
+    }
+
+    #[test]
+    fn the_squarish_grid_earns_a_third_row() {
+        // A 4:3-shaped body runs two tiles across, and its taller body earns
+        // a third row — six tiles again, filled in key order: the vitals sit
+        // third from the left on the bottom row, not by the chart.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let dash = capture_dash();
+        let mut terminal = Terminal::new(TestBackend::new(100, 75)).unwrap();
+        terminal
+            .draw(|frame| body(frame, &dash, Rect::new(0, 0, 100, 75), false, false))
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let rows: Vec<String> = (0..75)
+            .map(|y| {
+                (0..100)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect();
+        let at = |needle: &str| -> (usize, usize) {
+            rows.iter()
+                .enumerate()
+                .find_map(|(y, row)| row.find(needle).map(|x| (x, y)))
+                .unwrap_or_else(|| panic!("{needle} was not drawn"))
+        };
+
+        let (_, ey) = at("^1 EVENTS");
+        let (_, my) = at("^3 COUNTRIES");
+        let (_, vy) = at("^5 VITALS");
+
+        // Two across: the map, third in order, leads the second row and the
+        // vitals, fifth, the third — the taller body earned an extra row.
+        assert!(my > ey, "the map did not reach the second row");
+        assert!(vy > my, "the vitals did not reach the third row");
+
+        // Two across and eight panels on is four rows, not three and a queue:
+        // the last pair sits below the vitals rather than nowhere.
+        let (_, py) = at("^8 PORTALS");
+        assert!(py > vy, "the last row was never drawn");
+    }
+
+    #[test]
+    fn a_4x3_terminal_runs_two_across_even_though_its_body_is_wide() {
+        // The grid's shape is the terminal's, not the body's. A 4:3 terminal
+        // leaves a body that has lost the header, box and footer, which by
+        // itself would read as 16:9-wide — so measuring the body is how a 4:3
+        // window ended up stuck three across. The flag comes from the whole
+        // frame, and a squarish terminal draws two across.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let dash = capture_dash();
+        let mut terminal = Terminal::new(TestBackend::new(160, 104)).unwrap();
+        terminal
+            .draw(|frame| body(frame, &dash, Rect::new(0, 0, 160, 104), false, false))
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let rows: Vec<String> = (0..104)
+            .map(|y| {
+                (0..160)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect();
+        let at = |needle: &str| -> (usize, usize) {
+            rows.iter()
+                .enumerate()
+                .find_map(|(y, row)| row.find(needle).map(|x| (x, y)))
+                .unwrap_or_else(|| panic!("{needle} was not drawn"))
+        };
+
+        // Right Now shares the chart's row — that's the top row of two tiles
+        // — while the map waits its turn on the row beneath.
+        let (_, y1) = at("^1 EVENTS");
+        let (_, y2) = at("^2 RIGHT NOW");
+        let (_, y3) = at("^3 COUNTRIES");
+        assert_eq!(y1, y2, "the top row is not two across");
+        assert!(y3 > y1, "the map climbed onto the top row");
+    }
+
+    #[test]
+    fn the_grid_gives_up_the_last_tiles_under_pressure() {
+        // The grid tops out at six tiles, so a 16:9 body short of the daily
+        // chart and the portals is exactly the board it promised — the six
+        // up front keep everything the queue let through.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let dash = capture_dash();
+        let mut terminal = Terminal::new(TestBackend::new(132, 25)).unwrap();
+        terminal
+            .draw(|frame| body(frame, &dash, Rect::new(0, 0, 132, 25), false, true))
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let rows: Vec<String> = (0..25)
+            .map(|y| {
+                (0..132)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect();
+        let drawn = |needle: &str| rows.iter().any(|row| row.contains(needle));
+
+        assert!(drawn("^1 EVENTS") && drawn("^2 RIGHT NOW") && drawn("^3 COUNTRIES"));
+        assert!(
+            drawn("^4 TOP PAGES") && drawn("^5 VITALS") && drawn("^6 TOP COUNTRIES"),
+            "the first two rows lost a tile"
+        );
+        assert!(
+            !drawn("^7 DAILY USERS") && !drawn("^8 PORTALS"),
+            "the last row outlived the room for it"
+        );
+    }
+
+    #[test]
+    fn the_grid_keeps_events_pinned_when_the_vitals_toggle() {
+        // The tiles fill in the order the panels come, so the chart sits in
+        // the first cell of the top row whatever joins it — switching the
+        // vitals on fills the second row, and the chart stays where it was.
+        // This is the movement the grid exists to avoid: a dashboard you keep
+        // open should not rearrange itself because a neighbour joined the
+        // board.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let mut dash = capture_dash();
+        let at = |dash: &Dash| -> [(usize, usize); 3] {
+            let mut terminal = Terminal::new(TestBackend::new(132, 38)).unwrap();
+            terminal
+                .draw(|frame| body(frame, dash, Rect::new(0, 0, 132, 38), false, true))
+                .unwrap();
+            let buffer = terminal.backend().buffer().clone();
+            let rows: Vec<String> = (0..38)
+                .map(|y| {
+                    (0..132)
+                        .map(|x| buffer[(x, y)].symbol())
+                        .collect::<String>()
+                })
+                .collect();
+            let at = |needle: &str| {
+                rows.iter()
+                    .enumerate()
+                    .find_map(|(y, row)| row.find(needle).map(|x| (x, y)))
+                    .unwrap_or_else(|| panic!("{needle} was not drawn"))
+            };
+            [at("^1 EVENTS"), at("^2 RIGHT NOW"), at("^3 COUNTRIES")]
+        };
+
+        let before = at(&dash);
+        dash.panels.vitals = false;
+        let after = at(&dash);
+
+        assert_eq!(before, after, "toggling the vitals moved the top row");
+    }
+
+    #[test]
+    fn the_right_column_covers_the_body_when_the_left_is_all_off() {
+        // Nothing on the left homes — the chart, the map and the figures —
+        // and the remaining panels fill the grid from the front of the queue;
+        // none of the switched-off left is drawn, and none of the body is
+        // left empty.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let mut dash = capture_dash();
+        dash.panels.events = false;
+        dash.panels.map = false;
+        dash.panels.vitals = false;
+        let mut terminal = Terminal::new(TestBackend::new(100, 42)).unwrap();
+        terminal
+            .draw(|frame| body(frame, &dash, Rect::new(0, 0, 100, 42), false, true))
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let rows: Vec<String> = (0..42)
+            .map(|y| {
+                (0..100)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect();
+
+        assert!(
+            rows.iter().any(|row| row.contains("^2 RIGHT NOW")),
+            "the right column vanished"
+        );
+        assert!(
+            rows.iter().all(|row| !row.contains("^1 EVENTS")),
+            "the left drew a panel that was switched off"
+        );
+    }
+
+    #[test]
+    fn the_grid_fills_the_body_it_was_handed() {
+        // The grid used to stop at whatever height its tiles could spend and
+        // leave the rest as bare ground — four rows of it at the size the site
+        // is captured at, sitting between the last panel and the supporter
+        // box, which reads as the dashboard having stopped drawing. The last
+        // row of tiles now ends on the body's last row, at every size.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let dash = capture_dash();
+        for (width, height) in [(132, 40), (204, 40), (100, 24), (150, 33), (74, 50)] {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal
+                .draw(|frame| {
+                    body(
+                        frame,
+                        &dash,
+                        Rect::new(0, 0, width, height),
+                        false,
+                        width * 2 >= height * 3,
+                    )
+                })
+                .unwrap();
+            let buffer = terminal.backend().buffer().clone();
+            let inked = |y: u16| (0..width).any(|x| !buffer[(x, y)].symbol().trim().is_empty());
+            assert!(
+                inked(height - 1),
+                "{width}x{height} left the body's last row bare"
+            );
+        }
+    }
+
+    #[test]
+    fn a_narrow_body_gives_up_a_column_before_it_gives_up_the_reading() {
+        // The aspect asks for columns; the width grants them. A 60-column
+        // terminal is wider than it is tall, so it asked for three and got
+        // tiles seventeen cells across with their headers cut mid-word. It
+        // stacks instead, and a 74-column one — the width the site captures
+        // its phone plate at — still manages two.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let dash = capture_dash();
+        let columns_at = |width: u16, height: u16| -> usize {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal
+                .draw(|frame| body(frame, &dash, Rect::new(0, 0, width, height), false, true))
+                .unwrap();
+            let buffer = terminal.backend().buffer().clone();
+            // Tiles on one row share a top border, so counting the corners
+            // along the body's first row counts the columns.
+            (0..width)
+                .filter(|&x| buffer[(x, 0)].symbol() == "┌")
+                .count()
+        };
+
+        assert_eq!(columns_at(60, 40), 1, "a 60-column body went multi-column");
+        assert_eq!(
+            columns_at(74, 58),
+            2,
+            "the phone plate lost its second tile"
+        );
+        assert_eq!(columns_at(132, 40), 3, "the desktop plate lost a column");
+    }
+
+    #[test]
+    fn the_chart_and_the_map_take_the_wider_share_of_their_row() {
+        // Both read across — a time series and a world map turn width into
+        // detail where a list turns it into trailing space — so they get more
+        // of the row than the panel between them.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let dash = capture_dash();
+        let mut terminal = Terminal::new(TestBackend::new(132, 40)).unwrap();
+        terminal
+            .draw(|frame| body(frame, &dash, Rect::new(0, 0, 132, 40), false, true))
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        // The corners along the top row mark where each tile starts; the gaps
+        // between them are the tile widths.
+        let corners: Vec<u16> = (0..132)
+            .filter(|&x| buffer[(x, 0)].symbol() == "┌")
+            .collect();
+        assert_eq!(corners.len(), 3, "the top row is not three across");
+        // A gutter sits between the tiles, so it comes off the span between
+        // one tile's corner and the next one's.
+        let chart = corners[1] - corners[0] - 1;
+        let feed = corners[2] - corners[1] - 1;
+        assert!(
+            chart > feed,
+            "the chart ({chart}) did not outgrow the feed ({feed})"
+        );
+    }
+
+    #[test]
+    fn a_row_too_narrow_to_weight_splits_evenly_instead() {
+        // The width a wide tile gains comes off its neighbour. On a phone-
+        // sized row that would push the neighbour under MIN_TILE_COLS and cost
+        // it its labels, which is worth more than the map gains — so the row
+        // goes back to equal shares.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let dash = capture_dash();
+        let mut terminal = Terminal::new(TestBackend::new(74, 58)).unwrap();
+        terminal
+            .draw(|frame| body(frame, &dash, Rect::new(0, 0, 74, 58), true, false))
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let corners: Vec<u16> = (0..74)
+            .filter(|&x| buffer[(x, 0)].symbol() == "┌")
+            .collect();
+        assert_eq!(corners.len(), 2, "the phone plate is not two across");
+        let chart = corners[1] - corners[0] - 1;
+        let feed = 74 - corners[1];
+        assert!(
+            chart.abs_diff(feed) <= 1,
+            "a 74-column row was split {chart}/{feed} rather than evenly"
+        );
+        assert!(
+            chart >= MIN_TILE_COLS && feed >= MIN_TILE_COLS,
+            "a tile was squeezed under the width it can be read at"
+        );
+    }
+
+    #[test]
+    fn a_phone_sized_terminal_gets_the_dashboard_not_the_notice() {
+        // The site captures its narrow plate at 74 columns and the page shows
+        // it to every visitor under 860 CSS pixels. The floor used to be 80,
+        // so what phones were shown was the "too tight to work in" card — an
+        // error screen advertised as the product.
+        use ratatui::{backend::TestBackend, Terminal};
+
+        let dash = capture_dash();
+        for (width, height) in [(74, 58), (60, 24), (MIN_COLS, MIN_ROWS)] {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal.draw(|frame| draw(frame, &dash)).unwrap();
+            let buffer = terminal.backend().buffer().clone();
+            let screen: String = (0..height)
+                .flat_map(|y| (0..width).map(move |x| (x, y)))
+                .map(|(x, y)| buffer[(x, y)].symbol())
+                .collect();
+            assert!(
+                !screen.contains("too tight to work in"),
+                "{width}x{height} was shown the notice instead of the dashboard"
+            );
+            assert!(
+                screen.contains("EVENTS"),
+                "{width}x{height} drew no panel at all"
+            );
+        }
+    }
+
+    #[test]
+    fn the_bars_shed_whole_pieces_rather_than_letting_the_border_cut_one() {
+        // Every span used to be drawn whatever the room, and the block's
+        // border cropped whatever hung over — which is how a 60-column
+        // terminal came to say "◉ 130 on" and "· updated" with the clock
+        // behind the wall. The three full-width bars give up whole pieces
+        // instead, so what is left of one is true and none of them ends
+        // flush against the frame.
+        use ratatui::{backend::TestBackend, Terminal};
+
+        let dash = capture_dash();
+        for width in MIN_COLS..=200 {
+            let mut terminal = Terminal::new(TestBackend::new(width, MIN_ROWS)).unwrap();
+            terminal.draw(|frame| draw(frame, &dash)).unwrap();
+            let buffer = terminal.backend().buffer().clone();
+            let lines: Vec<String> = (0..MIN_ROWS)
+                .map(|y| (0..width).map(|x| buffer[(x, y)].symbol()).collect())
+                .collect();
+
+            // The bars are the one-line boxes: the brand, the supporter box
+            // and the hotbar. Each runs the full width, so each is the one
+            // that can run into its own border.
+            for mark in ["ANACRAFT ★", "ANACRAFTER", "[q]quit"] {
+                let line = lines
+                    .iter()
+                    .find(|line| line.contains(mark))
+                    .unwrap_or_else(|| panic!("no bar carrying {mark} at {width} columns"));
+                let cells: Vec<&str> = line.split_inclusive(|_| true).collect();
+                let close = cells
+                    .iter()
+                    .rposition(|cell| *cell == "│")
+                    .expect("a bar with no closing border");
+                assert!(
+                    cells[close - 1] == " ",
+                    "at {width} columns a bar ran up against its border: {line}"
+                );
+            }
+
+            // The clock is the footer's first sacrifice, and it is never a
+            // half of one.
+            let hotbar = lines.iter().find(|line| line.contains("[q]quit")).unwrap();
+            if hotbar.contains("updated") {
+                assert!(
+                    hotbar.contains(&dash.updated),
+                    "at {width} columns the footer kept the word and lost the clock"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_panel_brought_back_joins_the_back_of_the_board() {
+        // A tile's place is when it was switched on, not what its key number
+        // is. From 1, 3, 8, hiding 3 leaves 1, 8 — and pressing 3 again puts
+        // it at the back, giving 1, 8, 3. It used to shuffle back into the
+        // middle as 1, 3, 8 and move the panel after it, which is not what
+        // bringing a window back does.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let (w, h) = (132u16, 40u16);
+        let board = |dash: &Dash| -> Vec<String> {
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            terminal
+                .draw(|frame| body(frame, dash, Rect::new(0, 0, w, h), false, true))
+                .unwrap();
+            let buffer = terminal.backend().buffer().clone();
+            let rows: Vec<String> = (0..h)
+                .map(|y| (0..w).map(|x| buffer[(x, y)].symbol()).collect())
+                .collect();
+            // The tiles, read the way a page is: top row first, left to right.
+            let mut seen: Vec<(usize, usize, String)> = Vec::new();
+            for (y, row) in rows.iter().enumerate() {
+                for name in ["^1 EVENTS", "^3 COUNTRIES", "^8 PORTALS"] {
+                    if let Some(x) = row.find(name) {
+                        seen.push((y, x, name.to_string()));
+                    }
+                }
+            }
+            seen.sort();
+            seen.into_iter().map(|(_, _, name)| name).collect()
+        };
+
+        let mut dash = capture_dash();
+        dash.panels = Panels {
+            events: true,
+            map: true,
+            portals: true,
+            live: false,
+            chunks: false,
+            vitals: false,
+            realms_ranked: false,
+            trend: false,
+        };
+        assert_eq!(
+            board(&dash),
+            ["^1 EVENTS", "^3 COUNTRIES", "^8 PORTALS"],
+            "an untouched board does not open in key order"
+        );
+
+        dash.toggle(Tile::Map);
+        assert_eq!(
+            board(&dash),
+            ["^1 EVENTS", "^8 PORTALS"],
+            "hiding 3 did not leave 1, 8"
+        );
+
+        dash.toggle(Tile::Map);
+        assert_eq!(
+            board(&dash),
+            ["^1 EVENTS", "^8 PORTALS", "^3 COUNTRIES"],
+            "3 shuffled back into the middle instead of joining at the back"
+        );
+    }
+
+    #[test]
+    fn switching_a_panel_on_makes_room_for_itself() {
+        // Pressing 8 on a full board used to do nothing visible: the panel
+        // came on and found no cell, because the board stopped at six tiles.
+        // It pushes a row open for itself now, the way a new window does in a
+        // tiling manager, and nothing already on the board is turned away to
+        // pay for it.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let (w, h) = (132u16, 40u16);
+        let drawn = |dash: &Dash| -> Vec<String> {
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            terminal
+                .draw(|frame| body(frame, dash, Rect::new(0, 0, w, h), false, true))
+                .unwrap();
+            let buffer = terminal.backend().buffer().clone();
+            (0..h)
+                .map(|y| (0..w).map(|x| buffer[(x, y)].symbol()).collect())
+                .collect()
+        };
+        let shows = |rows: &[String], needle: &str| rows.iter().any(|row| row.contains(needle));
+
+        let mut dash = capture_dash();
+        dash.panels.portals = false;
+        let before = drawn(&dash);
+        assert!(
+            !shows(&before, "^8 PORTALS"),
+            "the eighth panel was drawn while switched off"
+        );
+
+        dash.panels.portals = true;
+        let after = drawn(&dash);
+        assert!(
+            shows(&after, "^8 PORTALS"),
+            "pressing 8 left the board exactly as it was"
+        );
+
+        // The seven that were already up are all still up.
+        for needle in [
+            "^1 EVENTS",
+            "^2 RIGHT NOW",
+            "^3 COUNTRIES",
+            "^4 TOP PAGES",
+            "^5 VITALS",
+            "^6 TOP COUNTRIES",
+            "^7 DAILY USERS",
+        ] {
+            assert!(
+                shows(&after, needle),
+                "{needle} was pushed off the board to make room for the eighth"
+            );
+        }
+
+        // And the board still reaches the bottom of the body it was handed.
+        assert!(
+            !after[(h - 1) as usize].trim().is_empty(),
+            "the board stopped short of the body's last row"
+        );
+    }
+
+    #[test]
+    fn switching_a_panel_off_re_tiles_the_rest_over_its_space() {
+        // The board behaves like a tiling window manager: closing a window
+        // does not leave its frame behind, the survivors grow over it. With
+        // 1, 3 and 4 across the top and 8 alone beneath them, switching 4 off
+        // pulls 8 up into the row — and what is left is still a full board,
+        // with no strip of bare ground where the panel used to be.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let tiled = |dash: &Dash| -> Vec<String> {
+            let (w, h) = (132u16, 40u16);
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            terminal
+                .draw(|frame| body(frame, dash, Rect::new(0, 0, w, h), false, true))
+                .unwrap();
+            let buffer = terminal.backend().buffer().clone();
+            let rows: Vec<String> = (0..h)
+                .map(|y| (0..w).map(|x| buffer[(x, y)].symbol()).collect())
+                .collect();
+
+            // The tiling invariant: a row is either a gutter, which is bare
+            // all the way across, or a row of tiles, which reaches both edges
+            // of the body. Anything else is a hole.
+            for (y, row) in rows.iter().enumerate() {
+                if row.trim().is_empty() {
+                    continue;
+                }
+                assert!(
+                    !row.starts_with(' ') && !row.ends_with(' '),
+                    "row {y} left bare ground at an edge: {row}"
+                );
+            }
+            assert!(
+                !rows[(h - 1) as usize].trim().is_empty(),
+                "the board stopped short of the body's last row"
+            );
+            rows
+        };
+
+        let mut dash = capture_dash();
+        dash.panels = Panels {
+            events: true,
+            map: true,
+            chunks: true,
+            portals: true,
+            live: false,
+            vitals: false,
+            realms_ranked: false,
+            trend: false,
+        };
+        let before = tiled(&dash);
+        let row_of = |rows: &[String], needle: &str| -> usize {
+            rows.iter()
+                .position(|row| row.contains(needle))
+                .unwrap_or_else(|| panic!("{needle} was not drawn"))
+        };
+        // Four panels make a 2×2: 1 and 3 along the top, 4 and 8 beneath
+        // them, and no bare cell beside either pair.
+        assert_eq!(
+            row_of(&before, "^1 EVENTS"),
+            row_of(&before, "^3 COUNTRIES"),
+            "the first two panels are not sharing the top row"
+        );
+        assert_eq!(
+            row_of(&before, "^4 TOP PAGES"),
+            row_of(&before, "^8 PORTALS"),
+            "the board ran three along the top and stretched the fourth"
+        );
+        assert!(
+            row_of(&before, "^4 TOP PAGES") > row_of(&before, "^1 EVENTS"),
+            "the board did not use its second row"
+        );
+
+        dash.panels.chunks = false;
+        let after = tiled(&dash);
+        assert_eq!(
+            row_of(&after, "^8 PORTALS"),
+            row_of(&after, "^1 EVENTS"),
+            "the panel below did not take the space the closed one gave up"
+        );
+    }
+
+    #[test]
+    fn very_tall_windows_keep_the_two_columns() {
+        // A body more than twice as tall as it is wide is where the grid gives
+        // up and the columns cut back in — tiles that tall and narrow would be
+        // unreadable. The chart, the map and the figures stack in the left
+        // column the way they always did.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let dash = capture_dash();
+        let mut terminal = Terminal::new(TestBackend::new(88, 220)).unwrap();
+        terminal
+            .draw(|frame| body(frame, &dash, Rect::new(0, 0, 88, 220), true, false))
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let rows: Vec<String> = (0..220)
+            .map(|y| (0..88).map(|x| buffer[(x, y)].symbol()).collect::<String>())
+            .collect();
+        let at = |needle: &str| -> (usize, usize) {
+            rows.iter()
+                .enumerate()
+                .find_map(|(y, row)| row.find(needle).map(|x| (x, y)))
+                .unwrap_or_else(|| panic!("{needle} was not drawn"))
+        };
+
+        // The map sits under the chart in the same left column, not beside it
+        // on a shared grid row.
+        let (_, y1) = at("^1 EVENTS");
+        let (_, y3) = at("^3 COUNTRIES");
+        assert!(y3 > y1, "the map did not stack under the chart");
     }
 
     #[test]
@@ -4824,25 +5994,25 @@ mod tests {
         dash.supporter = true;
 
         dash.founder = Some(41);
-        let text = render_to_string(supporter_box(&dash));
+        let text = render_to_string(supporter_box(&dash, 132));
         assert!(text.contains("#041"), "no number: {text:?}");
 
         // Three digits, so the first hundred line up under each other.
         dash.founder = Some(7);
         assert!(
-            render_to_string(supporter_box(&dash)).contains("#007"),
+            render_to_string(supporter_box(&dash, 132)).contains("#007"),
             "the number was not padded"
         );
 
         // And past the padding it simply keeps counting.
         dash.founder = Some(1024);
         assert!(
-            render_to_string(supporter_box(&dash)).contains("#1024"),
+            render_to_string(supporter_box(&dash, 132)).contains("#1024"),
             "the number was clipped"
         );
 
         dash.founder = None;
-        let text = render_to_string(supporter_box(&dash));
+        let text = render_to_string(supporter_box(&dash, 132));
         assert!(
             text.contains("ANACRAFTER"),
             "the word went with it: {text:?}"
@@ -4859,19 +6029,19 @@ mod tests {
         dash.demo = true;
 
         dash.supporter = false;
-        let text = render_to_string(supporter_box(&dash));
+        let text = render_to_string(supporter_box(&dash, 132));
         assert!(text.contains("craft subscribe"), "no ask: {text:?}");
         assert!(text.contains("to preview"), "no way in: {text:?}");
 
         dash.supporter = true;
-        let text = render_to_string(supporter_box(&dash));
+        let text = render_to_string(supporter_box(&dash, 132));
         assert!(text.contains("ANACRAFTER"), "no status: {text:?}");
         assert!(text.contains("preview"), "reads as earned: {text:?}");
 
         // Off the demo, the star carries one of the subscriber lines and
         // nothing mentions a key.
         dash.demo = false;
-        let text = render_to_string(supporter_box(&dash));
+        let text = render_to_string(supporter_box(&dash, 132));
         assert!(
             crate::license::SUPPORTER_LINES
                 .iter()

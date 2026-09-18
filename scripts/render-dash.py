@@ -14,9 +14,22 @@ from PIL import Image, ImageDraw, ImageFont
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FONTS = "/home/slp/.local/share/fonts/JetBrainsMonoNerdFont"
-FALLBACK = ("/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+# The Nerd Font is what the cell metrics assume. On a maintainer's machine it
+# sits at the path below; release CI points ANACRAFT_FONT_DIR at a copy it
+# downloads, so the same glyphs land in the same cells either way.
+FONTS = os.environ.get(
+    "ANACRAFT_FONT_DIR", "/home/slp/.local/share/fonts/JetBrainsMonoNerdFont"
+)
+# Only keep fallbacks that exist: a missing file raises when the font is loaded,
+# and a runner has less installed than a workstation.
+FALLBACK = tuple(
+    p
+    for p in (
+        "/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    )
+    if os.path.exists(p)
+)
 
 COLS, ROWS = 132, 52
 CW, CH = 16.8, 28.0

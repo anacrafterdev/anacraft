@@ -3,13 +3,108 @@ name: release
 on:
   push:
     tags: ["v*"]
+  # Cutting a release by hand: pick the bump and the workflow does the rest —
+  # version, captures, commit, tag, then the build and publish below. Leaving
+  # `bump` alone is a minor release.
   workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump: patch, minor, major, or an explicit x.y.z"
+        type: string
+        default: minor
 
 permissions:
   contents: write
 
 jobs:
+  # A tagged push already carries its version. A manual run does not, so this
+  # job bumps the crate and the site's footer, regenerates the capture and the
+  # social image so the badge and the board agree, then commits and tags. The
+  # tag is what the jobs below key off, which is why a dispatch does not need a
+  # second workflow run to be triggered.
+  bump:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: capture
+
+      - name: Work out the next version
+        id: version
+        run: |
+          set -euo pipefail
+          current=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)
+          IFS=. read -r major minor patch <<<"$current"
+          case "${{ inputs.bump }}" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+            *.*.*) IFS=. read -r major minor patch <<<"${{ inputs.bump }}" ;;
+            *) echo "::error::bump must be patch, minor, major, or x.y.z"; exit 1 ;;
+          esac
+          next="$major.$minor.$patch"
+          {
+            echo "current=$current"
+            echo "next=$next"
+            echo "tag=v$next"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Bump the crate
+        env:
+          OLD_VERSION: ${{ steps.version.outputs.current }}
+          NEW_VERSION: ${{ steps.version.outputs.next }}
+        run: |
+          set -euo pipefail
+          sed -i "s/^version = \"$OLD_VERSION\"/version = \"$NEW_VERSION\"/" Cargo.toml
+          # The lock file carries the crate's own version too; only its entry moves.
+          awk -v new="$NEW_VERSION" '
+            /^name = "anacraft"$/ { crate = 1 }
+            crate && /^version = / { sub(/"[^"]*"/, "\"" new "\""); crate = 0 }
+            { print }
+          ' Cargo.lock > Cargo.lock.bumped && mv Cargo.lock.bumped Cargo.lock
+          # The footer badge, and any version a capture already carries.
+          perl -pi -e 's/v\Q$ENV{OLD_VERSION}\E/v$ENV{NEW_VERSION}/g' docs/*.html
+
+      - name: Regenerate the captures
+        env:
+          FONT_DIR: ${{ runner.temp }}/fonts
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --break-system-packages pillow
+          curl -fsSL -o "$RUNNER_TEMP/font.zip" \
+            https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip
+          unzip -q -o "$RUNNER_TEMP/font.zip" -d "$FONT_DIR"
+          # The zip keeps its files at the root, but do not assume it.
+          font_dir=$(dirname "$(find "$FONT_DIR" -name 'JetBrainsMonoNerdFont-Regular.ttf' | head -1)")
+          make capture
+          ANACRAFT_FONT_DIR="$font_dir" python3 scripts/render-dash.py
+
+      - name: Commit and tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock docs
+          git commit -m "Release $TAG"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git tag "$TAG"
+          git push origin "$TAG"
+
   build:
+    needs: [bump]
+    # Skipped on a tag push, which is what `needs.bump.result` reports there.
+    if: always() && needs.bump.result != 'failure'
     strategy:
       fail-fast: false
       matrix:
@@ -28,6 +123,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.bump.outputs.tag || github.ref }}
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -67,9 +164,10 @@ jobs:
 
       - name: Package
         shell: bash
+        env:
+          TAG: ${{ needs.bump.outputs.tag || github.ref_name }}
         run: |
-          version="${GITHUB_REF_NAME:-dev}"
-          staging="anacraft-${version}-${{ matrix.target }}"
+          staging="anacraft-${TAG}-${{ matrix.target }}"
           mkdir -p "$staging"
           cp README.md LICENSE "$staging/"
 
@@ -93,78 +191,53 @@ jobs:
           name: ${{ matrix.target }}
           path: ${{ env.ASSET }}
 
-  # Release notes are written by Claude from the commit range: this repo lands
-  # work directly on main, and GitHub's own generator reads merged PRs, so it
-  # has almost nothing to go on here. A missing key or an API error falls back
-  # to the generated notes rather than failing the release.
+  # Release notes are written by GitHub Copilot from the PRs merged since the
+  # last tag. The action reads merged PRs, so a release built from commits
+  # pushed straight to main falls back to GitHub's generated notes; land work
+  # through PRs (or squash merges, which the action also reads) to get prose.
   notes:
+    needs: [bump]
+    if: always() && needs.bump.result != 'failure'
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
     outputs:
-      notes: ${{ steps.write.outputs.notes }}
+      notes: ${{ steps.copilot.outputs.release-notes }}
+    env:
+      COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ needs.bump.outputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ needs.bump.outputs.tag || github.ref }}
 
-      - name: Write release notes
-        id: write
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          TAG: ${{ github.ref_name }}
+      # The previous tag can be unreachable if history was rewritten, so fall
+      # back to the root commit rather than sending an empty range.
+      - name: Find the previous tag
+        id: prev
         run: |
           set -euo pipefail
-
-          emit() { { echo "notes<<CLAUDE_NOTES_EOF"; printf '%s\n' "$1"; echo "CLAUDE_NOTES_EOF"; } >> "$GITHUB_OUTPUT"; }
-
-          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-            echo "::warning::ANTHROPIC_API_KEY is not set; using generated notes"
-            emit ""; exit 0
-          fi
-
-          # The previous tag can be unreachable if history was rewritten, so fall
-          # back to the root commit rather than sending an empty range.
-          prev=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
+          prev=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
           if [ -z "$prev" ]; then prev=$(git rev-list --max-parents=0 HEAD | tail -1); fi
+          echo "base=$prev" >> "$GITHUB_OUTPUT"
           echo "range: $prev..$TAG"
 
-          prompt=$(printf '%s\n\nTag: %s\n\nCommits:\n%s\n\nDiffstat:\n%s\n' \
-            "$(cat .github/release-notes-prompt.md)" "$TAG" \
-            "$(git log --no-merges --max-count=200 --format='--- %s%n%b' "$prev..$TAG")" \
-            "$(git diff --stat "$prev" "$TAG" | tail -40)")
-
-          req=$(jq -n --arg p "$prompt" '{
-            model: "claude-opus-5",
-            max_tokens: 16000,
-            thinking: {type: "adaptive"},
-            fallbacks: "default",
-            messages: [{role: "user", content: $p}]
-          }')
-
-          response=$(curl -sS https://api.anthropic.com/v1/messages \
-            -H 'content-type: application/json' \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H 'anthropic-version: 2023-06-01' \
-            -H 'anthropic-beta: server-side-fallback-2026-07-01' \
-            -d "$req")
-
-          if [ "$(jq -r 'has("error")' <<<"$response")" = true ]; then
-            echo "::warning::$(jq -r '.error.message' <<<"$response")"
-            emit ""; exit 0
-          fi
-          if [ "$(jq -r '.stop_reason' <<<"$response")" = refusal ]; then
-            echo "::warning::model declined to write notes"
-            emit ""; exit 0
-          fi
-
-          notes=$(jq -r '[.content[] | select(.type == "text") | .text] | join("")' <<<"$response")
-          printf '%s\n' "$notes"
-          emit "$notes"
+      # No token means no Copilot; the release still ships with generated notes.
+      - name: Write release notes
+        id: copilot
+        if: env.COPILOT_GITHUB_TOKEN != ''
+        continue-on-error: true
+        uses: github/copilot-release-notes@v1
+        with:
+          base-ref: ${{ steps.prev.outputs.base }}
+          head-ref: ${{ needs.bump.outputs.tag || github.ref_name }}
+          instructions: .github/release-notes-prompt.md
 
   publish:
-    needs: [build, notes]
+    needs: [bump, build, notes]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    # Notes are best-effort: publish whenever the binaries built.
+    if: always() && needs.build.result == 'success'
     steps:
       - uses: actions/download-artifact@v7
         with:
@@ -174,6 +247,7 @@ jobs:
         run: cd dist && sha256sum * > SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.bump.outputs.tag || github.ref_name }}
           files: dist/*
           body: ${{ needs.notes.outputs.notes }}
           generate_release_notes: true

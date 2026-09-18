@@ -108,11 +108,21 @@ which is how the site came to advertise a panel the dashboard no longer drew.
 
 ## Releases
 
-Maintainers only: pushing a `v*` tag triggers `release.yml`, which builds macOS
-(arm64, x86_64), Linux musl (arm64, x86_64) and Windows x86_64, then publishes
-the archives with checksums. Assets are named `anacraft-<tag>-<target>`, and
-`install.sh` resolves the tag from the GitHub API — so if that naming ever
-changes, the installer has to change with it.
+Maintainers only. A release is a workflow dispatch: run **release** from the
+Actions tab (or `gh workflow run release.yml -f bump=minor`) and it bumps the
+crate and the site's footers, regenerates the captures, commits `Release
+vX.Y.Z`, and tags it. `bump` takes `patch`, `minor`, `major`, or an explicit
+`x.y.z`, and defaults to `minor`.
+
+Pushing a `v*` tag by hand still works — it skips the bump, for when the version
+commit already exists.
+
+Either way `release.yml` builds macOS (arm64, x86_64), Linux musl (arm64,
+x86_64) and Windows x86_64, then publishes the archives with checksums. Release
+notes are written by Copilot from the PRs merged since the last tag; work pushed
+straight to main falls back to GitHub's generated notes. Assets are named
+`anacraft-<tag>-<target>`, and `install.sh` resolves the tag from the GitHub API
+— so if that naming ever changes, the installer has to change with it.
 
 ## Reporting bugs
 

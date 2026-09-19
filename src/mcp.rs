@@ -1901,7 +1901,11 @@ mod tests {
     /// Kept as a number rather than read from `audit::CHECKS`, so adding a
     /// check has to be a deliberate edit here too: this is the figure an
     /// assistant quotes when it says how hard the property was looked at.
-    const CHECKS_AVAILABLE: usize = 16;
+    /// The size of `audit`'s check table, which this asserts the tool reports
+    /// honestly. Sixteen read the GA4 API; three read the project's source and
+    /// only run when a Lovable project is linked, so a demo run answers this
+    /// with nineteen available and sixteen run.
+    const CHECKS_AVAILABLE: usize = 19;
 
     #[tokio::test]
     async fn the_audit_tool_answers_with_graded_findings() {

@@ -47,7 +47,7 @@ use crate::theme::{glyph, ore};
 /// How many properties to search for an existing stream before giving up on
 /// the reuse check. An account with more properties than this is a reseller's,
 /// and the scan is one API call each.
-const SCAN_LIMIT: usize = 40;
+pub(crate) const SCAN_LIMIT: usize = 40;
 
 pub struct Options {
     /// GA4 account to create under, when the login can see more than one.

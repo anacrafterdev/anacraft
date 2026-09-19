@@ -33,6 +33,8 @@ use anyhow::Result;
 use ratatui::style::Color;
 use serde_json::{json, Value};
 
+mod source;
+
 use crate::config::Config;
 use crate::ga::{DateRange, Ga, KeyEvent, ReportRequest, WebStream};
 use crate::render::{self, bold, dim, paint, panel_bottom, panel_top};
@@ -97,7 +99,17 @@ const CHECKS: &[&str] = &[
     "event_names",
     "source_not_set",
     "direct_share",
+    // Read off the project's own code rather than the API. They report on a
+    // property with no data at all, so they are deliberately absent from
+    // NEEDS_DATA below.
+    "tag_missing",
+    "tag_duplicated",
+    "spa_page_views",
 ];
+
+/// The checks that read source rather than the GA4 API, and so are skipped
+/// when there is no project linked to read.
+const NEEDS_SOURCE: &[&str] = &["tag_missing", "tag_duplicated", "spa_page_views"];
 
 /// The checks that are statements about data, and so have nothing to say about
 /// a property that recorded none. When the window comes back empty these are
@@ -384,7 +396,13 @@ impl Audit {
 // ------------------------------------------------------------------ checks ---
 
 /// Read the property and grade what comes back.
-async fn examine(ga: &Ga, property: &str, title: &str, days: u32) -> Result<Audit> {
+async fn examine(
+    ga: &Ga,
+    property: &str,
+    title: &str,
+    days: u32,
+    files: &[source::File],
+) -> Result<Audit> {
     // Four reports, one round trip. Nothing here depends on anything else
     // here, and an audit that took four sequential round trips would be four
     // times as slow for no extra truth.
@@ -999,6 +1017,15 @@ async fn examine(ga: &Ga, property: &str, title: &str, days: u32) -> Result<Audi
     // A check can be skipped for two reasons at once — a dark property whose
     // Admin API is also unreadable skips `key_events_firing` twice — and
     // counting it twice would report fewer checks run than were skipped.
+    // The third evidence source. Configuration and measurement fail
+    // separately and are read separately; so does the code, and a project
+    // nobody linked is a check that could not run rather than one that passed.
+    if files.is_empty() {
+        skipped.extend_from_slice(NEEDS_SOURCE);
+    } else {
+        findings.extend(source::examine(files));
+    }
+
     skipped.sort_unstable();
     skipped.dedup();
 
@@ -1341,7 +1368,9 @@ fn as_json(audit: &Audit, repaired: &[&str]) -> Value {
 
 /// The `audit_site` tool, over an authenticated client.
 pub(crate) async fn inspect(ga: &Ga, property: &str, title: &str, days: u32) -> Result<Value> {
-    Ok(findings_payload(&examine(ga, property, title, days).await?))
+    Ok(findings_payload(
+        &examine(ga, property, title, days, &[]).await?,
+    ))
 }
 
 /// The same tool, on synthetic data.
@@ -1605,8 +1634,26 @@ pub async fn run(cfg: &Config, property: Option<&str>, opts: Options) -> Result<
         .map(|p| p.display())
         .unwrap_or_else(|| format!("property {id}"));
 
+    // The project's own code, where there is a project linked. Read here
+    // rather than behind its own gate: the source checks and the API checks
+    // are one audit at one price, and a report that priced half of itself
+    // separately would be the split this deliberately does not have.
+    //
+    // Best-effort — a Lovable server having a bad day is not a reason to
+    // withhold the fifteen checks that do not need it.
+    let files: Vec<source::File> = crate::lovable::source_files()
+        .await
+        .unwrap_or(None)
+        .map(|(_, files)| {
+            files
+                .into_iter()
+                .map(|(path, text)| source::File { path, text })
+                .collect()
+        })
+        .unwrap_or_default();
+
     let ga = Ga::new()?;
-    let audit = examine(&ga, &id, &title, days).await?;
+    let audit = examine(&ga, &id, &title, days, &files).await?;
 
     // Report first, then repair. The order is the whole argument for letting a
     // command that reads also write: nobody is asked to trust a fix they have
@@ -1667,6 +1714,10 @@ fn demo_audit(days: u32) -> Audit {
         property: "397412345".to_string(),
         title: "Contoso Labs (demo)".to_string(),
         days,
+        // All eighteen, because the demo is the shop window for the whole
+        // report and the synthetic project below is scanned as readily as the
+        // synthetic property is queried. Showing fifteen would undersell the
+        // half that only a linked project can produce.
         checks: CHECKS.len(),
         findings: vec![
             Finding {
@@ -1723,6 +1774,22 @@ fn demo_audit(days: u32) -> Audit {
                          otherwise points at campaigns going out without UTM tags."
                     .into(),
                 evidence: Some("74% of sessions".into()),
+            },
+            // The source half. Worth a place in the shop window because it is
+            // the finding no amount of API reading produces: from the data
+            // side this arrives as a site everybody lands on and leaves, which
+            // is why it gets mistaken for a content problem.
+            Finding {
+                check: "spa_page_views",
+                grade: Grade::Critical,
+                headline: "only the first page of each visit is counted".into(),
+                detail: "the snippet sends a view when the page loads, and this app changes \
+                         routes without reloading — so every page somebody reaches by \
+                         clicking is missing from the reports. Send one yourself on every \
+                         route change: gtag('event', 'page_view', { page_path: \
+                         location.pathname + location.search });"
+                    .into(),
+                evidence: Some("src/router.tsx · src/routes/__root.tsx".into()),
             },
         ],
         // One of the four is fixable from here, which is the honest ratio and
@@ -2193,7 +2260,10 @@ mod tests {
             );
         }
 
-        let source = include_str!("audit.rs");
+        // Both files, because the grep is textual: a check raised from the
+        // source module is invisible here, and a slug in CHECKS with no
+        // sighting silently inflates the denominator both numbers are against.
+        let source = concat!(include_str!("audit.rs"), include_str!("audit/source.rs"));
         let mut seen = 0;
         for line in source.lines().map(str::trim_start) {
             // `check: "x"` is a finding being raised; `skipped.push("x")` is

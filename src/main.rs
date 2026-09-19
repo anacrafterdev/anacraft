@@ -9,6 +9,7 @@ mod config;
 mod configure;
 mod ga;
 mod license;
+mod lovable;
 mod mcp;
 mod render;
 mod report;
@@ -249,6 +250,40 @@ enum Command {
         #[arg(long, conflicts_with_all = ["install", "uninstall"])]
         test: bool,
     },
+    /// Point craft at the GA4 property a Lovable app already tags.
+    ///
+    /// With no flag it says what is linked. `--link` signs in to Lovable,
+    /// picks a project, reads its source for a `G-` measurement id and makes
+    /// the GA4 property that id names the default — the `craft props`,
+    /// eyeball, `craft use` loop, done for you.
+    ///
+    /// Read-only against Lovable: it lists projects and reads files, and
+    /// changes nothing in the project.
+    Lovable {
+        /// Sign in to Lovable and pick a project.
+        #[arg(long)]
+        link: bool,
+        /// Re-read the linked project and reconcile it with GA4 again.
+        #[arg(long, conflicts_with = "link")]
+        sync: bool,
+        /// Forget the link here, and deregister this machine at Lovable.
+        #[arg(long, conflicts_with_all = ["link", "sync"])]
+        unlink: bool,
+        /// Which Lovable project — an id or a name. Only needed when the
+        /// account has more than one.
+        #[arg(long)]
+        project: Option<String>,
+        /// Follow this measurement id rather than whichever the scan found.
+        /// The way past a project carrying two of them.
+        #[arg(long)]
+        id: Option<String>,
+        /// Branch or commit to read at. Defaults to the project's own.
+        #[arg(long = "ref", value_name = "REF")]
+        git_ref: Option<String>,
+        /// The site's domain, for a project Lovable has not published yet.
+        #[arg(long)]
+        domain: Option<String>,
+    },
     /// Serve the dashboard's numbers to an AI assistant over MCP.
     ///
     /// Speaks the Model Context Protocol on stdin/stdout, so an MCP client
@@ -481,6 +516,31 @@ async fn run() -> Result<()> {
                 slack::test().await
             } else {
                 slack::status()
+            }
+        }
+        Command::Lovable {
+            link,
+            sync,
+            unlink,
+            project,
+            id,
+            git_ref,
+            domain,
+        } => {
+            let opts = lovable::Opts {
+                project,
+                id,
+                git_ref,
+                domain,
+            };
+            if link {
+                lovable::link(opts).await
+            } else if unlink {
+                lovable::unlink().await
+            } else if sync {
+                lovable::sync(opts).await
+            } else {
+                lovable::status()
             }
         }
         Command::Login => cmd_login().await,

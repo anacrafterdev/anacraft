@@ -26,6 +26,98 @@
       --mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
       --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
+    /* palettes:start */
+  html[data-pal="solarized-dark"] {
+    --ground: #001f27;
+    --ink: #002b36;
+    --panel: #073642;
+    --line: rgba(88,110,117,.35);
+    --line-2: rgba(88,110,117,.55);
+    --fg: #9ca9ab;
+    --white: #c7cfd0;
+    --dim: #74888f;
+    --jade: #2aa198;
+    --jade-deep: #44908f;
+    --gold: #b58900;
+    --coral: #dc322f;
+    --on-accent: #001f27;
+  }
+  html[data-pal="tokyo-night"] {
+    --ground: #161823;
+    --ink: #1a1b26;
+    --panel: #24283b;
+    --line: rgba(57,63,81,.35);
+    --line-2: rgba(57,63,81,.55);
+    --fg: #c0caf5;
+    --white: #e3e7fa;
+    --dim: #898fb6;
+    --jade: #7aa2f7;
+    --jade-deep: #89dceb;
+    --gold: #e0af68;
+    --coral: #f7768e;
+    --on-accent: #161823;
+  }
+  html[data-pal="catppuccin"] {
+    --ground: #11111b;
+    --ink: #1e1e2e;
+    --panel: #313244;
+    --line: rgba(69,71,90,.35);
+    --line-2: rgba(69,71,90,.55);
+    --fg: #cdd6f4;
+    --white: #e8edfa;
+    --dim: #7b7e92;
+    --jade: #94e2d5;
+    --jade-deep: #74c7ec;
+    --gold: #f9e2af;
+    --coral: #f38ba8;
+    --on-accent: #11111b;
+  }
+  html[data-pal="github"] {
+    --ground: #010409;
+    --ink: #0d1117;
+    --panel: #161b22;
+    --line: rgba(48,54,61,.35);
+    --line-2: rgba(48,54,61,.55);
+    --fg: #c9d1d9;
+    --white: #e7eaee;
+    --dim: #8b949e;
+    --jade: #39c5cf;
+    --jade-deep: #2372eb;
+    --gold: #d29922;
+    --coral: #f85149;
+    --on-accent: #010409;
+  }
+  html[data-pal="solarized-light"] {
+    --ground: #e2dbc7;
+    --ink: #fdf6e3;
+    --panel: #eee8d5;
+    --line: rgba(147,161,161,.35);
+    --line-2: rgba(147,161,161,.55);
+    --fg: #394549;
+    --white: #2d373b;
+    --dim: #566263;
+    --jade: #1c6a64;
+    --jade-deep: #3f6760;
+    --gold: #b58900;
+    --coral: #dc322f;
+    --on-accent: #fdf6e3;
+  }
+  html[data-pal="catppuccin-latte"] {
+    --ground: #e6e9f0;
+    --ink: #fafbfe;
+    --panel: #f0f3f8;
+    --line: rgba(200,207,218,.35);
+    --line-2: rgba(200,207,218,.55);
+    --fg: #242938;
+    --white: #101219;
+    --dim: #616872;
+    --jade: #0965d1;
+    --jade-deep: #4068ae;
+    --gold: #996600;
+    --coral: #c92a2a;
+    --on-accent: #fafbfe;
+  }
+    /* palettes:end */
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -325,8 +417,38 @@
       color: var(--coral);
     }
 
-    footer { margin-top: 28px; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+    footer {
+      margin-top: 28px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px 18px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--dim);
+    }
+
     footer a { color: var(--jade-deep); }
+
+    /* The same seven the dashboard ships, and the choice is the same one:
+       picking here writes the line `craft theme` writes, so the terminal and
+       this page are never wearing different clothes. */
+    .pals { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+
+    .pal {
+      width: 16px;
+      height: 16px;
+      padding: 0;
+      border: 1px solid var(--line-2);
+      background: var(--swatch, #000);
+      opacity: .65;
+      transition: opacity .12s, outline-color .12s;
+      outline: 1px solid transparent;
+      outline-offset: 2px;
+    }
+
+    .pal:hover { opacity: 1; }
+    .pal[aria-pressed="true"] { opacity: 1; outline-color: var(--jade); }
   </style>
 </head>
 
@@ -509,7 +631,9 @@
     </div>
 
     <footer>
-      the endpoints behind this page: <a href="https://anacraft.dev/serve.html">anacraft.dev/serve.html</a>
+      <span>the endpoints behind this page:
+        <a href="https://anacraft.dev/serve.html">anacraft.dev/serve.html</a></span>
+      <span class="pals" id="pals" role="group" aria-label="Palette"></span>
     </footer>
   </div>
 
@@ -577,6 +701,7 @@
       }
 
       function land(session) {
+        if (session.theme) { wear(session.theme); }
         $('who').textContent = session.email
           ? session.email + (session.tier ? ' · ' + session.tier : '')
           : '';
@@ -603,6 +728,79 @@
       }
 
       function refresh() { return api('GET', '/v1/session').then(land); }
+
+      // ── the palette ─────────────────────────────────────────────────
+
+      /* osaka-jade is `:root` rather than a `[data-pal]` block — it is what
+       * the page already renders as, which is why there is no flash on the
+       * way in — so wearing it means having no attribute at all. */
+      var DEFAULT_PAL = 'osaka-jade';
+
+      function wear(name) {
+        if (!name || name === DEFAULT_PAL) {
+          delete document.documentElement.dataset.pal;
+        } else {
+          document.documentElement.dataset.pal = name;
+        }
+        var chips = document.querySelectorAll('.pal');
+        for (var i = 0; i < chips.length; i++) {
+          chips[i].setAttribute('aria-pressed', String(chips[i].dataset.pal === name));
+        }
+      }
+
+      /* A swatch says more than a name, and there is no room for seven names
+       * in a footer. Each chip is painted in its own palette's accent by
+       * borrowing that palette's variables off a throwaway element — so the
+       * colours come from the same blocks the page is styled with rather than
+       * from a second list that can drift out of step with them. */
+      function swatches(list, current) {
+        var host = $('pals');
+        host.textContent = '';
+        var probe = document.createElement('div');
+        document.body.appendChild(probe);
+
+        list.forEach(function (theme) {
+          if (theme.name === DEFAULT_PAL) {
+            probe.removeAttribute('data-pal');
+          } else {
+            probe.dataset.pal = theme.name;
+          }
+          // The blocks are written on `html[data-pal]`, so read the colour by
+          // setting the attribute on the document for a moment instead.
+          var was = document.documentElement.dataset.pal;
+          if (theme.name === DEFAULT_PAL) {
+            delete document.documentElement.dataset.pal;
+          } else {
+            document.documentElement.dataset.pal = theme.name;
+          }
+          var accent = getComputedStyle(document.documentElement).getPropertyValue('--jade');
+          if (was === undefined) { delete document.documentElement.dataset.pal; }
+          else { document.documentElement.dataset.pal = was; }
+
+          var chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'pal';
+          chip.dataset.pal = theme.name;
+          chip.title = theme.name;
+          chip.setAttribute('aria-label', theme.name);
+          chip.setAttribute('aria-pressed', String(theme.name === current));
+          chip.style.setProperty('--swatch', accent.trim());
+          chip.addEventListener('click', function () {
+            wear(theme.name);
+            // Best-effort: the page is already wearing it, and a palette that
+            // failed to save is not worth an error pane over.
+            api('PUT', '/v1/themes', { name: theme.name }).catch(function () { });
+          });
+          host.appendChild(chip);
+        });
+
+        probe.remove();
+      }
+
+      api('GET', '/v1/themes').then(function (out) {
+        swatches(out.themes || [], out.current);
+        wear(out.current);
+      }).catch(function () { });
 
       // ── signing in ──────────────────────────────────────────────────
 

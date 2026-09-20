@@ -34,7 +34,7 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::auth::{Auth, Tokens};
+use crate::auth::{Auth, Cta, Landing, Tokens};
 use crate::config::Config;
 use crate::ga::Ga;
 use crate::license::{self, Tier};
@@ -131,6 +131,7 @@ pub async fn run(opts: Options) -> Result<()> {
         .route("/v1/properties/:id", axum::routing::delete(trash))
         .route("/v1/properties/:id/streams", get(streams).post(add_stream))
         .route("/v1/property", put(use_property))
+        .route("/v1/themes", get(themes).put(use_theme))
         .route("/v1/tag/:measurement_id", get(tag))
         .route("/v1/overview", get(overview))
         .route("/v1/pages", get(pages))
@@ -433,6 +434,10 @@ async fn session(State(app): State<Arc<App>>) -> Answer {
         "signed_in": tokens.is_some(),
         "state": state,
         "demo": app.demo,
+        "theme": cfg
+            .theme
+            .clone()
+            .unwrap_or_else(|| crate::theme::palette().name.to_string()),
         "version": env!("CARGO_PKG_VERSION"),
     });
     if let Some(account) = account {
@@ -482,6 +487,12 @@ async fn session_start(State(app): State<Arc<App>>) -> Answer {
     }
 
     let state = app.clone();
+    // Where Google's tab is sent afterwards: back here, token and all, so it
+    // arrives on a working page rather than on a dead one telling it to go to
+    // a terminal nobody was in. The tab that started the sign-in has been
+    // polling all along and has moved on by itself; this is for the tab the
+    // person is actually looking at.
+    let back = format!("{}/#k={}", app.origin, app.token);
     std::thread::spawn(move || {
         let outcome = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -490,7 +501,17 @@ async fn session_start(State(app): State<Arc<App>>) -> Answer {
             .and_then(|rt| {
                 rt.block_on(async {
                     let auth = Auth::new(reqwest::Client::new())?;
-                    auth.login().await?;
+                    auth.login_landing(&Landing {
+                        title: "Signed in",
+                        body: "anacraft has your Google account. \
+                               Your properties are listed back on the tag page.",
+                        cta: Some(Cta {
+                            label: "Back to your properties →",
+                            url: &back,
+                            note: "it is also waiting in the tab you came from",
+                        }),
+                    })
+                    .await?;
                     // Same courtesy `craft login` does: register the account
                     // so a subscription bought anywhere finds it here.
                     if let Some(account) = Auth::account()? {
@@ -822,6 +843,54 @@ fn tag_payload(measurement_id: &str) -> Value {
     })
 }
 
+// ------------------------------------------------------------ the palette ---
+
+/// The palettes the dashboard ships, and which one is in force.
+///
+/// The page wears whichever the CLI is set to, rather than keeping a
+/// preference of its own: the port changes every run, so anything this page
+/// stored would be stored against an origin that will not exist tomorrow. The
+/// config file is the one place a choice survives, and it is the same line
+/// `craft theme` writes and the dashboard reads.
+async fn themes() -> Answer {
+    let cfg = Config::load().map_err(Fail::from)?;
+    let current = cfg
+        .theme
+        .clone()
+        .unwrap_or_else(|| crate::theme::palette().name.to_string());
+    Ok(Json(json!({
+        "current": current,
+        "themes": crate::theme::THEMES.iter().map(|p| json!({
+            "name": p.name,
+            "current": p.name == current,
+        })).collect::<Vec<_>>(),
+    })))
+}
+
+#[derive(Deserialize)]
+struct Theme {
+    name: String,
+}
+
+async fn use_theme(State(app): State<Arc<App>>, Json(body): Json<Theme>) -> Answer {
+    if !crate::theme::select(&body.name) {
+        return Err(Fail::bad(format!(
+            "no theme called {} — GET /v1/themes lists them",
+            body.name
+        )));
+    }
+    // A demo changes nothing on this machine, and a line in the config file is
+    // something on this machine. The page still restyles itself; it just does
+    // not outlive the run.
+    if app.demo {
+        return Ok(Json(json!({ "theme": body.name, "saved": false })));
+    }
+    let mut cfg = Config::load().map_err(Fail::from)?;
+    cfg.theme = Some(body.name.clone());
+    cfg.save().map_err(Fail::from)?;
+    Ok(Json(json!({ "theme": body.name, "saved": true })))
+}
+
 // ----------------------------------------------------------- the reports ---
 
 #[derive(Deserialize)]
@@ -983,6 +1052,7 @@ fn demo_session() -> Value {
         "subscribed": true,
         "tier": "elite",
         "entitled": true,
+        "theme": crate::theme::palette().name,
         "version": env!("CARGO_PKG_VERSION"),
         "property": { "id": "demo", "name": "Contoso Labs (demo)" },
         "note": "synthetic — run `craft serve` without --demo to use a real account",

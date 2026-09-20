@@ -397,7 +397,12 @@ places it belongs, and a paste-ready prompt for
   style="display:block;width:100%;max-width:560px;height:auto;margin:22px 0 6px;border:1px solid var(--line-2);"
   alt="The page craft serve opens, showing a measurement id in gold with the tag written out below it and a button that copies it."></p>
 <p>The page is handed the run token in the URL it is opened with; the credentials stay with the CLI,
-which had them already.</p>
+which had them already. Signing in from it lands the Google tab back on the page rather than on a
+sentence about returning to a terminal nobody was in.</p>
+<p>It wears the palette the dashboard is set to, and the swatches in its footer change it — for the
+page and for <code>craft dash</code> both, because picking one writes the same line
+<code>craft theme</code> writes. It keeps no preference of its own on purpose: the port changes every
+run, so anything the browser stored would be stored against an origin that will not exist tomorrow.</p>
 
 <h2><span class="n">03</span>Talking to it yourself</h2>
 <p>JSON in, JSON out, one version prefix. Every endpoint but <code>/v1/health</code> wants the bearer
@@ -427,6 +432,8 @@ characters while doing it.</p>
   <tr><td>GET /v1/properties/{id}/streams</td><td>The web data streams on a property, with their ids.</td><td>account</td></tr>
   <tr><td>POST /v1/properties/{id}/streams</td><td>Add a web stream to a property that has none. Returns the tag.</td><td>plan</td></tr>
   <tr><td>PUT /v1/property</td><td>Set the default property, the way <code>craft use</code> does.</td><td>account</td></tr>
+  <tr><td>GET /v1/themes</td><td>The palettes the dashboard ships, and which one is in force.</td><td>token</td></tr>
+  <tr><td>PUT /v1/themes</td><td>Wear one, the way <code>craft theme</code> does.</td><td>token</td></tr>
   <tr><td>GET /v1/tag/{measurement_id}</td><td>The snippet and the paste-ready prompt for an id you already have.</td><td>token</td></tr>
   <tr><td>GET /v1/overview</td><td>Users, sessions, views, key events, bounce, duration, with deltas.</td><td>account</td></tr>
   <tr><td>GET /v1/pages</td><td>Most-visited pages.</td><td>account</td></tr>

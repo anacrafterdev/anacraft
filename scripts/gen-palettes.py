@@ -149,10 +149,17 @@ def css(p):
 # restore — `lovable.html` excepted, which styles itself and has no `:root` in
 # the shared shape to hang them off.
 PAGES = [
-    "index.html", "audit.html", "mcp.html", "alerts.html", "setup-ga4.html",
-    "pricing.html", "burn.html", "success.html", "privacy.html", "terms.html",
-    "lovable.html",
+    "index.html", "audit.html", "mcp.html", "serve.html", "alerts.html",
+    "setup-ga4.html", "pricing.html", "burn.html", "success.html",
+    "privacy.html", "terms.html", "lovable.html",
 ]
+
+# The page `craft serve` carries in the binary. It gets the blocks and nothing
+# else: the palette it wears comes from the config file over its own API, not
+# from `localStorage`, because the port changes every run and a preference
+# stored against `127.0.0.1:52413` is a preference stored against an origin
+# that will not exist tomorrow.
+CARRIED = ["assets/serve.html"]
 
 RESTORE_START = "<!-- palette-restore:start -->"
 RESTORE_END = "<!-- palette-restore:end -->"
@@ -194,7 +201,7 @@ def prepare(text, name):
     # accent chip; those contradict on a light palette.
     text = text.replace("background: var(--jade); color: var(--ink);",
                         "background: var(--jade); color: var(--on-accent);")
-    if RESTORE_START not in text:
+    if RESTORE_START not in text and name not in CARRIED:
         text = text.replace("</style>\n", f"</style>\n{RESTORE_START}\n{RESTORE_END}\n", 1)
     return text
 
@@ -213,7 +220,18 @@ def main():
         text = splice(text, RESTORE_START, RESTORE_END, RESTORE)
         page.write_text(text)
 
-    print(f"  {len(blocks)} palettes into {len(PAGES)} pages, from src/theme.rs")
+    for name in CARRIED:
+        page = ROOT / name
+        if not page.exists():
+            sys.exit(f"{name}: not found")
+        text = prepare(page.read_text(), name)
+        pad = re.search(r"^([ \t]*)" + re.escape(START), text, re.M).group(1)
+        page.write_text(splice(text, START, END, body, indent=pad))
+
+    print(
+        f"  {len(blocks)} palettes into {len(PAGES)} pages "
+        f"and {len(CARRIED)} carried, from src/theme.rs"
+    )
 
 
 if __name__ == "__main__":

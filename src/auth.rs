@@ -295,13 +295,23 @@ impl Auth {
 
     /// Full interactive login: PKCE + loopback redirect + browser handoff.
     pub async fn login(&self) -> Result<()> {
-        self.consent(SCOPE, Grant::Fresh)
-            .await?
-            .show(&Landing::plain(
-                "Logged in",
-                "anacraft is connected to your Google Analytics account. \
-                 You can close this tab and return to the terminal.",
-            ));
+        self.login_landing(&Landing::plain(
+            "Logged in",
+            "anacraft is connected to your Google Analytics account. \
+             You can close this tab and return to the terminal.",
+        ))
+        .await
+    }
+
+    /// The same login, leaving the browser somewhere the caller chooses.
+    ///
+    /// "Return to the terminal" is the right thing to say to somebody who
+    /// typed `craft login` there, and the wrong thing to say to somebody who
+    /// clicked a button on a page `craft serve` is holding open — they are
+    /// not going back to a terminal, they are going back to the page, and it
+    /// is one link away.
+    pub async fn login_landing(&self, landing: &Landing<'_>) -> Result<()> {
+        self.consent(SCOPE, Grant::Fresh).await?.show(landing);
         Ok(())
     }
 

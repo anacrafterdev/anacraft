@@ -250,9 +250,12 @@
         });
 
       function draw(doc) {
+        // The heading already says what this is, so the line under it says
+        // only what the heading cannot: which version is answering, and what
+        // the API is for.
         var info = doc.info || {};
-        $('lede').textContent = [info.title, info.version && 'v' + info.version]
-          .filter(Boolean).join(' · ') + (info.description ? ' — ' + info.description : '');
+        $('lede').textContent = (info.version ? 'v' + info.version + ' · ' : '')
+          + (info.description || '');
         var base = (doc.servers && doc.servers[0] && doc.servers[0].url) || location.origin;
         $('base').textContent = base;
 

@@ -479,7 +479,7 @@ async fn openapi(State(app): State<Arc<App>>) -> Json<Value> {
     Json(json!({
         "openapi": "3.1.0",
         "info": {
-            "title": "anacraft local API",
+            "title": "anacraft API",
             "version": env!("CARGO_PKG_VERSION"),
             "description": "craft serve: sign in with Google, register a GA4 tag, read the numbers. \
                             Loopback only. https://anacraft.dev/serve.html",
@@ -1384,7 +1384,7 @@ async fn client() -> std::result::Result<Ga, Fail> {
     // The plan is checked here rather than at each call site, because here is
     // where a real Analytics account is about to be reached, and every route
     // that reaches one comes through this function.
-    require("the local API").await?;
+    require("the API").await?;
     Ga::new().map_err(Fail::from)
 }
 

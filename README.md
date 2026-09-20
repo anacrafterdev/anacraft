@@ -96,9 +96,15 @@ and answers a browser only from its own origin. The page is the first caller of
 an API the whole of which is documented at
 [anacraft.dev/serve.html](https://anacraft.dev/serve.html) — so a script, an
 editor extension or another service can register a tag the same way. It creates
-nothing `craft configure` would not create, behind the same plan and the same
-two Admin API calls — and it can throw a property into Google's trash the way
+nothing `craft configure` would not create, through the same two Admin API
+calls — and it can throw a property into Google's trash the way
 `craft delete --all` does, asking for the id twice before it will.
+
+It is part of the [Anacrafter Elite plan](https://anacraft.dev/pricing.html),
+the same one `craft mcp` is on, so one subscription covers the tag and the
+assistant that reads the numbers afterwards. The command itself starts for
+anybody — the page is where you sign in and, if you need to, subscribe.
+`craft serve --demo` walks all of it and creates nothing.
 
 ### One-shot reports
 

@@ -334,6 +334,7 @@
       <a href="/#start">Quick start</a>
       <a href="/audit.html">Audit</a>
       <a href="/mcp.html">MCP</a>
+      <a href="/serve.html">Serve</a>
       <a href="/alerts.html">Alerts</a>
       <a href="/setup-ga4.html">Configure</a>
       <a href="/lovable.html">Lovable</a>
@@ -348,7 +349,7 @@
 
 <div class="eyebrow">Guide</div>
 <h1>The local API</h1>
-<div class="stamp">craft serve · a page to register a GA4 tag in, and the endpoints behind it · 127.0.0.1 only</div>
+<div class="stamp">craft serve · part of <a href="/pricing.html">Anacrafter Elite</a> · <code>--demo</code> needs no account · 127.0.0.1 only</div>
 
 <div class="tldr">
   <div class="h">What it does</div>
@@ -360,6 +361,10 @@
   for the agent that built the app rather than for you to retype.</p>
   <p>The page is only the first caller. Every endpoint it uses is below, so a script, an editor
   extension or another service can register a tag the same way.</p>
+  <p>It is on <a href="/pricing.html">Anacrafter Elite</a>, the same plan <a href="/mcp.html"><code>craft
+  mcp</code></a> is on — one subscription for the tag and for the assistant that reads the numbers
+  afterwards. The command starts for anybody: the page is where somebody signs in and, if they need
+  to, subscribes, and a server that refused to start would leave them nowhere to do either.</p>
 </div>
 
 <h2><span class="n">01</span>Start it on your machine</h2>
@@ -432,9 +437,11 @@ characters while doing it.</p>
   <tr><td>GET /v1/live</td><td>Who is on the site right now, by country.</td><td>account</td></tr>
   <tr><td>GET /v1/audit</td><td>What is wrong with how the property measures. Reads only.</td><td>plan</td></tr>
 </table>
-<p><b>token</b> means the bearer token and nothing else. <b>account</b> means somebody has signed in
-with Google. <b>plan</b> means the subscription the equivalent command needs, and an account without it gets
-a <a href="#errors">402 carrying a checkout URL</a> rather than a refusal.</p>
+<p><b>token</b> means the bearer token and nothing else. <b>account</b> and <b>plan</b> both mean a
+Google account signed in with an Elite subscription on it: everything that reaches a real Analytics
+account goes through one door, and an account short of the plan gets a
+<a href="#errors">402 carrying a checkout URL</a> rather than a flat refusal. <code>--demo</code>
+needs neither.</p>
 
 <h2><span class="n">05</span>Signing in</h2>
 <p>The server owns the flow, because it owns the credentials. <code>POST /v1/session</code> opens the
@@ -545,7 +552,8 @@ caller from spending the API quota the dashboard needs.</p>
   <tr><th>Status</th><th>Code</th><th>Means</th></tr>
   <tr><td>400</td><td>bad_request</td><td>A parameter is missing or not the shape it has to be.</td></tr>
   <tr><td>401</td><td>unauthorized</td><td>No bearer token, or not one this server trusts.</td></tr>
-  <tr><td>402</td><td>payment_required</td><td>The call needs a plan. <code>checkout_url</code> is where to get one.</td></tr>
+  <tr><td>402</td><td>payment_required</td><td>The account is not on Elite. <code>checkout_url</code> is where to
+  fix that, already tied to the signed-in account.</td></tr>
   <tr><td>403</td><td>forbidden</td><td>Google refused: the account lacks Viewer on the property, or Editor on the account.</td></tr>
   <tr><td>404</td><td>not_found</td><td>No such property, stream, or route.</td></tr>
   <tr><td>409</td><td>not_signed_in</td><td>Nothing is signed in — <code>POST /v1/session</code> starts one.</td></tr>

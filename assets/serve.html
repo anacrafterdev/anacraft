@@ -417,14 +417,14 @@
         </div>
 
         <div class="pane" data-pane="pay">
-          <h2>Unlock the tag</h2>
-          <p>
-            Creating a property and minting a measurement ID is the paid half
-            of anacraft — the same job <code>craft configure</code> does. Any
-            plan covers it.
+          <h2 id="pay-h">Unlock the tag</h2>
+          <p id="pay-p">
+            The local API is part of Anacrafter Elite — the same plan
+            <code>craft mcp</code> is on, so one subscription covers both the
+            tag and the assistant that reads the numbers afterwards.
           </p>
           <div class="price">
-            <span class="fig" id="price">$2.99</span>
+            <span class="fig" id="price">$9.99</span>
             <span class="per">per month · cancel any time</span>
           </div>
           <button class="primary" id="pay" type="button">Continue to checkout →</button>
@@ -588,7 +588,17 @@
             : 'craft serve is holding the credentials; this page never sees them.';
           return show('signin');
         }
-        if (!session.subscribed) { return show('pay'); }
+        // `entitled` rather than `subscribed`: the server owns which plan
+        // opens this, and says so, so the ladder is not reimplemented here.
+        if (!session.entitled) {
+          if (session.plan_price) { $('price').textContent = session.plan_price; }
+          if (session.subscribed) {
+            $('pay-h').textContent = 'This needs the Elite plan';
+            $('pay-p').textContent = 'Your subscription is live, but the local API is on Anacrafter Elite — the same plan craft mcp is on. Moving up is billed going forward, not charged again.';
+            $('pay').textContent = 'Move up to Elite →';
+          }
+          return show('pay');
+        }
         return list();
       }
 
@@ -623,13 +633,13 @@
       // ── paying ──────────────────────────────────────────────────────
 
       api('GET', '/v1/subscription').then(function (sub) {
-        var basic = (sub.plans || []).filter(function (p) { return p.plan === 'basic'; })[0];
-        if (basic) { $('price').textContent = basic.price; }
+        var elite = (sub.plans || []).filter(function (p) { return p.plan === 'elite'; })[0];
+        if (elite) { $('price').textContent = elite.price; }
       }).catch(function () { });
 
       $('pay').addEventListener('click', function () {
         $('pay').disabled = true;
-        api('POST', '/v1/subscription/checkout', { plan: 'basic' }).then(function (out) {
+        api('POST', '/v1/subscription/checkout', { plan: 'elite' }).then(function (out) {
           window.open(out.url, '_blank', 'noopener');
           $('waiting').hidden = false;
           watchPayment();
@@ -647,7 +657,7 @@
             return;
           }
           api('GET', '/v1/session').then(function (session) {
-            if (!session.subscribed) { return; }
+            if (!session.entitled) { return; }
             clearInterval(poll);
             $('waiting').hidden = true;
             $('pay').disabled = false;

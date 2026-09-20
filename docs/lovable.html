@@ -788,6 +788,7 @@
       <a href="/#start">Quick start</a>
       <a href="/audit.html">Audit</a>
       <a href="/mcp.html">MCP</a>
+      <a href="/serve.html">Serve</a>
       <a href="/alerts.html">Alerts</a>
       <a href="/setup-ga4.html">Configure</a>
       <a href="/lovable.html">Lovable</a>
@@ -940,12 +941,16 @@
 
             <p style="margin-top:20px;">
               The page listens on <code>127.0.0.1</code> and nowhere else, and
-              the credentials stay with the CLI on your machine. Making a
-              property is the paid half —
-              <a href="/pricing.html" style="color:var(--jade);text-decoration:underline;">Anacrafter</a>,
-              $2.99 a month — and the page takes you through it without
-              leaving the flow. Reading an ID off a property you already have
-              costs nothing.
+              the credentials stay with the CLI on your machine. Everything it
+              does, a script can do too — the page is the first caller of
+              <a href="/serve.html" style="color:var(--jade);text-decoration:underline;">the local
+                API</a>, and every endpoint behind it is written down. It is
+              part of
+              <a href="/pricing.html" style="color:var(--jade);text-decoration:underline;">Anacrafter
+                Elite</a> — $9.99 a month, the same plan step 04 needs — and
+              the page takes you through subscribing without leaving the flow.
+              <code>craft serve --demo</code> walks the whole thing first,
+              creating nothing.
             </p>
           </div>
         </div>
@@ -1030,9 +1035,9 @@
                 <code>craft serve --demo</code> walks the whole page on
                 synthetic data, creating nothing, and
                 <code>craft mcp --demo</code> does the same for the assistant
-                — no Google account, no subscription. Live data needs an
-                <a href="/pricing.html" style="color:var(--jade);text-decoration:underline;">Elite plan</a>
-                for MCP.
+                — no Google account, no subscription. One
+                <a href="/pricing.html" style="color:var(--jade);text-decoration:underline;">Elite
+                  plan</a> covers both when you are ready for real numbers.
               </p>
             </div>
           </div>

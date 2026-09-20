@@ -48,6 +48,19 @@ const PAGE: &str = include_str!("../assets/serve.html");
 /// is the timer's.
 const IDLE_TICK: Duration = Duration::from_secs(20);
 
+/// The plan `craft serve` is part of.
+///
+/// Elite, the same one `craft mcp` is on, because it is the same kind of
+/// thing: the binary standing up a service for something else to talk to,
+/// rather than printing an answer to the person who typed the command. One
+/// plan covers both, so somebody wiring a Lovable app into an assistant is
+/// never asked to reason about two.
+///
+/// It gates the API, not the command. `craft serve` starts for anybody — the
+/// page it opens is where somebody signs in and, if they need to, subscribes,
+/// and a server that refused to start would leave them nowhere to do either.
+const PLAN: Tier = Tier::Elite;
+
 pub struct Options {
     /// 0 lets the OS pick, which is the default: a fixed port is a thing to
     /// collide with, and the URL is printed either way.
@@ -439,6 +452,12 @@ async fn session(State(app): State<Arc<App>>) -> Answer {
     let tier = license::sync(&cfg).await;
     out["subscribed"] = json!(tier.is_some());
     out["tier"] = json!(tier.map(|t| t.name()));
+    // What a page actually needs to know is not whether somebody pays for
+    // something, but whether what they pay for opens this. The ladder stays
+    // here rather than being reimplemented in JavaScript.
+    out["entitled"] = json!(tier.is_some_and(|have| have.meets(PLAN)));
+    out["plan"] = json!(PLAN.name());
+    out["plan_price"] = json!(PLAN.monthly());
     Ok(Json(out))
 }
 
@@ -513,7 +532,7 @@ async fn session_end(State(app): State<Arc<App>>) -> Answer {
 async fn subscription(State(app): State<Arc<App>>) -> Answer {
     if app.demo {
         return Ok(Json(
-            json!({ "subscribed": true, "tier": "elite", "demo": true, "plans": [] }),
+            json!({ "subscribed": true, "tier": "elite", "entitled": true, "demo": true, "plans": [] }),
         ));
     }
     let cfg = Config::load().map_err(Fail::from)?;
@@ -542,7 +561,7 @@ async fn checkout(State(app): State<Arc<App>>, Json(body): Json<Checkout>) -> An
         return Err(demo_only("starting a checkout"));
     }
     let plan = match body.plan.as_deref() {
-        None => Tier::Pro,
+        None => PLAN,
         Some(name) => {
             Tier::parse(name).ok_or_else(|| Fail::bad("plan has to be basic, pro or elite"))?
         }
@@ -577,7 +596,7 @@ async fn properties(State(app): State<Arc<App>>) -> Answer {
             "note": "synthetic — run `craft serve` without --demo for the real ones",
         })));
     }
-    let ga = client()?;
+    let ga = client().await?;
     let cfg = Config::load().map_err(Fail::from)?;
     let props = ga.properties().await?;
     Ok(Json(json!({
@@ -612,9 +631,9 @@ async fn register(State(app): State<Arc<App>>, Json(body): Json<Register>) -> An
     if app.demo {
         return Ok(Json(demo_tag(&host)?));
     }
-    require(Tier::Basic, "registering a tag").await?;
+    require("registering a tag").await?;
 
-    let ga = client()?;
+    let ga = client().await?;
     let setup = crate::configure::setup(
         &ga,
         &host,
@@ -656,7 +675,7 @@ async fn streams(State(app): State<Arc<App>>, Path(id): Path<String>) -> Answer 
             }],
         })));
     }
-    let ga = client()?;
+    let ga = client().await?;
     let property = bare(&id);
     let found = ga.web_streams(&property).await?;
     Ok(Json(json!({
@@ -683,9 +702,9 @@ async fn add_stream(
     if app.demo {
         return Ok(Json(demo_tag(&host)?));
     }
-    require(Tier::Basic, "adding a web stream").await?;
+    require("adding a web stream").await?;
 
-    let ga = client()?;
+    let ga = client().await?;
     let property = bare(&id);
     let stream = ga
         .create_web_stream(&property, &host, &format!("https://{host}"))
@@ -730,7 +749,7 @@ async fn trash(
         )));
     }
 
-    let ga = client()?;
+    let ga = client().await?;
     ga.delete_property(&property).await?;
 
     // Google first, then here — the same order the command uses, because
@@ -765,7 +784,7 @@ async fn use_property(State(app): State<Arc<App>>, Json(body): Json<Chosen>) -> 
     if app.demo {
         return Err(demo_only("saving a default property"));
     }
-    let ga = client()?;
+    let ga = client().await?;
     let wanted = bare(&body.id);
     let props = ga.properties().await?;
     let found = props.iter().find(|p| p.id == wanted).ok_or_else(|| {
@@ -846,9 +865,6 @@ async fn live(State(app): State<Arc<App>>, Query(read): Query<Read>) -> Answer {
 }
 
 async fn audit(State(app): State<Arc<App>>, Query(read): Query<Read>) -> Answer {
-    if !app.demo {
-        require(Tier::Pro, "craft audit").await?;
-    }
     report(&app, "audit_site", read).await
 }
 
@@ -872,7 +888,7 @@ async fn report(app: &App, tool: &str, read: Read) -> Answer {
         return Ok(Json(crate::mcp::demo::tool(tool, &args, days, limit)?));
     }
 
-    let ga = client()?;
+    let ga = client().await?;
     let cfg = Config::load().map_err(Fail::from)?;
     let property = cfg
         .resolve_property(read.property.as_deref().or(app.property.as_deref()))
@@ -966,6 +982,7 @@ fn demo_session() -> Value {
         "demo": true,
         "subscribed": true,
         "tier": "elite",
+        "entitled": true,
         "version": env!("CARGO_PKG_VERSION"),
         "property": { "id": "demo", "name": "Contoso Labs (demo)" },
         "note": "synthetic — run `craft serve` without --demo to use a real account",
@@ -999,20 +1016,24 @@ fn demo_only(what: &str) -> Fail {
 
 /// A client, or the one refusal that is not Google's fault: nobody is signed
 /// in yet.
-fn client() -> std::result::Result<Ga, Fail> {
+async fn client() -> std::result::Result<Ga, Fail> {
     if Tokens::load().map_err(Fail::from)?.is_none() {
         return Err(Fail::cold());
     }
+    // The plan is checked here rather than at each call site, because here is
+    // where a real Analytics account is about to be reached, and every route
+    // that reaches one comes through this function.
+    require("the local API").await?;
     Ga::new().map_err(Fail::from)
 }
 
 /// The plan this machine is on, against the plan a call needs. The refusal
 /// text is [`crate::license::gate`]'s, so a caller reads the same sentence the
 /// terminal prints.
-async fn require(plan: Tier, what: &str) -> std::result::Result<(), Fail> {
+async fn require(what: &str) -> std::result::Result<(), Fail> {
     let cfg = Config::load().map_err(Fail::from)?;
     let have = license::sync(&cfg).await;
-    license::gate(have, plan, what).map_err(|message| Fail::unpaid(plan, message))
+    license::gate(have, PLAN, what).map_err(|message| Fail::unpaid(PLAN, message))
 }
 
 /// `properties/397412345` and `397412345` are the same property, and a caller

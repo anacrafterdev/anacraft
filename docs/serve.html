@@ -421,6 +421,7 @@ characters while doing it.</p>
   <tr><th>Endpoint</th><th>Does</th><th>Needs</th></tr>
   <tr><td>GET /v1/health</td><td>Liveness, and the version that answers.</td><td>nothing</td></tr>
   <tr><td>GET /v1/openapi.json</td><td>This table, as OpenAPI 3.1, with the port it is really on.</td><td>nothing</td></tr>
+  <tr><td>GET /docs</td><td>The same document with the punctuation put in — a reference page, on the server.</td><td>nothing</td></tr>
   <tr><td>GET /v1/session</td><td>Who is signed in, on what plan, with which default property.</td><td>token</td></tr>
   <tr><td>POST /v1/session</td><td>Start the Google sign-in; it opens a browser and answers at once.</td><td>token</td></tr>
   <tr><td>DELETE /v1/session</td><td>Revoke the credentials and forget them.</td><td>token</td></tr>
@@ -449,6 +450,18 @@ Google account signed in with an Elite subscription on it: everything that reach
 account goes through one door, and an account short of the plan gets a
 <a href="#errors">402 carrying a checkout URL</a> rather than a flat refusal. <code>--demo</code>
 needs neither.</p>
+
+<h3>The reference, on the server</h3>
+<p>A running <code>craft serve</code> hosts its own reference at <code>/docs</code>: every route
+grouped by what it is for, the method, what it needs, and a <code>curl</code> line per endpoint with
+the token already in it, which copies on a click. It needs no token of its own, and it is drawn from
+the document below rather than written out a second time, so it cannot describe a route that is not
+there.</p>
+<pre class="code">craft serve <span class="d">→ http://127.0.0.1:52413</span>
+<span class="d">                       http://127.0.0.1:52413/docs</span></pre>
+<p>Swagger UI, Redoc and Scalar all render an OpenAPI document better than this does, and all three
+are a megabyte of JavaScript from a CDN — a page that stops working on a plane, and a megabyte of
+binary for nineteen routes. If you would rather have one of them, the document is right here:</p>
 
 <h3>Or let a machine read it</h3>
 <p>Everything in the table above is also served as an OpenAPI 3.1 document, so a generated client, an

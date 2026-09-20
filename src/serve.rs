@@ -43,6 +43,16 @@ use crate::license::{self, Tier};
 /// files to find and no directory to be run from.
 const PAGE: &str = include_str!("../assets/serve.html");
 
+/// The API reference at `/docs`, drawn from the document this server
+/// generates rather than from a second list of routes that could fall behind
+/// it.
+///
+/// Swagger UI, Redoc and Scalar all do this better, and all of them are a
+/// megabyte of JavaScript fetched from a CDN — a page that stops working on a
+/// plane, and a megabyte of binary for a reference to nineteen routes. This is
+/// nine kilobytes and needs nothing.
+const API_PAGE: &str = include_str!("../assets/api.html");
+
 /// How long a request may take to reach us before the server decides nobody is
 /// coming back. Checked on a timer rather than per request, so the granularity
 /// is the timer's.
@@ -152,6 +162,10 @@ pub async fn run(opts: Options) -> Result<()> {
         // generator or an agent reads the description *before* it has been
         // given a token, which is the whole point of there being one.
         .route("/v1/openapi.json", get(openapi))
+        // The same document with the punctuation put in. Open for the same
+        // reason: it is the reference, and a reference you have to authenticate
+        // to read is a reference nobody reads.
+        .route("/docs", get(api_page))
         .merge(guarded)
         .with_state(app.clone());
 
@@ -664,6 +678,13 @@ impl From<anyhow::Error> for Fail {
 
 async fn page() -> Html<&'static str> {
     Html(PAGE)
+}
+
+/// The reference at `/docs`. It ships with no routes in it and fills itself in
+/// from `/v1/openapi.json`, so there is no second list of endpoints in this
+/// binary to fall behind the first.
+async fn api_page() -> Html<&'static str> {
+    Html(API_PAGE)
 }
 
 async fn health() -> Json<Value> {
@@ -1455,26 +1476,27 @@ mod tests {
         // aeroplanes, and on a laptop whose only working connection is the one
         // to Google. A stylesheet or a font from a CDN would turn the page
         // that hands over a measurement id into a page that sometimes renders.
-        for tag in [
-            "<script src",
-            "<link",
-            "@import",
-            "fonts.googleapis",
-            "cdn.",
-        ] {
-            assert!(
-                !PAGE.contains(tag),
-                "assets/serve.html reaches for `{tag}` — the page has to be self-contained"
-            );
+        for (name, page) in [("assets/serve.html", PAGE), ("assets/api.html", API_PAGE)] {
+            for tag in [
+                "<script src",
+                "<link",
+                "@import",
+                "fonts.googleapis",
+                "cdn.",
+            ] {
+                assert!(
+                    !page.contains(tag),
+                    "{name} reaches for `{tag}` — these pages have to be self-contained"
+                );
+            }
+            // The only outbound addresses the markup points at are links a
+            // person clicks, never something the browser fetches on load.
+            // (Other `https://` strings in these files are a placeholder and
+            // an error message, which ask nothing of the network.)
+            assert!(page.contains("href=\"https://anacraft.dev/serve.html\""));
+            assert!(!page.contains("src=\"http"));
         }
-
-        // One outbound address the markup points at, and it is a link a
-        // person clicks rather than something the browser fetches on load.
-        // (Other `https://` strings in the file are a placeholder and an error
-        // message, which ask nothing of the network.)
         assert_eq!(PAGE.matches("href=\"http").count(), 1);
-        assert!(PAGE.contains("href=\"https://anacraft.dev/serve.html\""));
-        assert!(!PAGE.contains("src=\"http"));
     }
 
     /// This module's own source, read at compile time, so the router can be
@@ -1514,7 +1536,7 @@ mod tests {
     /// Served, and deliberately not in the document: it answers HTML to a
     /// browser, and an OpenAPI path for it would describe the page as an
     /// endpoint that returns a string.
-    const NOT_API: [&str; 1] = ["/"];
+    const NOT_API: [&str; 2] = ["/", "/docs"];
 
     #[test]
     fn the_openapi_document_describes_exactly_what_is_routed() {

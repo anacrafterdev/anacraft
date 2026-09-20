@@ -479,7 +479,7 @@ async fn openapi(State(app): State<Arc<App>>) -> Json<Value> {
     Json(json!({
         "openapi": "3.1.0",
         "info": {
-            "title": "anacraft — the local API",
+            "title": "anacraft local API",
             "version": env!("CARGO_PKG_VERSION"),
             "description": "craft serve: sign in with Google, register a GA4 tag, read the numbers. \
                             Loopback only. https://anacraft.dev/serve.html",

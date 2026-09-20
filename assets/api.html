@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>anacraft — the local API</title>
+  <title>API reference — anacraft</title>
   <!-- Rendered from /v1/openapi.json, by this page, on this machine.
        Swagger UI, Redoc and Scalar all do this better and all of them are a
        megabyte of JavaScript fetched from a CDN — which is a page that stops
@@ -197,7 +197,7 @@
       </svg>nacraft
     </div>
 
-    <h1 id="title">The local API</h1>
+    <h1>API reference</h1>
     <p class="lede" id="lede">Reading the description…</p>
     <div class="base"><span class="k">base</span><span id="base"></span></div>
 
@@ -250,8 +250,9 @@
         });
 
       function draw(doc) {
-        $('title').textContent = (doc.info && doc.info.title) || 'The local API';
-        $('lede').textContent = (doc.info && doc.info.description) || '';
+        var info = doc.info || {};
+        $('lede').textContent = [info.title, info.version && 'v' + info.version]
+          .filter(Boolean).join(' · ') + (info.description ? ' — ' + info.description : '');
         var base = (doc.servers && doc.servers[0] && doc.servers[0].url) || location.origin;
         $('base').textContent = base;
 

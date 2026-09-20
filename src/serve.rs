@@ -132,6 +132,7 @@ pub async fn run(opts: Options) -> Result<()> {
         .route("/v1/properties/:id/streams", get(streams).post(add_stream))
         .route("/v1/property", put(use_property))
         .route("/v1/themes", get(themes).put(use_theme))
+        .route("/v1/openapi.json", get(openapi))
         .route("/v1/tag/:measurement_id", get(tag))
         .route("/v1/overview", get(overview))
         .route("/v1/pages", get(pages))
@@ -213,6 +214,270 @@ fn now() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or_default()
+}
+
+// ----------------------------------------------------------- the contract ---
+
+/// Every route this server answers, said once.
+///
+/// It exists because the alternative is a hand-kept OpenAPI document, and a
+/// hand-kept document is a document that is wrong by the third endpoint. This
+/// is what `/v1/openapi.json` is built from, and the test at the bottom of
+/// this file reads the `.route(` calls out of this module's own source and
+/// fails the build if the two disagree — so a route added without a line here
+/// does not compile past `cargo test`.
+///
+/// Rust has generators for this — `utoipa` is the mainstream one, `aide` the
+/// other — and both were weighed and left out. They describe a handler by its
+/// types, and every handler here answers `Json<Value>`: payloads that are
+/// mostly Google's own, passed through rather than modelled. Deriving a schema
+/// from `Value` describes nothing, so the annotations would be prose in a
+/// macro's clothing, bought with a proc-macro dependency and a rust-version
+/// bump to 1.75 on a binary tuned for size. The table is the same prose,
+/// checked by a test instead of by a derive.
+struct Route {
+    method: &'static str,
+    /// As axum spells it, `:id` and all. The document converts it.
+    path: &'static str,
+    summary: &'static str,
+    /// What a caller has to have. Free-text, and the same words the guide uses.
+    needs: &'static str,
+}
+
+const ROUTES: &[Route] = &[
+    Route {
+        method: "get",
+        path: "/v1/health",
+        summary: "Liveness, and the version answering.",
+        needs: "nothing",
+    },
+    Route {
+        method: "get",
+        path: "/v1/session",
+        summary: "Who is signed in, on what plan, with which property and palette.",
+        needs: "token",
+    },
+    Route {
+        method: "post",
+        path: "/v1/session",
+        summary: "Start the Google sign-in; opens a browser and answers at once.",
+        needs: "token",
+    },
+    Route {
+        method: "delete",
+        path: "/v1/session",
+        summary: "Revoke the credentials and forget them.",
+        needs: "token",
+    },
+    Route {
+        method: "get",
+        path: "/v1/subscription",
+        summary: "Plan, status, and the prices on offer.",
+        needs: "token",
+    },
+    Route {
+        method: "post",
+        path: "/v1/subscription/checkout",
+        summary: "A Stripe checkout URL, already tied to this account.",
+        needs: "account",
+    },
+    Route {
+        method: "get",
+        path: "/v1/properties",
+        summary: "Every GA4 property this login can see.",
+        needs: "plan",
+    },
+    Route {
+        method: "post",
+        path: "/v1/properties",
+        summary: "Create a property and its web stream; returns the tag.",
+        needs: "plan",
+    },
+    Route {
+        method: "delete",
+        path: "/v1/properties/:id",
+        summary: "Move a property to the Analytics trash. Wants the id twice.",
+        needs: "plan",
+    },
+    Route {
+        method: "get",
+        path: "/v1/properties/:id/streams",
+        summary: "The web data streams on a property, with their ids.",
+        needs: "plan",
+    },
+    Route {
+        method: "post",
+        path: "/v1/properties/:id/streams",
+        summary: "Add a web stream to a property that has none; returns the tag.",
+        needs: "plan",
+    },
+    Route {
+        method: "put",
+        path: "/v1/property",
+        summary: "Set the default property, the way `craft use` does.",
+        needs: "plan",
+    },
+    Route {
+        method: "get",
+        path: "/v1/tag/:measurement_id",
+        summary: "The snippet and the agent prompt for an id you already have.",
+        needs: "token",
+    },
+    Route {
+        method: "get",
+        path: "/v1/themes",
+        summary: "The palettes the dashboard ships, and which is in force.",
+        needs: "token",
+    },
+    Route {
+        method: "put",
+        path: "/v1/themes",
+        summary: "Wear one, the way `craft theme` does.",
+        needs: "token",
+    },
+    Route {
+        method: "get",
+        path: "/v1/overview",
+        summary: "Users, sessions, views, key events, bounce, duration, with deltas.",
+        needs: "plan",
+    },
+    Route {
+        method: "get",
+        path: "/v1/pages",
+        summary: "Most-visited pages.",
+        needs: "plan",
+    },
+    Route {
+        method: "get",
+        path: "/v1/events",
+        summary: "Events by count, against the previous period.",
+        needs: "plan",
+    },
+    Route {
+        method: "get",
+        path: "/v1/sources",
+        summary: "Source / medium pairs by sessions.",
+        needs: "plan",
+    },
+    Route {
+        method: "get",
+        path: "/v1/referrers",
+        summary: "Referring pages by sessions.",
+        needs: "plan",
+    },
+    Route {
+        method: "get",
+        path: "/v1/countries",
+        summary: "Users by country.",
+        needs: "plan",
+    },
+    Route {
+        method: "get",
+        path: "/v1/live",
+        summary: "Who is on the site right now, by country.",
+        needs: "plan",
+    },
+    Route {
+        method: "get",
+        path: "/v1/audit",
+        summary: "What is wrong with how the property measures. Reads only.",
+        needs: "plan",
+    },
+    Route {
+        method: "get",
+        path: "/v1/openapi.json",
+        summary: "This document.",
+        needs: "token",
+    },
+];
+
+/// The API as OpenAPI 3.1, built from [`ROUTES`] at request time.
+///
+/// Request time because of one field: `servers`. The port is whatever the OS
+/// handed out this run, and a document that named the wrong one would send
+/// every generated client to a closed door.
+async fn openapi(State(app): State<Arc<App>>) -> Json<Value> {
+    let mut paths = serde_json::Map::new();
+
+    for route in ROUTES {
+        // OpenAPI spells a parameter `{id}` where axum spells it `:id`.
+        let mut path = String::new();
+        let mut params = Vec::new();
+        for segment in route.path.split('/').skip(1) {
+            path.push('/');
+            match segment.strip_prefix(':') {
+                Some(name) => {
+                    path.push_str(&format!("{{{name}}}"));
+                    params.push(json!({
+                        "name": name,
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" },
+                    }));
+                }
+                None => path.push_str(segment),
+            }
+        }
+
+        let mut operation = json!({
+            "summary": route.summary,
+            "description": format!("Needs: {}.", route.needs),
+            "responses": {
+                "200": {
+                    "description": "The answer.",
+                    "content": { "application/json": { "schema": { "type": "object" } } },
+                },
+                "4XX": {
+                    "description": "A refusal, saying which kind and what to do about it.",
+                    "content": { "application/json": { "schema": {
+                        "type": "object",
+                        "properties": { "error": { "type": "object", "properties": {
+                            "code": { "type": "string" },
+                            "message": { "type": "string" },
+                            "checkout_url": { "type": "string" },
+                        }}},
+                    }}},
+                },
+            },
+        });
+        if !params.is_empty() {
+            operation["parameters"] = json!(params);
+        }
+        if route.needs == "nothing" {
+            // The one door that opens without the token, and the document has
+            // to say so or a generated client will send one it does not have.
+            operation["security"] = json!([]);
+        }
+
+        paths
+            .entry(path)
+            .or_insert_with(|| json!({}))
+            .as_object_mut()
+            .expect("built as an object")
+            .insert(route.method.to_string(), operation);
+    }
+
+    Json(json!({
+        "openapi": "3.1.0",
+        "info": {
+            "title": "anacraft — the local API",
+            "version": env!("CARGO_PKG_VERSION"),
+            "description": "craft serve: sign in with Google, register a GA4 tag, read the numbers. \
+                            Loopback only. https://anacraft.dev/serve.html",
+        },
+        "servers": [{ "url": app.origin }],
+        "security": [{ "bearer": [] }],
+        "components": {
+            "securitySchemes": {
+                "bearer": {
+                    "type": "http",
+                    "scheme": "bearer",
+                    "description": "The token `craft serve` printed when it started.",
+                },
+            },
+        },
+        "paths": paths,
+    }))
 }
 
 // ------------------------------------------------------------- the guard ---
@@ -1205,6 +1470,65 @@ mod tests {
         assert_eq!(PAGE.matches("href=\"http").count(), 1);
         assert!(PAGE.contains("href=\"https://anacraft.dev/serve.html\""));
         assert!(!PAGE.contains("src=\"http"));
+    }
+
+    /// This module's own source, read at compile time, so the router can be
+    /// checked against the table that documents it. The same trick `ga.rs`
+    /// uses to keep the scope submission honest, and for the same reason:
+    /// nothing else notices when code and documentation part company.
+    const SOURCE: &str = include_str!("serve.rs");
+
+    /// Every path handed to `route(`, above the test module.
+    ///
+    /// Comment lines are dropped before the scan, which is not fussiness: the
+    /// doc comment on `ROUTES` mentions the call by name, and without this the
+    /// table would be checked against a sentence about itself.
+    fn routed() -> Vec<String> {
+        let code: String = SOURCE
+            .split_once("\n#[cfg(test)]")
+            .map(|(code, _)| code)
+            .expect("this module is the first test module in the file")
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        code.match_indices(".route(")
+            .map(|(at, _)| {
+                // rustfmt puts a long route on its own line, so the path is
+                // the first string literal after the paren rather than the
+                // byte after it.
+                let rest = &code[at + ".route(".len()..];
+                let open = rest.find('"').expect("a route path is a string literal") + 1;
+                let rest = &rest[open..];
+                rest[..rest.find('"').expect("an unterminated route path")].to_string()
+            })
+            .collect()
+    }
+
+    /// Served, and deliberately not in the document: it answers HTML to a
+    /// browser, and an OpenAPI path for it would describe the page as an
+    /// endpoint that returns a string.
+    const NOT_API: [&str; 1] = ["/"];
+
+    #[test]
+    fn the_openapi_document_describes_exactly_what_is_routed() {
+        for path in routed()
+            .into_iter()
+            .filter(|p| !NOT_API.contains(&p.as_str()))
+        {
+            assert!(
+                ROUTES.iter().any(|r| r.path == path),
+                "{path} is served and is not in ROUTES — the OpenAPI document would not mention it"
+            );
+        }
+        for route in ROUTES {
+            assert!(
+                routed().iter().any(|p| p == route.path),
+                "ROUTES documents {} and nothing routes it",
+                route.path
+            );
+        }
     }
 
     #[test]

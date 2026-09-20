@@ -334,7 +334,6 @@
       <a href="/#start">Quick start</a>
       <a href="/audit.html">Audit</a>
       <a href="/mcp.html">MCP</a>
-      <a href="/serve.html">Serve</a>
       <a href="/alerts.html">Alerts</a>
       <a href="/setup-ga4.html">Configure</a>
       <a href="/lovable.html">Lovable</a>
@@ -421,6 +420,7 @@ characters while doing it.</p>
 <table class="tbl">
   <tr><th>Endpoint</th><th>Does</th><th>Needs</th></tr>
   <tr><td>GET /v1/health</td><td>Liveness, and the version that answers.</td><td>nothing</td></tr>
+  <tr><td>GET /v1/openapi.json</td><td>This table, as OpenAPI 3.1, with the port it is really on.</td><td>token</td></tr>
   <tr><td>GET /v1/session</td><td>Who is signed in, on what plan, with which default property.</td><td>token</td></tr>
   <tr><td>POST /v1/session</td><td>Start the Google sign-in; it opens a browser and answers at once.</td><td>token</td></tr>
   <tr><td>DELETE /v1/session</td><td>Revoke the credentials and forget them.</td><td>token</td></tr>
@@ -449,6 +449,16 @@ Google account signed in with an Elite subscription on it: everything that reach
 account goes through one door, and an account short of the plan gets a
 <a href="#errors">402 carrying a checkout URL</a> rather than a flat refusal. <code>--demo</code>
 needs neither.</p>
+
+<h3>Or let a machine read it</h3>
+<p>Everything in the table above is also served as an OpenAPI 3.1 document, so a generated client, an
+editor, or an agent that speaks OpenAPI can pick the API up without being told about it twice.</p>
+<pre class="code">curl -s http://127.0.0.1:52413<span class="k">/v1/openapi.json</span> \
+  -H <span class="k">'Authorization: Bearer …'</span> | jq .paths</pre>
+<p>It is built when you ask for it rather than written down, for one field: <code>servers</code>
+carries the port this run actually got, and a document naming yesterday's port would send every
+generated client to a closed door. The descriptions come from a table in the source that a test
+checks against the router, so a route cannot be added without the document growing a line for it.</p>
 
 <h2><span class="n">05</span>Signing in</h2>
 <p>The server owns the flow, because it owns the credentials. <code>POST /v1/session</code> opens the

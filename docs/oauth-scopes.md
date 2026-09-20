@@ -49,6 +49,21 @@ both:
 | [`properties.create`](https://developers.google.com/analytics/devguides/config/admin/v1/rest/v1beta/properties/create) | `https://www.googleapis.com/auth/analytics.edit` |
 | [`properties.dataStreams.create`](https://developers.google.com/analytics/devguides/config/admin/v1/rest/v1beta/properties.dataStreams/create) | `https://www.googleapis.com/auth/analytics.edit` |
 
+### `craft serve`
+
+The same two calls as `craft configure`, made for a page in a browser instead
+of a terminal. `craft serve` runs an HTTP API on `127.0.0.1` and opens a page
+on it where somebody signs in, picks or creates a property, and copies the tag;
+`POST /v1/properties` is `craft configure` underneath, calling the same
+`configure::setup` and so making `properties.create` and `dataStreams.create`
+and nothing else.
+
+It adds no scope and no endpoint. What it adds is a second way to reach the two
+that are already here, which is why it is named: the surface a reviewer can run
+is not the same as the surface a reviewer is told about unless both are
+written down. Every endpoint it serves is at
+[anacraft.dev/serve.html](https://anacraft.dev/serve.html).
+
 ### `craft audit --fix`
 
 `craft audit` reads a property and reports what is wrong with how it measures:

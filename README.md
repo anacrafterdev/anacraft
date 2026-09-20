@@ -80,6 +80,25 @@ that changes anything in your Analytics account, so it asks Google for
 permission to do so when you run it, and never at sign-in; see
 [docs/oauth-scopes.md](docs/oauth-scopes.md).
 
+### The same thing in a browser
+
+`craft serve` is that flow with a page in front of it, for when a terminal is
+not where you want to be — or when the person who needs the tag is not the
+person who reads terminals.
+
+```sh
+craft serve          # opens a page: sign in, pick or make the property, copy the tag
+craft serve --demo   # the whole walkthrough on synthetic data, creating nothing
+```
+
+It listens on `127.0.0.1` and nowhere else, mints a bearer token it prints once,
+and answers a browser only from its own origin. The page is the first caller of
+an API the whole of which is documented at
+[anacraft.dev/serve.html](https://anacraft.dev/serve.html) — so a script, an
+editor extension or another service can register a tag the same way. It creates
+nothing `craft configure` would not create, behind the same plan and the same
+two Admin API calls.
+
 ### One-shot reports
 
 Not everything needs a dashboard. These print and exit.

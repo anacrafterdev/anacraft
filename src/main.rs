@@ -12,6 +12,7 @@ mod license;
 mod mcp;
 mod render;
 mod report;
+mod serve;
 mod slack;
 mod theme;
 mod ui;
@@ -265,6 +266,29 @@ enum Command {
         #[arg(long, conflicts_with = "install")]
         uninstall: bool,
     },
+    /// Run the register-a-tag flow as an API on this machine.
+    ///
+    /// Opens a page in your browser: sign in with Google, pick or create a
+    /// property, copy the tag. Every endpoint the page uses is documented at
+    /// https://anacraft.dev/serve.html, so a script can do the same.
+    Serve {
+        /// Port to listen on. The OS picks one by default.
+        #[arg(long, default_value_t = 0)]
+        port: u16,
+        /// Print the URL instead of opening a browser.
+        #[arg(long)]
+        no_open: bool,
+        /// Use this bearer token instead of minting one.
+        #[arg(long)]
+        token: Option<String>,
+        /// Stop after this many idle minutes. 0 runs until Ctrl-C.
+        #[arg(long, default_value_t = 60)]
+        idle: u64,
+        /// Answer everything synthetically — no Google account, no
+        /// subscription, and nothing created in any Analytics account.
+        #[arg(long)]
+        demo: bool,
+    },
     /// Start an Anacraft subscription, or pick up the one you have.
     ///
     /// Opens Stripe, waits for the payment to clear, and writes the plan into
@@ -365,6 +389,23 @@ async fn run() -> Result<()> {
             .await
         }
         Command::Subscribe { plan, check } => cmd_subscribe(plan, check).await,
+        Command::Serve {
+            port,
+            no_open,
+            token,
+            idle,
+            demo,
+        } => {
+            serve::run(serve::Options {
+                port,
+                open: !no_open,
+                token,
+                idle,
+                demo,
+                property: cli.property.clone(),
+            })
+            .await
+        }
         Command::Mcp {
             demo,
             install,

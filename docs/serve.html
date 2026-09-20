@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>craft serve — the local API — anacraft</title>
+<meta name="description" content="craft serve runs a small HTTP API on your own machine and a page to register a GA4 tag in: sign in with Google, create the property, copy the tag. Every endpoint documented, loopback only, bearer token required.">
+<link rel="canonical" href="https://anacraft.dev/serve.html">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://anacraft.dev/serve.html">
+<meta property="og:title" content="craft serve — the local API — anacraft">
+<meta property="og:description" content="A local HTTP API and a page to register a GA4 tag in. Sign in with Google, create the property, copy the tag — no console, no flags.">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "craft serve — the local API",
+      "url": "https://anacraft.dev/serve.html",
+      "author": {
+        "@type": "Organization",
+        "name": "anacraft"
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is craft serve?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "A small HTTP server anacraft runs on your own machine. It opens a page in your browser where you sign in with Google, pick or create a GA4 property, and copy the gtag.js snippet \u2014 everything craft configure does, without flags. The same endpoints the page uses are documented and open to anything else running on that machine."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is the craft serve API reachable from the internet?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. It binds 127.0.0.1 and refuses any other address, every endpoint but /v1/health needs the bearer token printed when the server starts, and browser requests are accepted only from the loopback origin it is serving. There is no flag that opens it to a network."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does craft serve need a subscription?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Starting it, signing in and reading reports do not. Creating a GA4 property or a web data stream is the paid call \u2014 the same plan craft configure needs \u2014 and the endpoint answers 402 with a checkout URL rather than an error when the account is not on one."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
+<link rel="icon" type="image/svg+xml" href="favicon.svg?v=2dd77504">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  @font-face {
+    font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400;
+    font-display: block; src: url('fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  }
+  :root {
+    --ground: #060a09; --ink: #09100d; --panel: #0d1512;
+    --line: rgba(193,196,151,.11); --line-2: rgba(193,196,151,.20);
+    --fg: #c1c497; --white: #eef1dc; --dim: #6c7f73;
+    --jade: #2dd5b7; --jade-deep: #509475; --gold: #ffe16b; --coral: #ff5345;
+    --on-accent: #09100d;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  /* palettes:start */
+  html[data-pal="solarized-dark"] {
+    --ground: #001f27;
+    --ink: #002b36;
+    --panel: #073642;
+    --line: rgba(88,110,117,.35);
+    --line-2: rgba(88,110,117,.55);
+    --fg: #9ca9ab;
+    --white: #c7cfd0;
+    --dim: #74888f;
+    --jade: #2aa198;
+    --jade-deep: #44908f;
+    --gold: #b58900;
+    --coral: #dc322f;
+    --on-accent: #001f27;
+  }
+  html[data-pal="tokyo-night"] {
+    --ground: #161823;
+    --ink: #1a1b26;
+    --panel: #24283b;
+    --line: rgba(57,63,81,.35);
+    --line-2: rgba(57,63,81,.55);
+    --fg: #c0caf5;
+    --white: #e3e7fa;
+    --dim: #898fb6;
+    --jade: #7aa2f7;
+    --jade-deep: #89dceb;
+    --gold: #e0af68;
+    --coral: #f7768e;
+    --on-accent: #161823;
+  }
+  html[data-pal="catppuccin"] {
+    --ground: #11111b;
+    --ink: #1e1e2e;
+    --panel: #313244;
+    --line: rgba(69,71,90,.35);
+    --line-2: rgba(69,71,90,.55);
+    --fg: #cdd6f4;
+    --white: #e8edfa;
+    --dim: #7b7e92;
+    --jade: #94e2d5;
+    --jade-deep: #74c7ec;
+    --gold: #f9e2af;
+    --coral: #f38ba8;
+    --on-accent: #11111b;
+  }
+  html[data-pal="github"] {
+    --ground: #010409;
+    --ink: #0d1117;
+    --panel: #161b22;
+    --line: rgba(48,54,61,.35);
+    --line-2: rgba(48,54,61,.55);
+    --fg: #c9d1d9;
+    --white: #e7eaee;
+    --dim: #8b949e;
+    --jade: #39c5cf;
+    --jade-deep: #2372eb;
+    --gold: #d29922;
+    --coral: #f85149;
+    --on-accent: #010409;
+  }
+  html[data-pal="solarized-light"] {
+    --ground: #e2dbc7;
+    --ink: #fdf6e3;
+    --panel: #eee8d5;
+    --line: rgba(147,161,161,.35);
+    --line-2: rgba(147,161,161,.55);
+    --fg: #394549;
+    --white: #2d373b;
+    --dim: #566263;
+    --jade: #1c6a64;
+    --jade-deep: #3f6760;
+    --gold: #b58900;
+    --coral: #dc322f;
+    --on-accent: #fdf6e3;
+  }
+  html[data-pal="catppuccin-latte"] {
+    --ground: #e6e9f0;
+    --ink: #fafbfe;
+    --panel: #f0f3f8;
+    --line: rgba(200,207,218,.35);
+    --line-2: rgba(200,207,218,.55);
+    --fg: #242938;
+    --white: #101219;
+    --dim: #616872;
+    --jade: #0965d1;
+    --jade-deep: #4068ae;
+    --gold: #996600;
+    --coral: #c92a2a;
+    --on-accent: #fafbfe;
+  }
+  /* palettes:end */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--ground); color: var(--fg); line-height: 1.7;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden;
+  }
+  a { color: inherit; text-decoration: none; }
+  ::selection { background: var(--jade); color: #04120e; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+  /* nav:start */
+  nav {
+    /* Not pinned: the nav is the top of the page, not a bar laid over it, so it
+       scrolls away with everything else and takes the ground it sits on. */
+    position: relative; z-index: 1;
+  }
+  .nav-in { display: flex; align-items: center; gap: 32px; height: 60px; }
+  .brand {
+    font-family: 'Archivo', sans-serif; font-weight: 900;
+    font-size: 20px; letter-spacing: -.03em; color: var(--white);
+    display: flex; align-items: baseline; gap: 0;
+  }
+  /* The A is the accent, so it follows whatever palette is in force.
+     Inline rather than an <img>: an image cannot inherit a colour. */
+  .brand .pick { width: 14px; height: 14px; display: block; margin-right: 2px;
+                 color: var(--jade); }
+  /* Same voice as the footer: mono, lowercase, one rhythm. The casing is
+     text-transform rather than typed in, so the markup still says "Quick start"
+     and "Configure" for a screen reader. The brand keeps its own face —
+     it is a logo, not a link in the row. */
+  .nav-links {
+    display: flex; align-items: center; gap: 16px; margin-left: auto;
+    font-family: var(--mono); font-size: 11.5px;
+    text-transform: lowercase; letter-spacing: .01em;
+    color: var(--dim);
+  }
+  .nav-links a { transition: color .15s; }
+  .nav-links a:hover { color: var(--white); }
+  @media (max-width: 720px) { .nav-links a:not(.mode-toggle) { display: none; } }
+  /* nav:end */
+
+  /* ── document ──────────────────────────────────────── */
+  .doc { max-width: 760px; margin: 0 auto; padding: 72px 28px 96px; }
+  .eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: .16em;
+             text-transform: uppercase; color: var(--jade); margin-bottom: 18px; }
+  h1 { font-family: 'Archivo', sans-serif; font-weight: 900; font-size: clamp(34px, 6vw, 50px);
+       line-height: 1.05; letter-spacing: -.035em; color: var(--white); margin-bottom: 14px; }
+  .stamp { font-family: var(--mono); font-size: 12.5px; color: var(--dim); margin-bottom: 40px; }
+  h2 { font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 21px;
+       letter-spacing: -.02em; color: var(--white); margin: 52px 0 14px; }
+  h2 .n { color: var(--jade-deep); font-family: var(--mono); font-size: 15px;
+          font-weight: 400; margin-right: 10px; }
+  h3 { font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 15.5px;
+       color: var(--white); margin: 28px 0 8px; }
+  p { margin-bottom: 15px; font-size: 15.5px; }
+  ul { margin: 0 0 15px 0; padding-left: 22px; }
+  li { margin-bottom: 8px; font-size: 15.5px; }
+  li::marker { color: var(--jade-deep); }
+  b, strong { color: var(--white); font-weight: 600; }
+  code { font-family: var(--mono); font-size: .88em; color: var(--jade);
+         background: var(--panel); border: 1px solid var(--line);
+         padding: 1.5px 5px; white-space: nowrap; }
+  .doc a:not(.brand) { color: var(--jade); border-bottom: 1px solid rgba(45,213,183,.3);
+                       border-bottom-color: color-mix(in srgb, var(--jade) 30%, transparent); }
+  .doc a:not(.brand):hover { border-bottom-color: var(--jade); }
+
+  .tldr { border: 1px solid var(--line-2); border-left: 3px solid var(--jade);
+          background: var(--panel); padding: 22px 24px; margin-bottom: 8px; }
+  .tldr p:last-child { margin-bottom: 0; }
+  .tldr .h { font-family: var(--mono); font-size: 11.5px; letter-spacing: .14em;
+             text-transform: uppercase; color: var(--jade); margin-bottom: 10px; }
+
+  .tbl { width: 100%; border-collapse: collapse; margin-bottom: 18px;
+         font-size: 13.5px; display: block; overflow-x: auto; }
+  .tbl th, .tbl td { text-align: left; padding: 9px 12px;
+                     border-bottom: 1px solid var(--line); vertical-align: top; }
+  .tbl th { font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+            text-transform: uppercase; color: var(--dim); font-weight: 400;
+            border-bottom-color: var(--line-2); }
+  .tbl td:first-child { font-family: var(--mono); color: var(--jade); white-space: nowrap; }
+
+  /* the legal pages never needed a code block; this guide does */
+  pre.code { font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+             background: var(--panel); border: 1px solid var(--line);
+             border-left: 3px solid var(--jade-deep);
+             padding: 16px 18px; margin: 0 0 18px; overflow-x: auto; color: var(--fg); }
+  pre.code .d { color: var(--dim); }
+  pre.code .k { color: var(--jade); }
+  .step { font-size: 15.5px; margin: 0 0 14px; padding-left: 16px;
+          border-left: 2px solid var(--line-2); }
+
+  /* footer:start */
+  footer {
+    border-top: 1px solid var(--line); padding: 34px 0;
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+    color: var(--dim);
+    /* The whole row runs in the terminal voice: mono, lowercase, a little
+       tighter than the page text. The casing is done with text-transform
+       rather than typed in, so the markup still says "Privacy Policy" for a
+       screen reader and for anyone reading the source. Mono sets wider than
+       the sans it replaces, hence the step down in size. */
+    font-family: var(--mono); font-size: 11.5px;
+    text-transform: lowercase; letter-spacing: .01em;
+  }
+  footer .r { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+  /* Which release the install command will actually give you. It sits in the
+     footer rather than beside the command because it is a fact people check
+     against a changelog, not a version they are asked to type — `install.sh`
+     resolves the latest release itself and takes no version argument. Kept a
+     step quieter than the line it follows: it is a fingerprint, not news. */
+  footer .ver { opacity: .72; }
+  footer a:hover { color: var(--jade); }
+  footer .by { display: inline-flex; align-items: center; gap: 8px; }
+  /* A chip rather than a word: the rule does the framing the brackets used to,
+     so nothing has to be typed into the markup and a screen reader still reads
+     a clean "crafted in San Francisco". */
+  footer .tag {
+    font-size: 11px; letter-spacing: .04em;
+    color: var(--jade); border: 1px solid var(--line-2);
+    /* A tinted rule so the chip reads as one green object rather than green
+       text in a grey box. Declared after the shorthand: a browser without
+       color-mix drops just this line and keeps the neutral border. */
+    border-color: color-mix(in srgb, var(--jade) 32%, transparent);
+    padding: 2px 8px; line-height: 1.6;
+  }
+  /* The glow rides the same curve as the beat, brightest at the top of each
+     pulse, so the heart reads as lit from within rather than merely resized.
+     It is drawn with var(--jade), which the light theme redefines, so the
+     halo follows the palette instead of pinning one value. */
+  .heart { height: 14px; width: auto; display: block; transform-origin: center;
+           animation: beat 2.4s ease-in-out infinite;
+           filter: drop-shadow(0 0 3px var(--jade)); }
+  @keyframes beat {
+    0%, 40%, 100% { transform: scale(1);    filter: drop-shadow(0 0 2px var(--jade)); }
+    10%           { transform: scale(1.3);  filter: drop-shadow(0 0 7px var(--jade)); }
+    20%           { transform: scale(1);    filter: drop-shadow(0 0 2px var(--jade)); }
+    30%           { transform: scale(1.18); filter: drop-shadow(0 0 5px var(--jade)); }
+  }
+  @media (prefers-reduced-motion: reduce) { .heart { animation: none; } }
+  /* footer:end */
+
+  @media (max-width: 560px) {
+    .wrap { padding: 0 18px; }
+    .doc { padding: 48px 18px 72px; }
+    footer .r { margin-left: 0; flex-wrap: wrap; }
+  }
+</style>
+<!-- palette-restore:start -->
+<script>
+  (function () {
+    try {
+      var p = localStorage.getItem('palette');
+      if (p && p !== 'osaka-jade') { document.documentElement.dataset.pal = p; }
+    } catch (e) {}
+  })();
+</script>
+<!-- palette-restore:end -->
+<script src="/analytics.js?v=8fa4ec5f"></script>
+</head>
+<body>
+<!-- nav:start -->
+<nav>
+  <div class="wrap nav-in">
+    <a class="brand" href="/"><svg class="pick" role="img" aria-label="A" width="14" height="14" viewBox="1 1 14 14" shape-rendering="crispEdges" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="1" width="4" height="1"/><rect x="5" y="2" width="6" height="1"/><rect x="4" y="3" width="8" height="1"/><rect x="4" y="4" width="8" height="1"/><rect x="3" y="5" width="4" height="1"/><rect x="9" y="5" width="4" height="1"/><rect x="3" y="6" width="4" height="1"/><rect x="9" y="6" width="4" height="1"/><rect x="2" y="7" width="4" height="1"/><rect x="10" y="7" width="4" height="1"/><rect x="2" y="8" width="4" height="1"/><rect x="10" y="8" width="4" height="1"/><rect x="1" y="9" width="4" height="1"/><rect x="11" y="9" width="4" height="1"/><rect x="1" y="10" width="14" height="1"/><rect x="1" y="11" width="14" height="1"/><rect x="1" y="12" width="4" height="1"/><rect x="11" y="12" width="4" height="1"/><rect x="1" y="13" width="4" height="1"/><rect x="11" y="13" width="4" height="1"/><rect x="1" y="14" width="4" height="1"/><rect x="11" y="14" width="4" height="1"/></svg>nacraft</a>
+    <div class="nav-links">
+      <a href="/#start">Quick start</a>
+      <a href="/audit.html">Audit</a>
+      <a href="/mcp.html">MCP</a>
+      <a href="/alerts.html">Alerts</a>
+      <a href="/setup-ga4.html">Configure</a>
+      <a href="/lovable.html">Lovable</a>
+      <a href="/burn.html">Badge</a>
+      <a href="/pricing.html">Pricing</a>
+    </div>
+  </div>
+</nav>
+<!-- nav:end -->
+
+<main class="doc">
+
+<div class="eyebrow">Guide</div>
+<h1>craft serve — the local API</h1>
+<div class="stamp">craft serve · a page to register a tag in, and the endpoints behind it · loopback by default</div>
+
+<div class="tldr">
+  <div class="h">What it does</div>
+  <p><code>craft serve</code> starts a small HTTP server on your own machine and opens a page in your
+  browser. Sign in with Google, pick or create a GA4 property, <b>copy the tag</b> — everything
+  <a href="/setup-ga4.html"><code>craft configure</code></a> does, without a flag to remember.</p>
+  <p>The page is only the first caller. Every endpoint it uses is below, so a script, an editor
+  extension or another service can register a tag the same way. The same binary runs
+  <a href="#container">in a container</a> when the caller is not on this machine.</p>
+</div>
+
+<h2><span class="n">01</span>Two ways to run it</h2>
+<p>One binary, two postures. Which one is in force changes exactly two things: who the bearer token
+belongs to, and whether there is an account signed in on the server at all.</p>
+
+<table class="tbl">
+  <tr><th>&nbsp;</th><th>On your machine</th><th>In a container</th></tr>
+  <tr>
+    <td>start</td>
+    <td><code>craft serve</code></td>
+    <td><code>craft serve --hosted</code></td>
+  </tr>
+  <tr>
+    <td>binds</td>
+    <td>127.0.0.1, an ephemeral port</td>
+    <td>0.0.0.0, behind your ingress</td>
+  </tr>
+  <tr>
+    <td>bearer token</td>
+    <td>minted per run and printed once</td>
+    <td>the caller's own Google access token</td>
+  </tr>
+  <tr>
+    <td>credentials</td>
+    <td>the ones <code>craft login</code> keeps, in <code>~/.anacraft</code></td>
+    <td>none kept — every request carries its own</td>
+  </tr>
+  <tr>
+    <td>sign-in</td>
+    <td><code>POST /v1/session</code> opens a browser</td>
+    <td>not offered; the caller signs in and sends the token</td>
+  </tr>
+  <tr>
+    <td>state</td>
+    <td>a default property, like the CLI</td>
+    <td>none — a property is named on every call</td>
+  </tr>
+</table>
+
+<p>Hosted mode is stateless on purpose: nothing about a caller survives their request, so a replica
+can be replaced mid-conversation and nobody notices.</p>
+<div class="tldr" style="border-left-color:var(--gold);margin:22px 0 8px;">
+  <div class="h" style="color:var(--gold)">Where this stands</div>
+  <p>The local posture is what ships today: <code>craft serve</code>, the page, and every endpoint
+  below. <b><code>--hosted</code> is not a flag yet</b> — it is the next step, and
+  <a href="#container">section 10</a> is the design it will be built to rather than a description of
+  something you can run this afternoon.</p>
+</div>
+
+<h2><span class="n">02</span>Start it on your machine</h2>
+<pre class="code"><span class="k">craft serve</span>
+
+<span class="d">  anacraft serving on http://127.0.0.1:52413</span>
+<span class="d">  token  Jc8Kq2vXn0pLd4WbT7yS1rEo9ZmHfA6uG3iN5xQa</span>
+<span class="d">  opened your browser — ctrl-c to stop</span></pre>
+
+<table class="tbl">
+  <tr><th>Flag</th><th>Default</th><th>What it does</th></tr>
+  <tr><td>--port &lt;n&gt;</td><td>an ephemeral port</td><td>Pin the port. Useful when something else has the URL written down.</td></tr>
+  <tr><td>--no-open</td><td>opens</td><td>Print the URL instead of opening a browser.</td></tr>
+  <tr><td>--token &lt;t&gt;</td><td>40 random characters</td><td>Supply the token yourself, for a script that needs to know it in advance.</td></tr>
+  <tr><td>--idle &lt;mins&gt;</td><td>60</td><td>Stop after this long with no request. <code>0</code> runs until Ctrl-C.</td></tr>
+  <tr><td>--demo</td><td>off</td><td>Synthetic everything, and no account needed. The reports answer with the
+  dashboard's demo numbers; the writes answer with a synthetic measurement id and create nothing.</td></tr>
+</table>
+
+<h2><span class="n">03</span>The page it opens</h2>
+<p>Three screens, and you are done with the second one:</p>
+<div class="step"><b>Sign in with Google.</b> The same consent screen <code>craft login</code> shows, because
+it is the same OAuth client and the same two Analytics scopes.</div>
+<div class="step"><b>Pick a property, or make one.</b> Everything the account can see, with a
+<i>new property</i> row at the top. Making one asks for the site's URL and nothing else.</div>
+<div class="step"><b>Copy the tag.</b> The gtag.js snippet with the measurement id already in both of the
+places it belongs, and a paste-ready prompt for
+<a href="/lovable.html">Lovable</a>, v0, Bolt or whatever built the site.</div>
+<p>It is the same page in both postures. Hosted, it signs in with Google in the browser and sends that
+token; local, it is handed the run token in the URL and the server holds the credentials.</p>
+
+<h2><span class="n">04</span>Talking to it yourself</h2>
+<p>JSON in, JSON out, one version prefix. Every endpoint but <code>/v1/health</code> wants a bearer
+token, and what that token <i>is</i> depends on the posture:</p>
+<pre class="code"><span class="d"># on your machine — the token the server printed</span>
+curl -s http://127.0.0.1:52413<span class="k">/v1/session</span> \
+  -H <span class="k">'Authorization: Bearer Jc8Kq2vXn0pLd4WbT7yS1rEo9ZmHfA6uG3iN5xQa'</span>
+
+<span class="d"># hosted — a Google access token carrying the Analytics scopes</span>
+curl -s https://api.anacraft.dev<span class="k">/v1/session</span> \
+  -H <span class="k">'Authorization: Bearer ya29.a0Ad…'</span></pre>
+<p>Locally the token also arrives in the URL the browser is opened with, as <code>#k=…</code>. It is in
+the fragment rather than the query so it is never sent to the server as part of a request line and
+never lands in a log; the page reads it, keeps it in memory, and clears it out of the address bar.</p>
+<p>Browsers get no help reaching it from anywhere else. Local mode answers CORS preflights for its own
+loopback origin and nothing besides; hosted mode answers for the origins you list in
+<code>ANACRAFT_SERVE_ORIGINS</code> and, again, nothing besides. There is no wildcard and no flag that
+makes one.</p>
+
+<h2><span class="n">05</span>The endpoints</h2>
+<table class="tbl">
+  <tr><th>Endpoint</th><th>Does</th><th>Needs</th></tr>
+  <tr><td>GET /v1/health</td><td>Liveness, and the version that answers.</td><td>nothing</td></tr>
+  <tr><td>GET /v1/session</td><td>Who is signed in, on what plan, with which default property.</td><td>token</td></tr>
+  <tr><td>POST /v1/session</td><td>Start the Google sign-in. Local only.</td><td>token</td></tr>
+  <tr><td>DELETE /v1/session</td><td>Revoke the credentials and forget them. Local only.</td><td>token</td></tr>
+  <tr><td>GET /v1/subscription</td><td>Plan, status, and the date it started.</td><td>account</td></tr>
+  <tr><td>POST /v1/subscription/checkout</td><td>A Stripe checkout URL, already tied to this account.</td><td>account</td></tr>
+  <tr><td>GET /v1/properties</td><td>Every GA4 property this login can see.</td><td>account</td></tr>
+  <tr><td>POST /v1/properties</td><td>Create a property and its web stream. Returns the tag.</td><td>plan</td></tr>
+  <tr><td>GET /v1/properties/{id}/streams</td><td>The web data streams on a property, with their ids.</td><td>account</td></tr>
+  <tr><td>POST /v1/properties/{id}/streams</td><td>Add a web stream to a property that has none. Returns the tag.</td><td>plan</td></tr>
+  <tr><td>PUT /v1/property</td><td>Set the default property, the way <code>craft use</code> does. Local only.</td><td>account</td></tr>
+  <tr><td>GET /v1/tag/{measurement_id}</td><td>The snippet and the paste-ready prompt for an id you already have.</td><td>token</td></tr>
+  <tr><td>GET /v1/overview</td><td>Users, sessions, views, key events, bounce, duration, with deltas.</td><td>account</td></tr>
+  <tr><td>GET /v1/pages</td><td>Most-visited pages.</td><td>account</td></tr>
+  <tr><td>GET /v1/events</td><td>Events by count, against the previous period.</td><td>account</td></tr>
+  <tr><td>GET /v1/sources</td><td>Source / medium pairs by sessions.</td><td>account</td></tr>
+  <tr><td>GET /v1/referrers</td><td>Referring pages by sessions.</td><td>account</td></tr>
+  <tr><td>GET /v1/countries</td><td>Users by country.</td><td>account</td></tr>
+  <tr><td>GET /v1/live</td><td>Who is on the site right now, by country.</td><td>account</td></tr>
+  <tr><td>GET /v1/audit</td><td>What is wrong with how the property measures. Reads only.</td><td>plan</td></tr>
+</table>
+<p><b>token</b> means the bearer token and nothing else. <b>account</b> means a Google account is
+signed in — locally, that somebody ran the sign-in; hosted, that the bearer token is a live Google
+one. <b>plan</b> means the subscription the equivalent command needs, and an account without it gets
+a <a href="#errors">402 carrying a checkout URL</a> rather than a refusal.</p>
+
+<h2><span class="n">06</span>Signing in</h2>
+<p>Local mode owns the flow, because it owns the credentials. <code>POST /v1/session</code> opens the
+same browser window <code>craft login</code> does and returns immediately; the page polls until the
+answer changes.</p>
+<pre class="code">POST <span class="k">/v1/session</span>
+<span class="d">→ 202  { "state": "pending" }</span>
+
+GET <span class="k">/v1/session</span>
+<span class="d">→ 200  { "signed_in": false, "state": "pending" }</span>
+<span class="d">→ 200  { "signed_in": true,</span>
+<span class="d">         "state": "signed_in",</span>
+<span class="d">         "email": "you@example.com",</span>
+<span class="d">         "account_id": "1080…",</span>
+<span class="d">         "subscribed": true,</span>
+<span class="d">         "tier": "pro",</span>
+<span class="d">         "demo": false,</span>
+<span class="d">         "property": { "id": "397412345", "name": "My app" },</span>
+<span class="d">         "version": "0.25.0" }</span></pre>
+<p><code>state</code> is one of <code>idle</code>, <code>pending</code>, <code>signed_in</code> or
+<code>failed</code>; a <code>failed</code> one carries the reason in <code>error</code>, so a page
+polling this can say what went wrong rather than spinning. <code>tier</code> and
+<code>subscribed</code> are asked of the subscription service on every call, which is how a payment
+made on another machine thirty seconds ago is already true here.</p>
+<p>Hosted mode has no browser to open and nowhere to keep what would come back, so it answers
+<code>409 not_supported</code> and expects the caller to have signed in themselves. A hosted
+<code>GET /v1/session</code> describes the bearer token it was handed: the address on it, the scopes it
+carries, and what the subscription service says about the account.</p>
+
+<h2><span class="n">07</span>Registering a tag</h2>
+<p>The whole point, in one call. It creates the property, adds the web data stream, reads the
+measurement id back, and returns the two blocks of text somebody actually needs.</p>
+<pre class="code">POST <span class="k">/v1/properties</span>
+<span class="d">{ "url": "https://myapp.lovable.app",</span>
+<span class="d">  "name": "My app",            // optional, defaults to the host</span>
+<span class="d">  "account": "accounts/12345"  // optional when the login has one</span>
+<span class="d">}</span>
+
+<span class="d">→ 200  { "property": { "id": "397890123", "name": "My app" },</span>
+<span class="d">         "host": "myapp.lovable.app",</span>
+<span class="d">         "action": "created",     // or "reused", or "finished"</span>
+<span class="d">         "measurement_id": "G-1A2BCD345E",</span>
+<span class="d">         "default_uri": "https://myapp.lovable.app",</span>
+<span class="d">         "tag": "&lt;!-- Google tag (gtag.js) --&gt;\n&lt;script async …",</span>
+<span class="d">         "prompt": "Add Google Analytics 4 to this app.\n\nPaste this tag …" }</span></pre>
+<p><code>action</code> is the honest part. A site that already has a property gets
+<code>reused</code> and nothing is created — running this twice is the normal way to get a tag back,
+and a second property for the same site would split its numbers in two with nothing to say so until a
+week had gone to the wrong one. <code>finished</code> means the property was there and its web stream
+was not.</p>
+<p><code>tag</code> is the gtag.js snippet with the id in both of the places it belongs — the single
+commonest broken install is an id pasted into the <code>src</code> and left as a placeholder in the
+<code>config</code> call. <code>prompt</code> wraps it in instructions for an agent, and rules out the
+three ways one usually improves on it: an npm wrapper, a second tag, and a hand-rolled page view on
+route changes that counts every navigation twice.</p>
+<p>A property that already exists takes the second half on its own:</p>
+<pre class="code">GET  <span class="k">/v1/properties/397890123/streams</span>
+<span class="d">→ 200  { "streams": [ { "measurement_id": "G-1A2BCD345E",</span>
+<span class="d">                       "url": "https://myapp.lovable.app",</span>
+<span class="d">                       "name": "myapp.lovable.app" } ] }</span>
+
+POST <span class="k">/v1/properties/397890123/streams</span>
+<span class="d">{ "url": "https://myapp.lovable.app" }</span>
+<span class="d">→ 201  { "measurement_id": "G-…", "tag": "…", "prompt": "…" }</span></pre>
+<p>These two writes are the only ones in the API, and they are the two
+<a href="/oauth-scopes.md">the scope submission describes</a>:
+<code>properties.create</code> and <code>dataStreams.create</code>. Nothing here updates or deletes
+anything in an Analytics account — <code>craft delete</code> stays a command somebody has to type.</p>
+
+<h2><span class="n">08</span>Reading the numbers</h2>
+<p>The read endpoints take the same two parameters and answer the same shape.</p>
+<table class="tbl">
+  <tr><th>Parameter</th><th>Default</th><th>Notes</th></tr>
+  <tr><td>property</td><td>the default property</td><td>Required in hosted mode, which keeps no default.</td></tr>
+  <tr><td>days</td><td>7</td><td>1 to 365, clamped. Ignored by <code>/v1/live</code>, which is now.</td></tr>
+  <tr><td>limit</td><td>10</td><td>Rows, where there are rows. 1 to 100, clamped.</td></tr>
+  <tr><td>q</td><td>—</td><td>Substring filter on <code>/v1/pages</code> and <code>/v1/events</code>.</td></tr>
+</table>
+<pre class="code">GET <span class="k">/v1/pages?property=397890123&amp;days=7&amp;limit=3</span>
+<span class="d">→ 200  { "property": "397890123",</span>
+<span class="d">         "window": { "from": "2026-09-12", "to": "2026-09-18" },</span>
+<span class="d">         "rows": [ { "page": "/", "views": 6714 },</span>
+<span class="d">                   { "page": "/pricing", "views": 3917 },</span>
+<span class="d">                   { "page": "/blog", "views": 2136 } ] }</span></pre>
+<p>Every answer carries the property and the window it covers, so a caller quoting a number can say
+what it is a number <i>of</i>. Identical reports are cached for a minute, which is what keeps a chatty
+caller from spending the API quota the dashboard needs.</p>
+
+<h2 id="errors"><span class="n">09</span>When it says no</h2>
+<pre class="code"><span class="d">{ "error": { "code": "payment_required",</span>
+<span class="d">             "message": "Creating a property needs the Anacrafter plan.",</span>
+<span class="d">             "checkout_url": "https://buy.stripe.com/…" } }</span></pre>
+<table class="tbl">
+  <tr><th>Status</th><th>Code</th><th>Means</th></tr>
+  <tr><td>400</td><td>bad_request</td><td>A parameter is missing or not the shape it has to be.</td></tr>
+  <tr><td>401</td><td>unauthorized</td><td>No bearer token, or not one this server trusts.</td></tr>
+  <tr><td>402</td><td>payment_required</td><td>The call needs a plan. <code>checkout_url</code> is where to get one.</td></tr>
+  <tr><td>403</td><td>forbidden</td><td>Google refused: the account lacks Viewer on the property, or Editor on the account.</td></tr>
+  <tr><td>404</td><td>not_found</td><td>No such property, stream, or route.</td></tr>
+  <tr><td>409</td><td>not_signed_in</td><td>Nothing is signed in. Locally, start a session; hosted, send a live token.</td></tr>
+  <tr><td>409</td><td>not_supported</td><td>The posture cannot do this — a write under <code>--demo</code>, or an
+  interactive sign-in in a container.</td></tr>
+  <tr><td>429</td><td>rate_limited</td><td>Google is throttling, or this server is. <code>Retry-After</code> says how long.</td></tr>
+  <tr><td>500</td><td>no_client</td><td>This build has no OAuth client compiled in, so there is nothing to sign in
+  with. A release binary has one; a <code>cargo build</code> of your own needs
+  <a href="/oauth-scopes.md">its own</a>.</td></tr>
+  <tr><td>502</td><td>google</td><td>Google answered something unexpected; its message is passed through whole.</td></tr>
+</table>
+
+<h2 id="container"><span class="n">10</span>In a container</h2>
+<p><code>--hosted</code> is the whole difference: bind every interface, keep no credentials, trust no
+default property, and read the caller's identity off their own Google token. Behind an ingress at a
+name like <code>api.anacraft.dev</code>, that is an API anything can call.</p>
+<pre class="code"><span class="d"># the image is the binary and nothing else</span>
+FROM gcr.io/distroless/cc-debian12
+COPY craft /usr/local/bin/craft
+EXPOSE 8080
+ENTRYPOINT [<span class="k">"craft"</span>, <span class="k">"serve"</span>, <span class="k">"--hosted"</span>, <span class="k">"--port"</span>, <span class="k">"8080"</span>]</pre>
+<table class="tbl">
+  <tr><th>Variable</th><th>Notes</th></tr>
+  <tr><td>ANACRAFT_SERVE_ORIGINS</td><td>Comma-separated browser origins allowed to call it. No wildcard is accepted.</td></tr>
+  <tr><td>ANACRAFT_SUPABASE_URL</td><td>The subscription service, for the plan checks.</td></tr>
+  <tr><td>ANACRAFT_SUPABASE_KEY</td><td>The publishable key. It reaches two functions and nothing else.</td></tr>
+  <tr><td>ANACRAFT_SERVE_RATE</td><td>Requests a minute per account. Defaults to something sane and low.</td></tr>
+</table>
+<p>The OAuth client variables are not on that list, and must not be set: a hosted server never runs a
+sign-in, so a client secret in its environment would be a secret with no job and a blast radius.
+<code>/v1/health</code> is the liveness probe and needs no token; readiness is the same endpoint,
+since a process that answers is a process that can work.</p>
+<p>Two things are yours rather than the binary's. TLS, which belongs at the ingress — the server speaks
+plain HTTP and will not pretend otherwise. And the fact that a Google access token now crosses a
+network to reach it: it is used for the call the caller asked for and never written down, but a
+hosted deployment is a place someone else's token passes through, which is a thing to know before
+you run one for other people.</p>
+
+<h2><span class="n">11</span>What it will not do</h2>
+<ul>
+  <li><b>Bind anything but loopback</b> unless <code>--hosted</code> was typed. There is no flag that
+  quietly widens it.</li>
+  <li><b>Answer without a token.</b> One endpoint is open, and it returns a version string.</li>
+  <li><b>Trust an origin it was not told about.</b> No wildcard CORS, in either posture.</li>
+  <li><b>Write anything to an Analytics account beyond the two creates above.</b> No updates, no
+  deletes, no key events — those live behind commands a person runs.</li>
+  <li><b>Keep credentials in hosted mode.</b> Nothing is written to disk; the image can run read-only.</li>
+</ul>
+
+<h2><span class="n">12</span>Questions</h2>
+<h3>Why a server, when there is already a CLI?</h3>
+<p>Because registering a tag is the one thing people do before they have any reason to trust a
+terminal. A page with three screens gets somebody from <i>nothing</i> to <i>a measurement id in the
+clipboard</i>, and the endpoints underneath mean the second caller does not have to be a person.</p>
+<h3>Can I run it for other people?</h3>
+<p>Yes, with <code>--hosted</code>, and knowing what the last paragraph of
+<a href="#container">section 10</a> says. Each caller brings their own Google token and their own
+subscription, so there is no shared account to leak.</p>
+<h3>Does it work without a Google account?</h3>
+<p><code>craft serve --demo</code> answers <i>everything</i> synthetically: the reports carry the
+dashboard's demo numbers, the property list has one demo property in it, and registering a tag hands
+back <code>G-DEMO1A2B3C4D</code> having created nothing. The whole page can be walked that way, which
+is how it is tested. The two calls that would change something on this machine — saving a default
+property, starting a checkout — refuse by name rather than pretending, because a demo that quietly
+wrote into a real Analytics account because credentials happened to be on the disk is the worst
+surprise this could hold.</p>
+
+</main>
+
+<div class="wrap">
+<!-- footer:start -->
+<footer>
+  <div class="wrap" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;width:100%">
+    <span class="by"><span class="tag">crafted</span> in San Francisco <svg class="heart" role="img" aria-label="love" viewBox="0 0 9 8" fill="var(--jade)" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="0" width="2" height="1"/><rect x="6" y="0" width="2" height="1"/><rect x="0" y="1" width="1" height="1"/><rect x="3" y="1" width="1" height="1"/><rect x="5" y="1" width="1" height="1"/><rect x="8" y="1" width="1" height="1"/><rect x="0" y="2" width="1" height="1"/><rect x="4" y="2" width="1" height="1"/><rect x="8" y="2" width="1" height="1"/><rect x="0" y="3" width="1" height="1"/><rect x="8" y="3" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="7" y="4" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/><rect x="6" y="5" width="1" height="1"/><rect x="3" y="6" width="1" height="1"/><rect x="5" y="6" width="1" height="1"/><rect x="4" y="7" width="1" height="1"/></svg></span>
+    <span class="legal">© 2026 · All rights reserved</span>
+    <span class="ver">v0.24.0</span>
+    <span class="r">
+      <a href="/privacy.html">Privacy Policy</a>
+      <a href="/terms.html">Terms of Service</a>
+      <a href="mailto:support@anacraft.dev">support@anacraft.dev</a>
+    </span>
+  </div>
+</footer>
+<!-- footer:end -->
+</div>
+
+</body>
+</html>

@@ -516,7 +516,12 @@ fn tool_result(value: Value, is_error: bool) -> Value {
 
 /// Every answer says which property it is about and which days it covers, so an
 /// assistant can attribute the numbers it quotes.
-fn envelope(property: &str, name: Option<&str>, days: Option<u32>, payload: Value) -> Value {
+pub(crate) fn envelope(
+    property: &str,
+    name: Option<&str>,
+    days: Option<u32>,
+    payload: Value,
+) -> Value {
     let mut out = json!({ "property": property });
     let object = out.as_object_mut().expect("built as an object");
 
@@ -811,7 +816,7 @@ fn tool_schemas() -> Vec<Value> {
 
 // ------------------------------------------------------------------ reports ---
 
-async fn site_status(ga: &Ga, property: &str, days: u32) -> Result<Value> {
+pub(crate) async fn site_status(ga: &Ga, property: &str, days: u32) -> Result<Value> {
     let metrics: Vec<&str> = OVERVIEW.iter().map(|m| m.api).collect();
 
     let (current, previous, trend) = tokio::try_join!(
@@ -910,7 +915,7 @@ pub(crate) fn status_payload(
 /// One dimension, ranked by one metric, optionally narrowed to rows containing
 /// a substring — every `list_*` and `search_*` tool but `list_events` and
 /// `list_properties` is this function with different arguments.
-async fn ranked(
+pub(crate) async fn ranked(
     ga: &Ga,
     property: &str,
     days: u32,
@@ -960,7 +965,7 @@ fn ranked_payload(dimension: &str, metric: &str, rows: &[(String, f64)]) -> Valu
 
 /// Events want two answers at once — which ones fire, and whether they are
 /// firing more than they were — so this one doesn't fit `ranked`.
-async fn list_events(ga: &Ga, property: &str, days: u32, limit: i64) -> Result<Value> {
+pub(crate) async fn list_events(ga: &Ga, property: &str, days: u32, limit: i64) -> Result<Value> {
     let by_day = |range| {
         ReportRequest::new(&["eventCount"])
             .by(&["date"])
@@ -1017,7 +1022,7 @@ fn events_payload(
     payload
 }
 
-async fn live_visitors(ga: &Ga, property: &str) -> Result<Value> {
+pub(crate) async fn live_visitors(ga: &Ga, property: &str) -> Result<Value> {
     let report = ga
         .realtime(
             property,
@@ -1201,7 +1206,7 @@ pub(crate) fn iso_date(raw: &str) -> String {
 /// Synthetic answers for `craft mcp --demo`, shaped like the small site having
 /// a good week that `craft dash --demo` shows. Fixed rather than random: the
 /// demo is what the tests run against, and a moving number is not a fixture.
-mod demo {
+pub(crate) mod demo {
     use super::*;
 
     const PROPERTY: &str = "demo";

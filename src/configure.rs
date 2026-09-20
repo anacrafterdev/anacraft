@@ -840,6 +840,39 @@ pub(crate) fn tag_snippet(measurement_id: &str) -> String {
     )
 }
 
+/// The snippet wrapped in instructions, for handing to the agent that built
+/// the site rather than to the person who owns it.
+///
+/// Lovable, v0 and Bolt all take a paste in a chat box, and all three will
+/// happily improve on a tag they are handed. The three ways they do it are
+/// named here and ruled out: an npm wrapper instead of the tag, a second tag
+/// beside the one already in the project, and a hand-rolled page view on route
+/// changes — which GA4's enhanced measurement already sends from history
+/// events, so adding one counts every navigation twice.
+///
+/// The tag is embedded rather than described, so there is exactly one place in
+/// this binary that knows what a gtag.js snippet looks like.
+pub(crate) fn tag_prompt(measurement_id: &str) -> String {
+    format!(
+        "Add Google Analytics 4 to this app.\n\n\
+         Paste this tag into index.html as the last thing inside <head>, \
+         exactly as written:\n\n\
+         {tag}\n\n\
+         Rules:\n\
+         - Keep the measurement ID {measurement_id} exactly as it is, in both \
+         of the places it appears.\n\
+         - Do not install an analytics npm package or a React wrapper. The tag \
+         is the whole job.\n\
+         - If the project already has a Google Analytics tag, replace it. Two \
+         tags double every number.\n\
+         - Do not send your own page_view on route changes. GA4 already counts \
+         them from history events, and a second one counts every navigation \
+         twice.\n\n\
+         Then publish the project so the tag goes live.",
+        tag = tag_snippet(measurement_id),
+    )
+}
+
 fn print_next(host: &str) {
     println!(
         "  {} then {} to watch {host} arrive\n",

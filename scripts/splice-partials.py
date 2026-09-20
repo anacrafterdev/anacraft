@@ -27,6 +27,7 @@ PAGES = [
     "alerts.html",
     "audit.html",
     "mcp.html",
+    "serve.html",
     "setup-ga4.html",
     "pricing.html",
     "lovable.html",

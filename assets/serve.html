@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>anacraft — get your GA4 tag</title>
+  <!-- Served by `craft serve` off a machine that may have no network at all,
+       so everything is here: no font, no stylesheet, no script from anywhere
+       else. The palette is the dashboard's. -->
+  <style>
+    :root {
+      --ground: #060a09;
+      --ink: #09100d;
+      --panel: #0d1512;
+      --line: rgba(193, 196, 151, .11);
+      --line-2: rgba(193, 196, 151, .20);
+      --fg: #c1c497;
+      --white: #eef1dc;
+      --dim: #6c7f73;
+      --jade: #2dd5b7;
+      --jade-deep: #509475;
+      --gold: #ffe16b;
+      --coral: #ff5345;
+      --on-accent: #09100d;
+      --mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--ground);
+      color: var(--fg);
+      font-family: var(--sans);
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+      padding: 48px 24px 72px;
+    }
+
+    ::selection { background: var(--jade); color: #04120e; }
+
+    .wrap { max-width: 720px; margin: 0 auto; }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--jade-deep);
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      font-family: var(--sans);
+      font-weight: 800;
+      font-size: clamp(26px, 5vw, 38px);
+      letter-spacing: -.035em;
+      line-height: 1.05;
+      color: var(--white);
+    }
+
+    .lede { margin-top: 12px; max-width: 54ch; color: var(--dim); font-size: 15px; }
+
+    .card {
+      margin-top: 32px;
+      background: var(--panel);
+      border: 1px solid var(--line-2);
+    }
+
+    .head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 20px;
+      border-bottom: 1px solid var(--line);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+
+    .dot { width: 7px; height: 7px; background: var(--jade-deep); flex: none; }
+    .card[data-state="out"] .dot { background: var(--jade); }
+    .card[data-state="err"] .dot { background: var(--coral); }
+    .who { margin-left: auto; letter-spacing: .04em; color: var(--jade-deep); text-transform: none; }
+
+    .body { padding: 26px 24px; }
+    .pane { display: none; }
+    .pane.on { display: block; }
+
+    h2 { font-size: 19px; font-weight: 700; letter-spacing: -.02em; color: var(--white); }
+    p { margin-top: 10px; font-size: 14.5px; color: var(--dim); max-width: 54ch; }
+    code { font-family: var(--mono); font-size: 12.5px; color: var(--jade); }
+
+    button { font: inherit; cursor: pointer; border-radius: 0; }
+
+    .go {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 22px;
+      background: var(--ink);
+      border: 1px solid var(--line-2);
+      padding: 13px 20px;
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--white);
+      transition: border-color .15s, background .15s;
+    }
+
+    .go:hover { border-color: var(--jade); }
+    .go[disabled] { opacity: .5; cursor: default; }
+    .go svg { width: 17px; height: 17px; display: block; flex: none; }
+
+    .primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 18px;
+      background: var(--jade);
+      color: var(--on-accent);
+      border: 1px solid var(--jade);
+      padding: 12px 22px;
+      font-weight: 700;
+      font-size: 14.5px;
+    }
+
+    .primary:hover { filter: brightness(1.07); }
+    .primary.done { background: none; color: var(--jade); }
+
+    .lnk {
+      background: none;
+      border: 0;
+      padding: 0;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--dim);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    .lnk:hover { color: var(--jade); }
+    .acts { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-top: 22px; }
+
+    .fine {
+      margin-top: 16px;
+      max-width: 62ch;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.95;
+      color: var(--dim);
+    }
+
+    .work { font-family: var(--mono); font-size: 13px; color: var(--fg); }
+    .work::after { content: '▍'; color: var(--jade); margin-left: 3px; animation: caret 1.05s steps(1) infinite; }
+    @keyframes caret { 50% { opacity: 0 } }
+    @media (prefers-reduced-motion: reduce) { .work::after { animation: none } }
+
+    .list { margin-top: 18px; border-top: 1px solid var(--line); max-height: 320px; overflow-y: auto; }
+
+    .row {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      padding: 13px 8px;
+      color: inherit;
+      transition: background .12s;
+    }
+
+    .row:hover, .row:focus-visible { background: var(--ink); outline: none; }
+    .row .nm { font-size: 14.5px; color: var(--white); overflow-wrap: anywhere; }
+    .row .id { font-family: var(--mono); font-size: 11.5px; color: var(--jade-deep); }
+    .row .ac { margin-left: auto; padding-left: 12px; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+    .row.make .nm { color: var(--jade); }
+
+    .empty { padding: 16px 8px; font-family: var(--mono); font-size: 12px; color: var(--dim); }
+
+    label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin: 20px 0 7px;
+    }
+
+    input, select {
+      width: 100%;
+      max-width: 440px;
+      background: var(--ink);
+      border: 1px solid var(--line-2);
+      color: var(--white);
+      font-family: var(--mono);
+      font-size: 13px;
+      padding: 11px 12px;
+    }
+
+    input:focus, select:focus { outline: none; border-color: var(--jade); }
+
+    .price { display: flex; align-items: baseline; gap: 12px; margin-top: 20px; }
+    .price .fig { font-size: 36px; font-weight: 800; letter-spacing: -.04em; color: var(--white); line-height: 1; }
+    .price .per { font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+
+    .mid {
+      margin-top: 18px;
+      font-family: var(--mono);
+      font-weight: 700;
+      font-size: clamp(22px, 5vw, 30px);
+      color: var(--gold);
+      overflow-wrap: anywhere;
+    }
+
+    .sub { margin-top: 6px; font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+    .tabs { display: flex; margin-top: 24px; border-bottom: 1px solid var(--line); }
+
+    .tab {
+      background: none;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      padding: 9px 14px;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+
+    .tab[aria-selected="true"] { color: var(--white); border-bottom-color: var(--jade); }
+
+    pre {
+      background: var(--ink);
+      border: 1px solid var(--line);
+      border-top: 0;
+      padding: 20px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.85;
+      color: var(--white);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .next { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
+
+    .cmd {
+      display: inline-flex;
+      gap: 10px;
+      background: var(--ink);
+      border: 1px solid var(--line-2);
+      padding: 11px 14px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--white);
+    }
+
+    .cmd .p { color: var(--jade-deep); }
+
+    .err {
+      border-left: 3px solid var(--coral);
+      background: var(--ink);
+      padding: 15px 18px;
+      font-size: 14.5px;
+      color: var(--fg);
+      max-width: 62ch;
+    }
+
+    .err b {
+      display: block;
+      margin-bottom: 7px;
+      font-family: var(--mono);
+      font-weight: 400;
+      font-size: 10.5px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--coral);
+    }
+
+    footer { margin-top: 28px; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+    footer a { color: var(--jade-deep); }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <svg width="13" height="13" viewBox="1 1 14 14" shape-rendering="crispEdges" fill="var(--jade)"
+        aria-hidden="true">
+        <rect x="6" y="1" width="4" height="1" />
+        <rect x="5" y="2" width="6" height="1" />
+        <rect x="4" y="3" width="8" height="1" />
+        <rect x="4" y="4" width="8" height="1" />
+        <rect x="3" y="5" width="4" height="1" />
+        <rect x="9" y="5" width="4" height="1" />
+        <rect x="3" y="6" width="4" height="1" />
+        <rect x="9" y="6" width="4" height="1" />
+        <rect x="2" y="7" width="4" height="1" />
+        <rect x="10" y="7" width="4" height="1" />
+        <rect x="2" y="8" width="4" height="1" />
+        <rect x="10" y="8" width="4" height="1" />
+        <rect x="1" y="9" width="4" height="1" />
+        <rect x="11" y="9" width="4" height="1" />
+        <rect x="1" y="10" width="14" height="1" />
+        <rect x="1" y="11" width="14" height="1" />
+        <rect x="1" y="12" width="4" height="1" />
+        <rect x="11" y="12" width="4" height="1" />
+        <rect x="1" y="13" width="4" height="1" />
+        <rect x="11" y="13" width="4" height="1" />
+        <rect x="1" y="14" width="4" height="1" />
+        <rect x="11" y="14" width="4" height="1" />
+      </svg>
+      anacraft
+    </div>
+
+    <h1>Get your GA4 tag.</h1>
+    <p class="lede">
+      Sign in with Google, pick or create the property for your site, and copy
+      the tag. This page is served by <code>craft serve</code> on your own
+      machine — nothing here leaves it but the calls to Google.
+    </p>
+
+    <div class="card" id="card" data-state="boot">
+      <div class="head">
+        <span class="dot" aria-hidden="true"></span>
+        <span>ga4 tag</span>
+        <span class="who" id="who"></span>
+      </div>
+      <div class="body">
+
+        <div class="pane on" data-pane="boot">
+          <div class="work" id="boot">starting up</div>
+        </div>
+
+        <!-- the token never arrived, so this page is a page and nothing more -->
+        <div class="pane" data-pane="nokey">
+          <h2>Open the URL the terminal printed</h2>
+          <p>
+            This page needs the token <code>craft serve</code> minted when it
+            started — it travels in the part of the URL after the
+            <code>#</code>, which a request never carries. Copy the whole line
+            from the terminal, including the <code>#k=…</code>, and open that.
+          </p>
+        </div>
+
+        <div class="pane" data-pane="signin">
+          <h2>Sign in with Google</h2>
+          <p>
+            The same consent screen <code>craft login</code> shows, because it
+            is the same client and the same two Analytics scopes. The
+            credentials are kept by the CLI, on this machine.
+          </p>
+          <button class="go" id="signin" type="button">
+            <svg viewBox="0 0 18 18" aria-hidden="true">
+              <path fill="#4285F4"
+                d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z" />
+              <path fill="#34A853"
+                d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z" />
+              <path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z" />
+              <path fill="#EA4335"
+                d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.9 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
+            </svg>
+            Sign in with Google
+          </button>
+          <p class="fine" id="signin-note"></p>
+        </div>
+
+        <div class="pane" data-pane="work">
+          <div class="work" id="work">working</div>
+        </div>
+
+        <div class="pane" data-pane="pay">
+          <h2>Unlock the tag</h2>
+          <p>
+            Creating a property and minting a measurement ID is the paid half
+            of anacraft — the same job <code>craft configure</code> does. Any
+            plan covers it.
+          </p>
+          <div class="price">
+            <span class="fig" id="price">$2.99</span>
+            <span class="per">per month · cancel any time</span>
+          </div>
+          <button class="primary" id="pay" type="button">Continue to checkout →</button>
+          <div class="work" id="waiting" hidden>waiting for Stripe</div>
+          <p class="fine">
+            Stripe opens in a new tab; this page notices by itself and carries
+            on. Already subscribed?
+            <button class="lnk" id="recheck" type="button">check again</button>
+          </p>
+        </div>
+
+        <div class="pane" data-pane="pick">
+          <h2>Pick this site's property</h2>
+          <p>One property per site, so each site's numbers are its own.</p>
+          <div class="list" id="rows"></div>
+          <div class="acts">
+            <button class="lnk" id="signout" type="button">sign out</button>
+          </div>
+        </div>
+
+        <div class="pane" data-pane="stream">
+          <h2>More than one website here</h2>
+          <p>Each web data stream has its own measurement ID. Pick this site's.</p>
+          <div class="list" id="streams"></div>
+          <div class="acts">
+            <button class="lnk" id="back-1" type="button">back to the properties</button>
+          </div>
+        </div>
+
+        <div class="pane" data-pane="new">
+          <h2 id="new-h">A new property</h2>
+          <p id="new-p"></p>
+          <label for="url">Your site's URL</label>
+          <input id="url" type="url" inputmode="url" placeholder="https://myapp.lovable.app">
+          <div class="acts">
+            <button class="primary" id="create" type="button" style="margin-top:0">Create the property</button>
+            <button class="lnk" id="back-2" type="button">back to the list</button>
+          </div>
+          <p class="fine">
+            Reused if this site already has a property — the same check
+            <code>craft configure</code> makes before it creates anything.
+          </p>
+        </div>
+
+        <div class="pane" data-pane="out">
+          <h2>Your tag is ready</h2>
+          <div class="mid" id="mid"></div>
+          <div class="sub" id="sub"></div>
+
+          <div class="tabs" role="tablist" aria-label="What to copy">
+            <button class="tab" type="button" role="tab" aria-selected="true" data-tab="prompt">Paste to the
+              agent</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" data-tab="tag">Raw tag</button>
+          </div>
+          <pre id="paste"></pre>
+          <button class="primary" id="copy" type="button"><span id="copy-label">Copy</span></button>
+          <p class="fine" id="hint"></p>
+
+          <div class="next">
+            <p id="next-p">Read it from the terminal whenever you like:</p>
+            <div class="cmd"><span class="p">$</span><span id="cmd">craft dash</span></div>
+            <div class="acts">
+              <button class="lnk" id="default" type="button">make this the default property</button>
+              <button class="lnk" id="another" type="button">pick a different property</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="pane" data-pane="err">
+          <div class="err"><b>that did not work</b><span id="msg"></span></div>
+          <div class="acts">
+            <button class="go" id="retry" type="button" style="margin-top:0">Try again</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <footer>
+      the endpoints behind this page: <a href="https://anacraft.dev/serve.html">anacraft.dev/serve.html</a>
+    </footer>
+  </div>
+
+  <script>
+    /* The page `craft serve` opens.
+     *
+     * It knows nothing about Google or Stripe. Every question it has goes to
+     * the server that served it — which is the CLI, holding the credentials it
+     * already had — so this file is a view and the binary stays the one place
+     * that decides anything.
+     */
+    (function () {
+      // The token rides in the fragment, which is never sent to a server and
+      // so never lands in a log. Read once, kept in memory, and wiped from the
+      // address bar so a shoulder or a screenshot does not carry it.
+      var token = (location.hash.match(/(?:^|[#&])k=([^&]+)/) || [])[1] || '';
+      if (token) { history.replaceState(null, '', location.pathname); }
+
+      var card = document.getElementById('card');
+      var $ = function (id) { return document.getElementById(id); };
+
+      var chosen = null;     // the property being worked on
+      var texts = { prompt: '', tag: '' };
+      var poll = null;
+
+      function show(name) {
+        card.dataset.state = name;
+        var panes = card.querySelectorAll('.pane');
+        for (var i = 0; i < panes.length; i++) {
+          panes[i].classList.toggle('on', panes[i].dataset.pane === name);
+        }
+      }
+
+      function busy(what) { $('work').textContent = what; show('work'); }
+      function stop(err) { $('msg').textContent = (err && err.message) || String(err); show('err'); }
+
+      /* One door to the server, and one place errors are turned into
+       * something a person can read. A 402 is not an error here — it is the
+       * paywall answering, and it carries where to pay. */
+      function api(method, path, body) {
+        return fetch(path, {
+          method: method,
+          headers: {
+            authorization: 'Bearer ' + token,
+            'content-type': 'application/json'
+          },
+          body: body ? JSON.stringify(body) : undefined
+        }).then(function (res) {
+          return res.json().catch(function () { return {}; }).then(function (data) {
+            if (res.ok) { return data; }
+            var err = new Error((data.error && data.error.message) || ('the server answered ' + res.status));
+            err.code = data.error && data.error.code;
+            err.checkout = data.error && data.error.checkout_url;
+            throw err;
+          });
+        });
+      }
+
+      // ── where we are ────────────────────────────────────────────────
+
+      function begin() {
+        if (!token) { return show('nokey'); }
+        $('boot').textContent = 'asking the CLI where you stand';
+        return api('GET', '/v1/session').then(land).catch(stop);
+      }
+
+      function land(session) {
+        $('who').textContent = session.email
+          ? session.email + (session.tier ? ' · ' + session.tier : '')
+          : '';
+
+        if (!session.signed_in) {
+          if (session.state === 'pending') { return watchLogin(); }
+          $('signin-note').textContent = session.error
+            ? 'last attempt: ' + session.error
+            : 'craft serve is holding the credentials; this page never sees them.';
+          return show('signin');
+        }
+        if (!session.subscribed) { return show('pay'); }
+        return list();
+      }
+
+      function refresh() { return api('GET', '/v1/session').then(land); }
+
+      // ── signing in ──────────────────────────────────────────────────
+
+      $('signin').addEventListener('click', function () {
+        busy('opening the Google window');
+        api('POST', '/v1/session').then(watchLogin).catch(stop);
+      });
+
+      /* The sign-in happens in another window and finishes on its own time, so
+       * this asks the CLI every second whether it is done yet. */
+      function watchLogin() {
+        busy('waiting for Google — finish in the window that opened');
+        clearInterval(poll);
+        poll = setInterval(function () {
+          api('GET', '/v1/session').then(function (session) {
+            if (session.state === 'pending') { return; }
+            clearInterval(poll);
+            land(session);
+          }).catch(function () { });
+        }, 1000);
+      }
+
+      $('signout').addEventListener('click', function () {
+        busy('signing out');
+        api('DELETE', '/v1/session').then(begin).catch(stop);
+      });
+
+      // ── paying ──────────────────────────────────────────────────────
+
+      api('GET', '/v1/subscription').then(function (sub) {
+        var basic = (sub.plans || []).filter(function (p) { return p.plan === 'basic'; })[0];
+        if (basic) { $('price').textContent = basic.price; }
+      }).catch(function () { });
+
+      $('pay').addEventListener('click', function () {
+        $('pay').disabled = true;
+        api('POST', '/v1/subscription/checkout', { plan: 'basic' }).then(function (out) {
+          window.open(out.url, '_blank', 'noopener');
+          $('waiting').hidden = false;
+          watchPayment();
+        }).catch(function (err) { $('pay').disabled = false; stop(err); });
+      });
+
+      function watchPayment() {
+        var until = Date.now() + 10 * 60 * 1000;
+        clearInterval(poll);
+        poll = setInterval(function () {
+          if (Date.now() > until) {
+            clearInterval(poll);
+            $('waiting').textContent = 'gave up waiting — if the payment went through, check again';
+            $('pay').disabled = false;
+            return;
+          }
+          api('GET', '/v1/session').then(function (session) {
+            if (!session.subscribed) { return; }
+            clearInterval(poll);
+            $('waiting').hidden = true;
+            $('pay').disabled = false;
+            land(session);
+          }).catch(function () { });
+        }, 4000);
+      }
+
+      $('recheck').addEventListener('click', function () {
+        busy('asking about your subscription');
+        refresh().catch(stop);
+      });
+
+      // ── the property ────────────────────────────────────────────────
+
+      function row(name, id, account, onPick, make) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'row' + (make ? ' make' : '');
+        [['nm', name], ['id', id], ['ac', account]].forEach(function (pair) {
+          if (!pair[1]) { return; }
+          var span = document.createElement('span');
+          span.className = pair[0];
+          // Property names are somebody's typing, so they arrive as text and
+          // never as markup.
+          span.textContent = pair[1];
+          b.appendChild(span);
+        });
+        b.addEventListener('click', onPick);
+        return b;
+      }
+
+      function list() {
+        busy('reading the properties this login can see');
+        return api('GET', '/v1/properties').then(function (data) {
+          var rows = $('rows');
+          rows.textContent = '';
+          rows.appendChild(row('+  Create a new property', '', '', function () { form(); }, true));
+          (data.properties || []).forEach(function (p) {
+            rows.appendChild(row(p.name, p.id, p.account, function () { pick(p); }));
+          });
+          if (!(data.properties || []).length) {
+            var empty = document.createElement('div');
+            empty.className = 'empty';
+            empty.textContent = 'no GA4 properties on this account yet — make the first one above';
+            rows.appendChild(empty);
+          }
+          show('pick');
+        }).catch(stop);
+      }
+
+      function pick(property) {
+        chosen = property;
+        busy('reading the data streams on ' + property.name);
+        api('GET', '/v1/properties/' + encodeURIComponent(property.id) + '/streams')
+          .then(function (data) {
+            var web = data.streams || [];
+            if (web.length === 1) { return done(web[0].measurement_id); }
+            if (!web.length) { return form(); }
+            var rows = $('streams');
+            rows.textContent = '';
+            web.forEach(function (s) {
+              rows.appendChild(row(s.url || s.name || 'web stream', s.measurement_id, '', function () {
+                done(s.measurement_id);
+              }));
+            });
+            show('stream');
+          }).catch(stop);
+      }
+
+      function form() {
+        var onExisting = !!(chosen && chosen.id);
+        $('new-h').textContent = onExisting ? 'This property measures no website yet' : 'A new property';
+        $('new-p').textContent = onExisting
+          ? '“' + chosen.name + '” has no web data stream, so there is no measurement ID on it. Adding one mints it.'
+          : 'anacraft creates the property and its web data stream, then reads the measurement ID back.';
+        $('create').textContent = onExisting ? 'Add the web stream' : 'Create the property';
+        show('new');
+        $('url').focus();
+      }
+
+      $('create').addEventListener('click', create);
+      $('url').addEventListener('keydown', function (e) { if (e.key === 'Enter') { create(); } });
+
+      function create() {
+        var url = ($('url').value || '').trim();
+        if (!url) { $('url').focus(); return stop(new Error('Give the site’s URL — something like https://myapp.lovable.app.')); }
+
+        var onExisting = !!(chosen && chosen.id);
+        busy(onExisting ? 'adding the web stream' : 'creating the property');
+        var call = onExisting
+          ? api('POST', '/v1/properties/' + encodeURIComponent(chosen.id) + '/streams', { url: url })
+          : api('POST', '/v1/properties', { url: url });
+
+        call.then(function (out) {
+          if (out.property) { chosen = { id: out.property.id, name: out.property.name || url }; }
+          done(out.measurement_id, out);
+        }).catch(function (err) {
+          // The paywall, arriving where the work was asked for rather than
+          // where the page guessed it would be needed.
+          if (err.code === 'payment_required') { return show('pay'); }
+          stop(err);
+        });
+      }
+
+      // ── the tag ─────────────────────────────────────────────────────
+
+      function done(measurementId, out) {
+        if (out && out.tag) {
+          texts.tag = out.tag;
+          texts.prompt = out.prompt;
+          paint(measurementId);
+          return;
+        }
+        busy('writing the tag');
+        api('GET', '/v1/tag/' + encodeURIComponent(measurementId)).then(function (data) {
+          texts.tag = data.tag;
+          texts.prompt = data.prompt;
+          paint(measurementId);
+        }).catch(stop);
+      }
+
+      function paint(measurementId) {
+        $('mid').textContent = measurementId;
+        $('sub').textContent = chosen ? chosen.name + ' · property ' + chosen.id : '';
+        $('cmd').textContent = 'craft dash';
+        tab('prompt');
+        show('out');
+      }
+
+      function tab(which) {
+        var tabs = card.querySelectorAll('.tab');
+        for (var i = 0; i < tabs.length; i++) {
+          tabs[i].setAttribute('aria-selected', String(tabs[i].dataset.tab === which));
+        }
+        $('paste').textContent = texts[which];
+        $('paste').scrollTop = 0;
+        $('copy-label').textContent = which === 'prompt' ? 'Copy for the agent' : 'Copy the tag';
+        $('hint').textContent = which === 'prompt'
+          ? 'Paste it into the chat of whatever built the site — Lovable, v0, Bolt — and send.'
+          : 'Into <head>, on every page, and only once: a second GA4 tag doubles every number.';
+        $('copy').classList.remove('done');
+      }
+
+      var tabs = card.querySelectorAll('.tab');
+      for (var i = 0; i < tabs.length; i++) {
+        tabs[i].addEventListener('click', function (e) { tab(e.currentTarget.dataset.tab); });
+      }
+
+      $('copy').addEventListener('click', function () {
+        var label = $('copy-label').textContent;
+        navigator.clipboard.writeText($('paste').textContent).then(function () {
+          $('copy').classList.add('done');
+          $('copy-label').textContent = 'Copied';
+          setTimeout(function () {
+            $('copy').classList.remove('done');
+            $('copy-label').textContent = label;
+          }, 1800);
+        }).catch(function () {
+          var range = document.createRange();
+          range.selectNodeContents($('paste'));
+          var selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+        });
+      });
+
+      $('default').addEventListener('click', function () {
+        if (!chosen) { return; }
+        api('PUT', '/v1/property', { id: chosen.id }).then(function () {
+          $('next-p').textContent = 'Saved as the default. From any terminal:';
+        }).catch(stop);
+      });
+
+      $('another').addEventListener('click', function () { chosen = null; list(); });
+      $('back-1').addEventListener('click', function () { chosen = null; list(); });
+      $('back-2').addEventListener('click', function () { chosen = null; list(); });
+      $('retry').addEventListener('click', function () { begin(); });
+
+      begin();
+    })();
+  </script>
+</body>
+
+</html>

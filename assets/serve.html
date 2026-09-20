@@ -435,16 +435,28 @@
        this page are never wearing different clothes. */
     .pals { display: flex; gap: 6px; align-items: center; margin-left: auto; }
 
+    /* A palette is a background with an accent on it, and a chip that showed
+       only the accent made every light theme look like a dark square. So the
+       chip is the palette: its ground, with its accent sitting on it, which is
+       what the page will actually look like. */
     .pal {
-      width: 16px;
-      height: 16px;
+      position: relative;
+      width: 18px;
+      height: 18px;
       padding: 0;
       border: 1px solid var(--line-2);
-      background: var(--swatch, #000);
-      opacity: .65;
+      background: var(--swatch-ground, #000);
+      opacity: .7;
       transition: opacity .12s, outline-color .12s;
       outline: 1px solid transparent;
       outline-offset: 2px;
+    }
+
+    .pal::after {
+      content: '';
+      position: absolute;
+      inset: 4px;
+      background: var(--swatch-accent, #fff);
     }
 
     .pal:hover { opacity: 1; }
@@ -556,6 +568,11 @@
             on. Already subscribed?
             <button class="lnk" id="recheck" type="button">check again</button>
           </p>
+          <div class="acts">
+            <span class="fine" style="margin:0" id="pay-who"></span>
+            <button class="lnk" id="signout-pay" type="button">sign out and use a different
+              account</button>
+          </div>
         </div>
 
         <div class="pane" data-pane="pick">
@@ -717,6 +734,9 @@
         // opens this, and says so, so the ladder is not reimplemented here.
         if (!session.entitled) {
           if (session.plan_price) { $('price').textContent = session.plan_price; }
+          $('pay-who').textContent = session.email
+            ? 'signed in as ' + session.email
+            : '';
           if (session.subscribed) {
             $('pay-h').textContent = 'This needs the Elite plan';
             $('pay-p').textContent = 'Your subscription is live, but the API is on Anacrafter Elite — the same plan craft mcp is on. Moving up is billed going forward, not charged again.';
@@ -773,7 +793,9 @@
           } else {
             document.documentElement.dataset.pal = theme.name;
           }
-          var accent = getComputedStyle(document.documentElement).getPropertyValue('--jade');
+          var style = getComputedStyle(document.documentElement);
+          var accent = style.getPropertyValue('--jade');
+          var ground = style.getPropertyValue('--ground');
           if (was === undefined) { delete document.documentElement.dataset.pal; }
           else { document.documentElement.dataset.pal = was; }
 
@@ -784,7 +806,8 @@
           chip.title = theme.name;
           chip.setAttribute('aria-label', theme.name);
           chip.setAttribute('aria-pressed', String(theme.name === current));
-          chip.style.setProperty('--swatch', accent.trim());
+          chip.style.setProperty('--swatch-accent', accent.trim());
+          chip.style.setProperty('--swatch-ground', ground.trim());
           chip.addEventListener('click', function () {
             wear(theme.name);
             // Best-effort: the page is already wearing it, and a palette that
@@ -823,10 +846,17 @@
         }, 1000);
       }
 
-      $('signout').addEventListener('click', function () {
+      /* Sign-out is offered on the unlock pane as well as the property list.
+       * Somebody who lands on a paywall having signed in with the wrong Google
+       * account — the personal one, when the subscription is on the work one —
+       * otherwise has two ways forward, and both of them are a credit card. */
+      function signOut() {
         busy('signing out');
         api('DELETE', '/v1/session').then(begin).catch(stop);
-      });
+      }
+
+      $('signout').addEventListener('click', signOut);
+      $('signout-pay').addEventListener('click', signOut);
 
       // ── paying ──────────────────────────────────────────────────────
 

@@ -562,8 +562,11 @@ impl Paywall {
                  Anacrafter — nothing to pay for and nothing to paste. The terminal is \
                  setting the property up now; you can close this tab and watch it.",
             ),
+            // Deliberately no `redirect`: this page is an ask, and a page
+            // that asks something has no business moving on by itself.
             Paywall::Owed { checkout, note, .. } => Landing {
                 title: "One thing left",
+                redirect: None,
                 body: "anacraft has the permission it needs. Creating the property is part of \
                        the Anacrafter subscription — start one here and it comes back to the \
                        terminal on its own, with nothing to paste. Already an Anacrafter? The \

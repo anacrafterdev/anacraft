@@ -795,11 +795,17 @@ async fn session_start(State(app): State<Arc<App>>) -> Answer {
                     auth.login_landing(&Landing {
                         title: "Signed in",
                         body: "anacraft has your Google account. \
-                               Your properties are listed back on the tag page.",
+                               Taking you to your properties…",
+                        // Straight there, rather than a page with a button on
+                        // it: this landing is the end of a step, not a choice.
+                        redirect: Some(&back),
+                        // Still carried, for the browser that will not follow
+                        // a refresh — and it costs nothing in the one that
+                        // does, which has already moved on.
                         cta: Some(Cta {
-                            label: "Back to your properties →",
+                            label: "Your properties →",
                             url: &back,
-                            note: "it is also waiting in the tab you came from",
+                            note: "if this page has not moved along by itself",
                         }),
                     })
                     .await?;

@@ -549,6 +549,15 @@ pub(crate) fn nonce(len: usize) -> String {
 pub struct Landing<'a> {
     pub title: &'a str,
     pub body: &'a str,
+    /// Where to send the browser on its own, if anywhere.
+    ///
+    /// A landing that exists to get somebody back where they were should not
+    /// make them click to get there — `craft serve`'s does, and the sign-in it
+    /// ends is the last step before a page that was already waiting. A landing
+    /// that exists to *ask* something, like the paywall's, must never move on
+    /// by itself, which is why this is opt-in and per-caller rather than
+    /// implied by having a [`Cta`].
+    pub redirect: Option<&'a str>,
     /// The one link this page is allowed to carry.
     ///
     /// A tab that has just handed over a permission is the cheapest place
@@ -573,6 +582,7 @@ impl<'a> Landing<'a> {
         Landing {
             title,
             body,
+            redirect: None,
             cta: None,
         }
     }
@@ -814,7 +824,12 @@ fn mark_svg(fill: &str) -> String {
 /// previous hardcoded one did, and a light palette gets a readable light page
 /// for free.
 fn page(landing: &Landing<'_>, tone: Tone) -> String {
-    let Landing { title, body, cta } = landing;
+    let Landing {
+        title,
+        body,
+        redirect,
+        cta,
+    } = landing;
     let p = crate::theme::palette();
     let (ink, card, fg, dim, shadow) =
         (hex(p.ink), hex(p.bg), hex(p.fg), hex(p.sage), hex(p.shadow));
@@ -846,9 +861,22 @@ fn page(landing: &Landing<'_>, tone: Tone) -> String {
         None => String::new(),
     };
 
+    // Sent as a meta refresh rather than a redirect status: the response is
+    // already being written to a tab that is looking at it, and the card below
+    // stays on screen for the instant before the move — and for good, in a
+    // browser that refuses to follow it, where the button is still there.
+    let go = match redirect {
+        Some(url) => format!(
+            "<meta http-equiv=refresh content=\"0;url={}\">",
+            escape(url)
+        ),
+        None => String::new(),
+    };
+
     format!(
         "<!doctype html><html lang=en><meta charset=utf-8>\
          <meta name=viewport content=\"width=device-width,initial-scale=1\">\
+         {go}\
          <title>anacraft — {title}</title>\
          <style>\
          *{{box-sizing:border-box}}\
@@ -1019,6 +1047,43 @@ mod tests {
     }
 
     #[test]
+    fn a_landing_with_somewhere_to_be_sends_the_browser_there() {
+        let sent = page(
+            &Landing {
+                title: "Signed in",
+                body: "body",
+                redirect: Some("http://127.0.0.1:52413/#k=abc&x=1"),
+                cta: None,
+            },
+            Tone::Good,
+        );
+        // The refresh has to be in the head, before the card, or a slow render
+        // shows the card and stays on it.
+        assert!(sent.contains("<meta http-equiv=refresh content=\"0;url="));
+        // And the URL goes through the same escaping the button's does: an `&`
+        // in an attribute is an entity or it is a bug.
+        assert!(sent.contains("k=abc&amp;x=1"));
+
+        // A landing that asks something must never move on by itself, and
+        // neither must the plain one every other caller uses.
+        let asking = page(
+            &Landing {
+                title: "One thing left",
+                body: "body",
+                redirect: None,
+                cta: Some(Cta {
+                    label: "Become an Anacrafter",
+                    url: "https://buy.stripe.com/x",
+                    note: "$2.99/month",
+                }),
+            },
+            Tone::Good,
+        );
+        assert!(!asking.contains("http-equiv=refresh"));
+        assert!(!page(&Landing::plain("Logged in", "body"), Tone::Good).contains("http-equiv"));
+    }
+
+    #[test]
     fn the_paywall_button_carries_an_escaped_checkout_url() {
         // The checkout URL has a query string, so the `&` between its
         // parameters has to survive the trip through an HTML attribute.
@@ -1026,6 +1091,7 @@ mod tests {
             &Landing {
                 title: "One thing left",
                 body: "body",
+                redirect: None,
                 cta: Some(Cta {
                     label: "Become an Anacrafter",
                     url: "https://buy.stripe.com/x?client_reference_id=t&prefilled_email=a%40b.co",

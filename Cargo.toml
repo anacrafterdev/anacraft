@@ -1,6 +1,6 @@
 [package]
 name = "anacraft"
-version = "0.30.3"
+version = "0.31.0"
 edition = "2021"
 rust-version = "1.74"
 description = "A Google Analytics 4 dashboard in your terminal, with a Minecraft texture pack"

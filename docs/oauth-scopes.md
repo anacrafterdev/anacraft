@@ -55,10 +55,13 @@ The same two calls as `craft configure`, made for a page in a browser instead
 of a terminal. `craft serve` runs an HTTP API on `127.0.0.1` and opens a page
 on it where somebody signs in, picks or creates a property, and copies the tag;
 `POST /v1/properties` is `craft configure` underneath, calling the same
-`configure::setup` and so making `properties.create` and `dataStreams.create`
-and nothing else.
+`configure::setup` and so making `properties.create` and `dataStreams.create`.
+`DELETE /v1/properties/{id}` is `craft delete --all` underneath, making
+`properties.delete` — Google's soft delete, into a trash the console restores
+from for 35 days — and it is opt-in twice the way the command is: the id in the
+path, and the same id again in `?confirm=`.
 
-It adds no scope and no endpoint. What it adds is a second way to reach the two
+It adds no scope and no call. What it adds is a second way to reach the three
 that are already here, which is why it is named: the surface a reviewer can run
 is not the same as the surface a reviewer is told about unless both are
 written down. Every endpoint it serves is at

@@ -97,7 +97,8 @@ an API the whole of which is documented at
 [anacraft.dev/serve.html](https://anacraft.dev/serve.html) — so a script, an
 editor extension or another service can register a tag the same way. It creates
 nothing `craft configure` would not create, behind the same plan and the same
-two Admin API calls.
+two Admin API calls — and it can throw a property into Google's trash the way
+`craft delete --all` does, asking for the id twice before it will.
 
 ### One-shot reports
 

@@ -115,6 +115,7 @@ pub async fn run(opts: Options) -> Result<()> {
         .route("/v1/subscription", get(subscription))
         .route("/v1/subscription/checkout", axum::routing::post(checkout))
         .route("/v1/properties", get(properties).post(register))
+        .route("/v1/properties/:id", axum::routing::delete(trash))
         .route("/v1/properties/:id/streams", get(streams).post(add_stream))
         .route("/v1/property", put(use_property))
         .route("/v1/tag/:measurement_id", get(tag))
@@ -698,6 +699,61 @@ async fn add_stream(
 }
 
 #[derive(Deserialize)]
+struct Confirm {
+    confirm: Option<String>,
+}
+
+/// Move a property to Google's trash — the one destructive call in this API,
+/// and the same one `craft delete --all` makes.
+///
+/// What keeps it defensible is that Google's delete is a soft one: the
+/// property sits in the account's trash for 35 days, fully restorable from the
+/// console, before anything is actually gone. The undo is Google's, it is
+/// where a person would look for it, and nothing here can shorten it.
+///
+/// It is opt-in twice, the way the command is. The command needs a subcommand
+/// and then a flag; this needs the id in the path and the same id again in
+/// `?confirm=`, so a `DELETE` aimed at the wrong row by a script that built
+/// its URL wrong has to be wrong the same way twice.
+async fn trash(
+    State(app): State<Arc<App>>,
+    Path(id): Path<String>,
+    Query(query): Query<Confirm>,
+) -> Answer {
+    if app.demo {
+        return Err(demo_only("deleting a property"));
+    }
+    let property = bare(&id);
+    if query.confirm.as_deref().map(bare).as_deref() != Some(property.as_str()) {
+        return Err(Fail::bad(format!(
+            "deleting is confirmed by saying the id twice — DELETE /v1/properties/{property}?confirm={property}"
+        )));
+    }
+
+    let ga = client()?;
+    ga.delete_property(&property).await?;
+
+    // Google first, then here — the same order the command uses, because
+    // forgetting is local and reversible and a failed API call is not a
+    // reason to have already pointed the dashboard away from a property that
+    // is still sitting there collecting.
+    let mut cfg = Config::load().map_err(Fail::from)?;
+    let forgotten = cfg.remove(&property);
+    if forgotten {
+        cfg.save().map_err(Fail::from)?;
+    }
+
+    Ok(Json(json!({
+        "property": property,
+        "state": "trashed",
+        "forgotten": forgotten,
+        "restorable_days": 35,
+        "note": "moved to the Analytics trash — it has stopped collecting, and Google keeps it \
+                 restorable from the console for 35 days",
+    })))
+}
+
+#[derive(Deserialize)]
 struct Chosen {
     id: String,
 }
@@ -1007,6 +1063,16 @@ mod tests {
     fn a_property_id_is_taken_in_either_spelling() {
         assert_eq!(bare("properties/397412345"), "397412345");
         assert_eq!(bare(" 397412345 "), "397412345");
+    }
+
+    #[test]
+    fn deleting_asks_for_the_id_twice() {
+        // The check itself is in the handler, which needs a server to call.
+        // What is testable without one is the pair it compares — and that both
+        // spellings of a property id land on the same string, so a `confirm`
+        // written as `properties/1` still matches a path of `1`.
+        assert_eq!(bare("properties/397412345"), bare("397412345"));
+        assert_ne!(bare("397412345"), bare("397412346"));
     }
 
     #[test]

@@ -388,7 +388,7 @@ it is the same OAuth client and the same two Analytics scopes.</div>
 <div class="step"><b>Copy the tag.</b> The gtag.js snippet with the measurement id already in both of the
 places it belongs, and a paste-ready prompt for
 <a href="/lovable.html">Lovable</a>, v0, Bolt or whatever built the site.</div>
-<p><img src="serve.png" width="820" height="976" loading="lazy"
+<p><img src="serve.png" width="692" height="836" loading="lazy"
   style="display:block;width:100%;max-width:560px;height:auto;margin:22px 0 6px;border:1px solid var(--line-2);"
   alt="The page craft serve opens, showing a measurement id in gold with the tag written out below it and a button that copies it."></p>
 <p>The page is handed the run token in the URL it is opened with; the credentials stay with the CLI,
@@ -418,6 +418,7 @@ characters while doing it.</p>
   <tr><td>POST /v1/subscription/checkout</td><td>A Stripe checkout URL, already tied to this account.</td><td>account</td></tr>
   <tr><td>GET /v1/properties</td><td>Every GA4 property this login can see.</td><td>account</td></tr>
   <tr><td>POST /v1/properties</td><td>Create a property and its web stream. Returns the tag.</td><td>plan</td></tr>
+  <tr><td>DELETE /v1/properties/{id}</td><td>Move a property to the Analytics trash. Wants the id twice.</td><td>account</td></tr>
   <tr><td>GET /v1/properties/{id}/streams</td><td>The web data streams on a property, with their ids.</td><td>account</td></tr>
   <tr><td>POST /v1/properties/{id}/streams</td><td>Add a web stream to a property that has none. Returns the tag.</td><td>plan</td></tr>
   <tr><td>PUT /v1/property</td><td>Set the default property, the way <code>craft use</code> does.</td><td>account</td></tr>
@@ -500,6 +501,23 @@ POST <span class="k">/v1/properties/397890123/streams</span>
 <code>properties.create</code> and <code>dataStreams.create</code>. Nothing here updates or deletes
 anything in an Analytics account — <code>craft delete</code> stays a command somebody has to type.</p>
 
+<h3>Throwing one away</h3>
+<p>The other half of being able to make a property: an app rebuilt three times leaves three of them
+behind, and the Analytics console is four screens away.</p>
+<pre class="code">DELETE <span class="k">/v1/properties/397890123?confirm=397890123</span>
+<span class="d">→ 200  { "property": "397890123",</span>
+<span class="d">         "state": "trashed",</span>
+<span class="d">         "forgotten": true,</span>
+<span class="d">         "restorable_days": 35 }</span></pre>
+<p>The id goes in twice — once in the path and once in <code>confirm</code> — so a request built wrong
+by a script has to be wrong the same way twice. It is the same opt-in-twice the CLI asks for, where
+the command needs a subcommand and then a flag.</p>
+<p>Google's delete is a soft one, which is what makes this defensible: the property goes to the
+account's trash and sits there for <b>35 days</b>, fully restorable from the console, before anything
+is actually gone. The undo is Google's, it is where a person would look for it, and nothing here can
+shorten it. <code>forgotten</code> says whether this machine was also opening on that property and has
+stopped.</p>
+
 <h2><span class="n">07</span>Reading the numbers</h2>
 <p>The read endpoints take the same two parameters and answer the same shape.</p>
 <table class="tbl">
@@ -546,8 +564,9 @@ caller from spending the API quota the dashboard needs.</p>
   of this that belongs on a network you do not control.</li>
   <li><b>Answer without a token.</b> One endpoint is open, and it returns a version string.</li>
   <li><b>Trust an origin it was not told about.</b> No wildcard CORS, in either posture.</li>
-  <li><b>Write anything to an Analytics account beyond the two creates above.</b> No updates, no
-  deletes, no key events — those live behind commands a person runs.</li>
+  <li><b>Write anything to an Analytics account beyond the two creates and the one delete above.</b>
+  No updates, no key events, no settings — those live behind commands a person runs. And the delete
+  is Google's soft one, asked for twice.</li>
   <li><b>Outlive its usefulness.</b> It stops after an hour with nothing to do: a server started to
   hand over one tag should not still be listening the next morning.</li>
 </ul>

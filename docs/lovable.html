@@ -484,6 +484,10 @@
       border-radius: 0;
       padding: 22px 24px;
       overflow-x: auto;
+      /* The blocks are written a line per line, so keep the line breaks. It
+         has to be `pre-line` rather than `pre`: the markup is indented to sit
+         in the page, and `pre` would print that indentation. */
+      white-space: pre-line;
       font-family: var(--mono);
       font-size: 13px;
       line-height: 2.05;
@@ -617,6 +621,16 @@
       color: var(--dim);
       text-transform: uppercase;
       letter-spacing: .1em;
+    }
+
+    /* the page `craft serve` opens, as it looks */
+    .shot {
+      display: block;
+      width: 100%;
+      max-width: 560px;
+      height: auto;
+      margin-top: 24px;
+      border: 1px solid var(--line-2);
     }
 
     /* callout box */
@@ -808,7 +822,7 @@
                 <path class="tick" d="M3 8.6l3.2 3.2L13 4.8" />
               </svg></span>
           </button>
-          <a href="#setup" class="btn">See the setup ↓</a>
+          <a href="#setup" class="btn">Get your tag ↓</a>
         </div>
       </div>
     </div>
@@ -885,58 +899,53 @@
   <section id="setup">
     <div class="wrap">
       <div class="sec-label">Setup</div>
-      <h2>Two prompts, one install.</h2>
+      <h2>One command. Your tag in the clipboard.</h2>
       <p class="sec-sub">
-        anacraft is a CLI that runs on your machine. It reads your GA4 data
-        and serves it to any MCP-compatible AI client — Claude, ChatGPT,
-        Cursor, VS Code. One install, one sign-in, and your assistant has
-        the numbers.
+        anacraft is a CLI, but you do not have to live in it.
+        <code>craft serve</code> opens a page on your own machine: sign in with
+        Google, pick or create the GA4 property for your app, and copy the
+        block that goes into Lovable. Nothing to read, four things to click.
       </p>
 
       <div class="steps">
         <div class="step">
           <div class="step-n">01</div>
           <div>
-            <h3>Add analytics to your Lovable app</h3>
-            <p>
-              Open your Lovable project and tell the agent:
-            </p>
-            <div class="code">
-              <span class="c">// in the Lovable chat</span>
-              <span class="w">Add Google Analytics to this project</span>
-            </div>
+            <h3>Install anacraft</h3>
+            <p>One command downloads the binary. macOS, Linux, Windows.</p>
+            <div class="code"><span class="w">curl -fsSL https://anacraft.dev/install.sh | bash</span></div>
             <p style="margin-top:12px;">
-              Lovable will create a GA4 property and add the gtag snippet.
-              You get a <code>G-XXXXXXX</code> measurement ID back. If you
-              prefer to do it yourself, ask Lovable for the
-              <code>index.html</code> and paste the tag into
-              <code>&lt;head&gt;</code>.
+              A single binary with no dependencies — uninstall by deleting it.
             </p>
-
-            <div class="callout">
-              <h4>Already have GA4 on your Lovable app?</h4>
-              <p>
-                Skip to step 2. If you set up analytics through the Google
-                Analytics console instead of Lovable, you already have what
-                you need.
-              </p>
-            </div>
           </div>
         </div>
 
         <div class="step">
           <div class="step-n">02</div>
           <div>
-            <h3>Install anacraft</h3>
+            <h3>Run <code>craft serve</code> and get your tag</h3>
             <p>
-              One command downloads the binary. macOS, Linux, Windows.
+              It opens a page in your browser and waits there. Sign in with
+              Google, pick the property for this app — or make one, which is
+              the usual answer for a Lovable app — and it hands you the
+              measurement ID with the tag already written around it.
             </p>
-            <div class="code">
-              <span class="w">curl -fsSL https://anacraft.dev/install.sh | bash</span>
-            </div>
-            <p style="margin-top:12px;">
-              This gives you the <code>craft</code> command. It is a single
-              binary with no dependencies — uninstall by deleting it.
+            <div class="code"><span class="w">craft serve</span>
+
+              <span class="c"># or look before you sign in to anything:</span>
+              <span class="w">craft serve --demo</span></div>
+
+            <img class="shot" src="serve.png" width="820" height="976" loading="lazy"
+              alt="The page craft serve opens: a measurement ID in gold, the tag written out below it, and a button that copies it.">
+
+            <p style="margin-top:20px;">
+              The page listens on <code>127.0.0.1</code> and nowhere else, and
+              the credentials stay with the CLI on your machine. Making a
+              property is the paid half —
+              <a href="/pricing.html" style="color:var(--jade);text-decoration:underline;">Anacrafter</a>,
+              $2.99 a month — and the page takes you through it without
+              leaving the flow. Reading an ID off a property you already have
+              costs nothing.
             </p>
           </div>
         </div>
@@ -944,25 +953,36 @@
         <div class="step">
           <div class="step-n">03</div>
           <div>
-            <h3>Sign in and connect your property</h3>
+            <h3>Paste it into Lovable</h3>
             <p>
-              Sign in with your Google account, then point anacraft at the
-              GA4 property Lovable created.
+              The copy button gives you instructions, not just a snippet —
+              written for the agent that built the app. Paste it into the
+              Lovable chat, send, and publish.
             </p>
-            <div class="code">
-              <span class="c"># sign in to Google (once, opens browser)</span>
-              <span class="w">craft login</span>
+            <div class="code"><span class="d">you:</span> <span class="w">Add Google Analytics 4 to this app.</span>
 
-              <span class="c"># if Lovable created the property, find its ID</span>
-              <span class="w">craft props</span>
+              <span class="w">Paste this tag into index.html as the last thing inside &lt;head&gt;,
+              exactly as written:</span>
 
-              <span class="c"># or let anacraft create one for your domain</span>
-              <span class="w">craft configure yoursite.com</span>
-            </div>
+              <span class="c">&lt;!-- Google tag (gtag.js) --&gt;
+              &lt;script async src="https://www.googletagmanager.com/gtag/js?id=G-1A2BCD345E"&gt;&lt;/script&gt;
+              …</span>
+
+              <span class="w">Rules:
+              - Keep the measurement ID exactly as it is, in both of the places it appears.
+              - Do not install an analytics npm package or a React wrapper.
+              - If the project already has a Google Analytics tag, replace it.
+              - Do not send your own page_view on route changes.</span></div>
             <p style="margin-top:12px;">
-              <code>craft props</code> lists every GA4 property your account
-              can see. Pick the one Lovable made and set it as default with
-              <code>craft use &lt;id&gt;</code>.
+              Those rules are there because an agent will otherwise improve on
+              a tag it is handed: an npm wrapper instead of the snippet, a
+              second tag beside the first, or a page view on every route change
+              that GA4 was already counting. Each one quietly doubles or
+              hides your numbers.
+            </p>
+            <p style="margin-top:12px;">
+              Publish, then <code>craft live</code> to watch the first visit
+              land.
             </p>
           </div>
         </div>
@@ -970,87 +990,29 @@
         <div class="step">
           <div class="step-n">04</div>
           <div>
-            <h3>Add the MCP server to your AI client</h3>
+            <h3>Wire it into your assistant</h3>
             <p>
-              anacraft speaks MCP over stdio — your client spawns it as a
-              child process. No port, no server to run, no config file to
-              babysit. The easiest way:
+              One command per client. anacraft runs as a child process — no
+              port, no server, nothing to keep running.
             </p>
-            <div class="code">
-              <span class="c"># writes directly into Claude Desktop's config</span>
+            <div class="code"><span class="c"># Claude Desktop</span>
               <span class="w">craft mcp --install</span>
-            </div>
+
+              <span class="c"># Claude Code</span>
+              <span class="w">claude mcp add anacraft craft mcp</span></div>
             <p style="margin-top:12px;">
-              Or add it manually to your client's MCP config:
+              Restart the client and the tools are there. Cursor, Windsurf,
+              VS Code and the raw JSON are on the
+              <a href="/mcp.html" style="color:var(--jade);text-decoration:underline;">MCP page</a>.
             </p>
-
-            <h4
-              style="color:var(--fg);font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin:24px 0 8px;">
-              Claude Code</h4>
-            <div class="code">
-              <span class="w">claude mcp add anacraft craft mcp</span>
-            </div>
-
-            <h4
-              style="color:var(--fg);font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin:24px 0 8px;">
-              Claude Desktop (or run <code
-                style="font-family:var(--mono);color:var(--jade);font-size:12px;">craft mcp --install</code>)</h4>
-            <div class="code">
-              <span class="c">// ~/Library/Application Support/Claude/claude_desktop_config.json</span>
-              {
-              <span class="w">"mcpServers"</span>: {
-              <span class="w">"anacraft"</span>: {
-              <span class="w">"command"</span>: <span class="w">"/absolute/path/to/craft"</span>,
-              <span class="w">"args"</span>: [<span class="w">"mcp"</span>]
-              }
-              }
-              }
-            </div>
-
-            <h4
-              style="color:var(--fg);font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin:24px 0 8px;">
-              Cursor / Windsurf</h4>
-            <div class="code">
-              <span class="c">// ~/.cursor/mcp.json</span>
-              {
-              <span class="w">"mcpServers"</span>: {
-              <span class="w">"anacraft"</span>: {
-              <span class="w">"command"</span>: <span class="w">"craft"</span>,
-              <span class="w">"args"</span>: [<span class="w">"mcp"</span>]
-              }
-              }
-              }
-            </div>
-
-            <p style="margin-top:16px;">
-              Restart the client after saving. The tools appear in your
-              assistant's tool list automatically.
-            </p>
-
-            <div class="callout" style="margin-top:20px;">
-              <h4>No subscription yet?</h4>
-              <p>
-                <code>craft mcp --demo</code> serves synthetic data — no
-                Google account, no subscription. It is the fastest way to
-                see the tools work. Live data requires an
-                <a href="/pricing.html" style="color:var(--jade);text-decoration:underline;">Elite plan</a>
-                ($9.99/mo).
-              </p>
-            </div>
           </div>
         </div>
 
         <div class="step">
           <div class="step-n">05</div>
           <div>
-            <h3>Ask your assistant</h3>
-            <p>
-              Open Claude, ChatGPT, or Cursor and ask about your site.
-              The assistant reads live GA4 data and answers with real
-              numbers.
-            </p>
-            <div class="code">
-              <span class="d">you:</span> <span class="w">how is the site doing this week?</span>
+            <h3>Ask</h3>
+            <div class="code"><span class="d">you:</span> <span class="w">how is the site doing this week?</span>
 
               <span class="d">assistant:</span> <span class="c">[calls site_status — reads GA4]</span>
               <span class="d">assistant:</span> <span class="w">12,481 users this week, up 9% from last week.
@@ -1060,12 +1022,18 @@
 
               <span class="d">assistant:</span> <span class="c">[calls list_pages]</span>
               <span class="d">assistant:</span> <span class="w">Top pages: / (6,714), /pricing (3,917),
-                /docs/quickstart (2,765), /blog (2,136).</span>
+                /docs/quickstart (2,765), /blog (2,136).</span></div>
 
-              <span class="d">you:</span> <span class="w">is anyone on the site right now?</span>
-
-              <span class="d">assistant:</span> <span class="c">[calls live_visitors]</span>
-              <span class="d">assistant:</span> <span class="w">124 active users. US: 46, India: 16, Germany: 11.</span>
+            <div class="callout" style="margin-top:24px;">
+              <h4>Want to see it before you commit?</h4>
+              <p>
+                <code>craft serve --demo</code> walks the whole page on
+                synthetic data, creating nothing, and
+                <code>craft mcp --demo</code> does the same for the assistant
+                — no Google account, no subscription. Live data needs an
+                <a href="/pricing.html" style="color:var(--jade);text-decoration:underline;">Elite plan</a>
+                for MCP.
+              </p>
             </div>
           </div>
         </div>
@@ -1156,8 +1124,7 @@
         anything.
       </p>
 
-      <div class="code">
-        <span class="d">you:</span> <span class="w">switch to the booking app</span>
+      <div class="code"><span class="d">you:</span> <span class="w">switch to the booking app</span>
 
         <span class="d">assistant:</span> <span class="c">[calls list_properties]</span>
         <span class="d">assistant:</span> <span class="w">Found: "My SaaS" (397412345), "Booking App" (397890123),
@@ -1165,8 +1132,7 @@
 
         <span class="d">you:</span> <span class="w">how is it doing?</span>
 
-        <span class="d">assistant:</span> <span class="c">[calls site_status — reads the booking app's GA4]</span>
-      </div>
+        <span class="d">assistant:</span> <span class="c">[calls site_status — reads the booking app's GA4]</span></div>
     </div>
   </section>
 
@@ -1182,11 +1148,9 @@
         numbers move.
       </p>
 
-      <div class="code">
-        <span class="w">craft dash</span> <span class="c"># live dashboard for the default property</span>
+      <div class="code"><span class="w">craft dash</span> <span class="c"># live dashboard for the default property</span>
         <span class="w">craft dash --demo</span> <span class="c"># synthetic data, no account needed</span>
-        <span class="w">craft overview --format json</span> <span class="c"># one-shot, scriptable</span>
-      </div>
+        <span class="w">craft overview --format json</span> <span class="c"># one-shot, scriptable</span></div>
     </div>
   </section>
 

@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>craft serve — the local API — anacraft</title>
+<title>The local API — craft serve — anacraft</title>
 <meta name="description" content="craft serve runs a small HTTP API on your own machine and a page to register a GA4 tag in: sign in with Google, create the property, copy the tag. Every endpoint documented, loopback only, bearer token required.">
 <link rel="canonical" href="https://anacraft.dev/serve.html">
 <meta name="robots" content="index, follow">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://anacraft.dev/serve.html">
-<meta property="og:title" content="craft serve — the local API — anacraft">
+<meta property="og:title" content="The local API — craft serve — anacraft">
 <meta property="og:description" content="A local HTTP API and a page to register a GA4 tag in. Sign in with Google, create the property, copy the tag — no console, no flags.">
 <script type="application/ld+json">
 {
@@ -32,7 +32,7 @@
           "name": "What is craft serve?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "A small HTTP server anacraft runs on your own machine. It opens a page in your browser where you sign in with Google, pick or create a GA4 property, and copy the gtag.js snippet \u2014 everything craft configure does, without flags. The same endpoints the page uses are documented and open to anything else running on that machine."
+            "text": "A small HTTP server anacraft runs on your own machine. It opens a page in your browser where you sign in with Google, pick or create a GA4 property, and copy the gtag.js snippet with instructions written for the agent that built the site \u2014 everything craft configure does, without flags. The same endpoints the page uses are documented and open to anything else running on that machine."
           }
         },
         {
@@ -40,7 +40,7 @@
           "name": "Is the craft serve API reachable from the internet?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "No. It binds 127.0.0.1 and refuses any other address, every endpoint but /v1/health needs the bearer token printed when the server starts, and browser requests are accepted only from the loopback origin it is serving. There is no flag that opens it to a network."
+            "text": "No. It binds 127.0.0.1 and refuses any other address, every endpoint but /v1/health needs the bearer token printed when the server starts, and browser requests are accepted only from the loopback origin it is serving. There is no flag that opens it to a network at all."
           }
         },
         {
@@ -347,68 +347,22 @@
 <main class="doc">
 
 <div class="eyebrow">Guide</div>
-<h1>craft serve — the local API</h1>
-<div class="stamp">craft serve · a page to register a tag in, and the endpoints behind it · loopback by default</div>
+<h1>The local API</h1>
+<div class="stamp">craft serve · a page to register a GA4 tag in, and the endpoints behind it · 127.0.0.1 only</div>
 
 <div class="tldr">
   <div class="h">What it does</div>
   <p><code>craft serve</code> starts a small HTTP server on your own machine and opens a page in your
   browser. Sign in with Google, pick or create a GA4 property, <b>copy the tag</b> — everything
   <a href="/setup-ga4.html"><code>craft configure</code></a> does, without a flag to remember.</p>
+  <p>Built the site with <a href="/lovable.html">Lovable</a>, v0 or Bolt? This is the shortest road
+  from <i>nothing</i> to <i>a measurement id in the clipboard</i>, and what it hands you is written
+  for the agent that built the app rather than for you to retype.</p>
   <p>The page is only the first caller. Every endpoint it uses is below, so a script, an editor
-  extension or another service can register a tag the same way. The same binary runs
-  <a href="#container">in a container</a> when the caller is not on this machine.</p>
+  extension or another service can register a tag the same way.</p>
 </div>
 
-<h2><span class="n">01</span>Two ways to run it</h2>
-<p>One binary, two postures. Which one is in force changes exactly two things: who the bearer token
-belongs to, and whether there is an account signed in on the server at all.</p>
-
-<table class="tbl">
-  <tr><th>&nbsp;</th><th>On your machine</th><th>In a container</th></tr>
-  <tr>
-    <td>start</td>
-    <td><code>craft serve</code></td>
-    <td><code>craft serve --hosted</code></td>
-  </tr>
-  <tr>
-    <td>binds</td>
-    <td>127.0.0.1, an ephemeral port</td>
-    <td>0.0.0.0, behind your ingress</td>
-  </tr>
-  <tr>
-    <td>bearer token</td>
-    <td>minted per run and printed once</td>
-    <td>the caller's own Google access token</td>
-  </tr>
-  <tr>
-    <td>credentials</td>
-    <td>the ones <code>craft login</code> keeps, in <code>~/.anacraft</code></td>
-    <td>none kept — every request carries its own</td>
-  </tr>
-  <tr>
-    <td>sign-in</td>
-    <td><code>POST /v1/session</code> opens a browser</td>
-    <td>not offered; the caller signs in and sends the token</td>
-  </tr>
-  <tr>
-    <td>state</td>
-    <td>a default property, like the CLI</td>
-    <td>none — a property is named on every call</td>
-  </tr>
-</table>
-
-<p>Hosted mode is stateless on purpose: nothing about a caller survives their request, so a replica
-can be replaced mid-conversation and nobody notices.</p>
-<div class="tldr" style="border-left-color:var(--gold);margin:22px 0 8px;">
-  <div class="h" style="color:var(--gold)">Where this stands</div>
-  <p>The local posture is what ships today: <code>craft serve</code>, the page, and every endpoint
-  below. <b><code>--hosted</code> is not a flag yet</b> — it is the next step, and
-  <a href="#container">section 10</a> is the design it will be built to rather than a description of
-  something you can run this afternoon.</p>
-</div>
-
-<h2><span class="n">02</span>Start it on your machine</h2>
+<h2><span class="n">01</span>Start it on your machine</h2>
 <pre class="code"><span class="k">craft serve</span>
 
 <span class="d">  anacraft serving on http://127.0.0.1:52413</span>
@@ -425,7 +379,7 @@ can be replaced mid-conversation and nobody notices.</p>
   dashboard's demo numbers; the writes answer with a synthetic measurement id and create nothing.</td></tr>
 </table>
 
-<h2><span class="n">03</span>The page it opens</h2>
+<h2><span class="n">02</span>The page it opens</h2>
 <p>Three screens, and you are done with the second one:</p>
 <div class="step"><b>Sign in with Google.</b> The same consent screen <code>craft login</code> shows, because
 it is the same OAuth client and the same two Analytics scopes.</div>
@@ -434,41 +388,39 @@ it is the same OAuth client and the same two Analytics scopes.</div>
 <div class="step"><b>Copy the tag.</b> The gtag.js snippet with the measurement id already in both of the
 places it belongs, and a paste-ready prompt for
 <a href="/lovable.html">Lovable</a>, v0, Bolt or whatever built the site.</div>
-<p>It is the same page in both postures. Hosted, it signs in with Google in the browser and sends that
-token; local, it is handed the run token in the URL and the server holds the credentials.</p>
+<p><img src="serve.png" width="820" height="976" loading="lazy"
+  style="display:block;width:100%;max-width:560px;height:auto;margin:22px 0 6px;border:1px solid var(--line-2);"
+  alt="The page craft serve opens, showing a measurement id in gold with the tag written out below it and a button that copies it."></p>
+<p>The page is handed the run token in the URL it is opened with; the credentials stay with the CLI,
+which had them already.</p>
 
-<h2><span class="n">04</span>Talking to it yourself</h2>
-<p>JSON in, JSON out, one version prefix. Every endpoint but <code>/v1/health</code> wants a bearer
-token, and what that token <i>is</i> depends on the posture:</p>
-<pre class="code"><span class="d"># on your machine — the token the server printed</span>
-curl -s http://127.0.0.1:52413<span class="k">/v1/session</span> \
-  -H <span class="k">'Authorization: Bearer Jc8Kq2vXn0pLd4WbT7yS1rEo9ZmHfA6uG3iN5xQa'</span>
-
-<span class="d"># hosted — a Google access token carrying the Analytics scopes</span>
-curl -s https://api.anacraft.dev<span class="k">/v1/session</span> \
-  -H <span class="k">'Authorization: Bearer ya29.a0Ad…'</span></pre>
+<h2><span class="n">03</span>Talking to it yourself</h2>
+<p>JSON in, JSON out, one version prefix. Every endpoint but <code>/v1/health</code> wants the bearer
+token the server printed when it started:</p>
+<pre class="code">curl -s http://127.0.0.1:52413<span class="k">/v1/session</span> \
+  -H <span class="k">'Authorization: Bearer Jc8Kq2vXn0pLd4WbT7yS1rEo9ZmHfA6uG3iN5xQa'</span></pre>
 <p>Locally the token also arrives in the URL the browser is opened with, as <code>#k=…</code>. It is in
 the fragment rather than the query so it is never sent to the server as part of a request line and
 never lands in a log; the page reads it, keeps it in memory, and clears it out of the address bar.</p>
-<p>Browsers get no help reaching it from anywhere else. Local mode answers CORS preflights for its own
-loopback origin and nothing besides; hosted mode answers for the origins you list in
-<code>ANACRAFT_SERVE_ORIGINS</code> and, again, nothing besides. There is no wildcard and no flag that
-makes one.</p>
+<p>Browsers get no help reaching it from anywhere else: it answers CORS preflights for its own
+loopback origin and nothing besides. There is no wildcard and no flag that makes one — a page on the
+public web can absolutely try to talk to <code>127.0.0.1</code>, it just cannot guess forty random
+characters while doing it.</p>
 
-<h2><span class="n">05</span>The endpoints</h2>
+<h2><span class="n">04</span>The endpoints</h2>
 <table class="tbl">
   <tr><th>Endpoint</th><th>Does</th><th>Needs</th></tr>
   <tr><td>GET /v1/health</td><td>Liveness, and the version that answers.</td><td>nothing</td></tr>
   <tr><td>GET /v1/session</td><td>Who is signed in, on what plan, with which default property.</td><td>token</td></tr>
-  <tr><td>POST /v1/session</td><td>Start the Google sign-in. Local only.</td><td>token</td></tr>
-  <tr><td>DELETE /v1/session</td><td>Revoke the credentials and forget them. Local only.</td><td>token</td></tr>
+  <tr><td>POST /v1/session</td><td>Start the Google sign-in; it opens a browser and answers at once.</td><td>token</td></tr>
+  <tr><td>DELETE /v1/session</td><td>Revoke the credentials and forget them.</td><td>token</td></tr>
   <tr><td>GET /v1/subscription</td><td>Plan, status, and the date it started.</td><td>account</td></tr>
   <tr><td>POST /v1/subscription/checkout</td><td>A Stripe checkout URL, already tied to this account.</td><td>account</td></tr>
   <tr><td>GET /v1/properties</td><td>Every GA4 property this login can see.</td><td>account</td></tr>
   <tr><td>POST /v1/properties</td><td>Create a property and its web stream. Returns the tag.</td><td>plan</td></tr>
   <tr><td>GET /v1/properties/{id}/streams</td><td>The web data streams on a property, with their ids.</td><td>account</td></tr>
   <tr><td>POST /v1/properties/{id}/streams</td><td>Add a web stream to a property that has none. Returns the tag.</td><td>plan</td></tr>
-  <tr><td>PUT /v1/property</td><td>Set the default property, the way <code>craft use</code> does. Local only.</td><td>account</td></tr>
+  <tr><td>PUT /v1/property</td><td>Set the default property, the way <code>craft use</code> does.</td><td>account</td></tr>
   <tr><td>GET /v1/tag/{measurement_id}</td><td>The snippet and the paste-ready prompt for an id you already have.</td><td>token</td></tr>
   <tr><td>GET /v1/overview</td><td>Users, sessions, views, key events, bounce, duration, with deltas.</td><td>account</td></tr>
   <tr><td>GET /v1/pages</td><td>Most-visited pages.</td><td>account</td></tr>
@@ -479,15 +431,14 @@ makes one.</p>
   <tr><td>GET /v1/live</td><td>Who is on the site right now, by country.</td><td>account</td></tr>
   <tr><td>GET /v1/audit</td><td>What is wrong with how the property measures. Reads only.</td><td>plan</td></tr>
 </table>
-<p><b>token</b> means the bearer token and nothing else. <b>account</b> means a Google account is
-signed in — locally, that somebody ran the sign-in; hosted, that the bearer token is a live Google
-one. <b>plan</b> means the subscription the equivalent command needs, and an account without it gets
+<p><b>token</b> means the bearer token and nothing else. <b>account</b> means somebody has signed in
+with Google. <b>plan</b> means the subscription the equivalent command needs, and an account without it gets
 a <a href="#errors">402 carrying a checkout URL</a> rather than a refusal.</p>
 
-<h2><span class="n">06</span>Signing in</h2>
-<p>Local mode owns the flow, because it owns the credentials. <code>POST /v1/session</code> opens the
-same browser window <code>craft login</code> does and returns immediately; the page polls until the
-answer changes.</p>
+<h2><span class="n">05</span>Signing in</h2>
+<p>The server owns the flow, because it owns the credentials. <code>POST /v1/session</code> opens the
+same browser window <code>craft login</code> does and returns immediately — a sign-in takes as long as
+a person takes — so the page polls until the answer changes.</p>
 <pre class="code">POST <span class="k">/v1/session</span>
 <span class="d">→ 202  { "state": "pending" }</span>
 
@@ -507,12 +458,9 @@ GET <span class="k">/v1/session</span>
 polling this can say what went wrong rather than spinning. <code>tier</code> and
 <code>subscribed</code> are asked of the subscription service on every call, which is how a payment
 made on another machine thirty seconds ago is already true here.</p>
-<p>Hosted mode has no browser to open and nowhere to keep what would come back, so it answers
-<code>409 not_supported</code> and expects the caller to have signed in themselves. A hosted
-<code>GET /v1/session</code> describes the bearer token it was handed: the address on it, the scopes it
-carries, and what the subscription service says about the account.</p>
 
-<h2><span class="n">07</span>Registering a tag</h2>
+
+<h2><span class="n">06</span>Registering a tag</h2>
 <p>The whole point, in one call. It creates the property, adds the web data stream, reads the
 measurement id back, and returns the two blocks of text somebody actually needs.</p>
 <pre class="code">POST <span class="k">/v1/properties</span>
@@ -552,11 +500,11 @@ POST <span class="k">/v1/properties/397890123/streams</span>
 <code>properties.create</code> and <code>dataStreams.create</code>. Nothing here updates or deletes
 anything in an Analytics account — <code>craft delete</code> stays a command somebody has to type.</p>
 
-<h2><span class="n">08</span>Reading the numbers</h2>
+<h2><span class="n">07</span>Reading the numbers</h2>
 <p>The read endpoints take the same two parameters and answer the same shape.</p>
 <table class="tbl">
   <tr><th>Parameter</th><th>Default</th><th>Notes</th></tr>
-  <tr><td>property</td><td>the default property</td><td>Required in hosted mode, which keeps no default.</td></tr>
+  <tr><td>property</td><td>the saved default</td><td>Any property the login can read, by id.</td></tr>
   <tr><td>days</td><td>7</td><td>1 to 365, clamped. Ignored by <code>/v1/live</code>, which is now.</td></tr>
   <tr><td>limit</td><td>10</td><td>Rows, where there are rows. 1 to 100, clamped.</td></tr>
   <tr><td>q</td><td>—</td><td>Substring filter on <code>/v1/pages</code> and <code>/v1/events</code>.</td></tr>
@@ -571,7 +519,7 @@ anything in an Analytics account — <code>craft delete</code> stays a command s
 what it is a number <i>of</i>. Identical reports are cached for a minute, which is what keeps a chatty
 caller from spending the API quota the dashboard needs.</p>
 
-<h2 id="errors"><span class="n">09</span>When it says no</h2>
+<h2 id="errors"><span class="n">08</span>When it says no</h2>
 <pre class="code"><span class="d">{ "error": { "code": "payment_required",</span>
 <span class="d">             "message": "Creating a property needs the Anacrafter plan.",</span>
 <span class="d">             "checkout_url": "https://buy.stripe.com/…" } }</span></pre>
@@ -582,9 +530,9 @@ caller from spending the API quota the dashboard needs.</p>
   <tr><td>402</td><td>payment_required</td><td>The call needs a plan. <code>checkout_url</code> is where to get one.</td></tr>
   <tr><td>403</td><td>forbidden</td><td>Google refused: the account lacks Viewer on the property, or Editor on the account.</td></tr>
   <tr><td>404</td><td>not_found</td><td>No such property, stream, or route.</td></tr>
-  <tr><td>409</td><td>not_signed_in</td><td>Nothing is signed in. Locally, start a session; hosted, send a live token.</td></tr>
-  <tr><td>409</td><td>not_supported</td><td>The posture cannot do this — a write under <code>--demo</code>, or an
-  interactive sign-in in a container.</td></tr>
+  <tr><td>409</td><td>not_signed_in</td><td>Nothing is signed in — <code>POST /v1/session</code> starts one.</td></tr>
+  <tr><td>409</td><td>not_supported</td><td>A write while <code>--demo</code> is in force, which by design changes
+  nothing anywhere.</td></tr>
   <tr><td>429</td><td>rate_limited</td><td>Google is throttling, or this server is. <code>Retry-After</code> says how long.</td></tr>
   <tr><td>500</td><td>no_client</td><td>This build has no OAuth client compiled in, so there is nothing to sign in
   with. A release binary has one; a <code>cargo build</code> of your own needs
@@ -592,52 +540,28 @@ caller from spending the API quota the dashboard needs.</p>
   <tr><td>502</td><td>google</td><td>Google answered something unexpected; its message is passed through whole.</td></tr>
 </table>
 
-<h2 id="container"><span class="n">10</span>In a container</h2>
-<p><code>--hosted</code> is the whole difference: bind every interface, keep no credentials, trust no
-default property, and read the caller's identity off their own Google token. Behind an ingress at a
-name like <code>api.anacraft.dev</code>, that is an API anything can call.</p>
-<pre class="code"><span class="d"># the image is the binary and nothing else</span>
-FROM gcr.io/distroless/cc-debian12
-COPY craft /usr/local/bin/craft
-EXPOSE 8080
-ENTRYPOINT [<span class="k">"craft"</span>, <span class="k">"serve"</span>, <span class="k">"--hosted"</span>, <span class="k">"--port"</span>, <span class="k">"8080"</span>]</pre>
-<table class="tbl">
-  <tr><th>Variable</th><th>Notes</th></tr>
-  <tr><td>ANACRAFT_SERVE_ORIGINS</td><td>Comma-separated browser origins allowed to call it. No wildcard is accepted.</td></tr>
-  <tr><td>ANACRAFT_SUPABASE_URL</td><td>The subscription service, for the plan checks.</td></tr>
-  <tr><td>ANACRAFT_SUPABASE_KEY</td><td>The publishable key. It reaches two functions and nothing else.</td></tr>
-  <tr><td>ANACRAFT_SERVE_RATE</td><td>Requests a minute per account. Defaults to something sane and low.</td></tr>
-</table>
-<p>The OAuth client variables are not on that list, and must not be set: a hosted server never runs a
-sign-in, so a client secret in its environment would be a secret with no job and a blast radius.
-<code>/v1/health</code> is the liveness probe and needs no token; readiness is the same endpoint,
-since a process that answers is a process that can work.</p>
-<p>Two things are yours rather than the binary's. TLS, which belongs at the ingress — the server speaks
-plain HTTP and will not pretend otherwise. And the fact that a Google access token now crosses a
-network to reach it: it is used for the call the caller asked for and never written down, but a
-hosted deployment is a place someone else's token passes through, which is a thing to know before
-you run one for other people.</p>
-
-<h2><span class="n">11</span>What it will not do</h2>
+<h2><span class="n">09</span>What it will not do</h2>
 <ul>
-  <li><b>Bind anything but loopback</b> unless <code>--hosted</code> was typed. There is no flag that
-  quietly widens it.</li>
+  <li><b>Bind anything but loopback.</b> There is no flag that widens it, because there is no version
+  of this that belongs on a network you do not control.</li>
   <li><b>Answer without a token.</b> One endpoint is open, and it returns a version string.</li>
   <li><b>Trust an origin it was not told about.</b> No wildcard CORS, in either posture.</li>
   <li><b>Write anything to an Analytics account beyond the two creates above.</b> No updates, no
   deletes, no key events — those live behind commands a person runs.</li>
-  <li><b>Keep credentials in hosted mode.</b> Nothing is written to disk; the image can run read-only.</li>
+  <li><b>Outlive its usefulness.</b> It stops after an hour with nothing to do: a server started to
+  hand over one tag should not still be listening the next morning.</li>
 </ul>
 
-<h2><span class="n">12</span>Questions</h2>
+<h2><span class="n">10</span>Questions</h2>
 <h3>Why a server, when there is already a CLI?</h3>
 <p>Because registering a tag is the one thing people do before they have any reason to trust a
 terminal. A page with three screens gets somebody from <i>nothing</i> to <i>a measurement id in the
 clipboard</i>, and the endpoints underneath mean the second caller does not have to be a person.</p>
 <h3>Can I run it for other people?</h3>
-<p>Yes, with <code>--hosted</code>, and knowing what the last paragraph of
-<a href="#container">section 10</a> says. Each caller brings their own Google token and their own
-subscription, so there is no shared account to leak.</p>
+<p>Not today. It is one machine's API, holding one account's credentials, and it binds loopback with
+no way to say otherwise. A posture that takes each caller's own Google token and keeps nothing — the
+shape a hosted version would have to have — is a thing to build deliberately, not a flag to leave
+lying around.</p>
 <h3>Does it work without a Google account?</h3>
 <p><code>craft serve --demo</code> answers <i>everything</i> synthetically: the reports carry the
 dashboard's demo numbers, the property list has one demo property in it, and registering a tag hands

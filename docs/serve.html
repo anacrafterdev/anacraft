@@ -404,8 +404,8 @@ page and for <code>craft dash</code> both, because picking one writes the same l
 run, so anything the browser stored would be stored against an origin that will not exist tomorrow.</p>
 
 <h2><span class="n">03</span>Talking to it yourself</h2>
-<p>JSON in, JSON out, one version prefix. Every endpoint but <code>/v1/health</code> wants the bearer
-token the server printed when it started:</p>
+<p>JSON in, JSON out, one version prefix. Every endpoint but <code>/v1/health</code> and
+<code>/v1/openapi.json</code> wants the bearer token the server printed when it started:</p>
 <pre class="code">curl -s http://127.0.0.1:52413<span class="k">/v1/session</span> \
   -H <span class="k">'Authorization: Bearer Jc8Kq2vXn0pLd4WbT7yS1rEo9ZmHfA6uG3iN5xQa'</span></pre>
 <p>Locally the token also arrives in the URL the browser is opened with, as <code>#k=…</code>. It is in
@@ -420,7 +420,7 @@ characters while doing it.</p>
 <table class="tbl">
   <tr><th>Endpoint</th><th>Does</th><th>Needs</th></tr>
   <tr><td>GET /v1/health</td><td>Liveness, and the version that answers.</td><td>nothing</td></tr>
-  <tr><td>GET /v1/openapi.json</td><td>This table, as OpenAPI 3.1, with the port it is really on.</td><td>token</td></tr>
+  <tr><td>GET /v1/openapi.json</td><td>This table, as OpenAPI 3.1, with the port it is really on.</td><td>nothing</td></tr>
   <tr><td>GET /v1/session</td><td>Who is signed in, on what plan, with which default property.</td><td>token</td></tr>
   <tr><td>POST /v1/session</td><td>Start the Google sign-in; it opens a browser and answers at once.</td><td>token</td></tr>
   <tr><td>DELETE /v1/session</td><td>Revoke the credentials and forget them.</td><td>token</td></tr>
@@ -453,8 +453,10 @@ needs neither.</p>
 <h3>Or let a machine read it</h3>
 <p>Everything in the table above is also served as an OpenAPI 3.1 document, so a generated client, an
 editor, or an agent that speaks OpenAPI can pick the API up without being told about it twice.</p>
-<pre class="code">curl -s http://127.0.0.1:52413<span class="k">/v1/openapi.json</span> \
-  -H <span class="k">'Authorization: Bearer …'</span> | jq .paths</pre>
+<pre class="code">curl -s http://127.0.0.1:52413<span class="k">/v1/openapi.json</span> | jq .paths</pre>
+<p><b>It needs no token</b>, which is the second of the two open routes. A description of the door is
+not a key to it — every word of it is on this page already — and a client generator reads the
+description <i>before</i> it has been given a token, which is the whole point of having one.</p>
 <p>It is built when you ask for it rather than written down, for one field: <code>servers</code>
 carries the port this run actually got, and a document naming yesterday's port would send every
 generated client to a closed door. The descriptions come from a table in the source that a test
@@ -587,7 +589,8 @@ caller from spending the API quota the dashboard needs.</p>
 <ul>
   <li><b>Bind anything but loopback.</b> There is no flag that widens it, because there is no version
   of this that belongs on a network you do not control.</li>
-  <li><b>Answer without a token.</b> One endpoint is open, and it returns a version string.</li>
+  <li><b>Answer without a token.</b> Two endpoints are open: a version string, and a description of
+  the API that is published on this page anyway.</li>
   <li><b>Trust an origin it was not told about.</b> No wildcard CORS, in either posture.</li>
   <li><b>Write anything to an Analytics account beyond the two creates and the one delete above.</b>
   No updates, no key events, no settings — those live behind commands a person runs. And the delete

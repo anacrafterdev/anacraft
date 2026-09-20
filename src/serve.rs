@@ -132,7 +132,6 @@ pub async fn run(opts: Options) -> Result<()> {
         .route("/v1/properties/:id/streams", get(streams).post(add_stream))
         .route("/v1/property", put(use_property))
         .route("/v1/themes", get(themes).put(use_theme))
-        .route("/v1/openapi.json", get(openapi))
         .route("/v1/tag/:measurement_id", get(tag))
         .route("/v1/overview", get(overview))
         .route("/v1/pages", get(pages))
@@ -147,6 +146,12 @@ pub async fn run(opts: Options) -> Result<()> {
     let router = Router::new()
         .route("/", get(page))
         .route("/v1/health", get(health))
+        // Open, like health. A description of the door is not a key to it:
+        // this names the routes and the shape of an answer, all of which is
+        // published at anacraft.dev/serve.html anyway — and a client
+        // generator or an agent reads the description *before* it has been
+        // given a token, which is the whole point of there being one.
+        .route("/v1/openapi.json", get(openapi))
         .merge(guarded)
         .with_state(app.clone());
 
@@ -387,7 +392,7 @@ const ROUTES: &[Route] = &[
         method: "get",
         path: "/v1/openapi.json",
         summary: "This document.",
-        needs: "token",
+        needs: "nothing",
     },
 ];
 

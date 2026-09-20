@@ -1,0 +1,58 @@
+{% extends "layout.html" %}
+{% block title %}anacraft — {{ measurement_id }}{% endblock %}
+{% block pane %}
+<h2>Your tag is ready</h2>
+<div class="mid">{{ measurement_id }}</div>
+<div class="sub">{{ subtitle }}</div>
+
+{#- Two tabs, two URLs. Which block somebody is looking at is a thing worth
+    being able to link to and reload onto, and a link does that for nothing. -#}
+<div class="tabs" role="tablist" aria-label="What to copy">
+  <a class="tab" role="tab" href="{{ here }}" aria-selected="{{ prompt_shown }}">Paste to the agent</a>
+  <a class="tab" role="tab" href="{{ here }}&amp;show=tag" aria-selected="{{ !prompt_shown }}">Raw tag</a>
+</div>
+<pre id="paste">{{ text }}</pre>
+
+{#- The one button left that cannot be a link. Reaching the clipboard is
+    JavaScript by definition, so it is JavaScript — and the `<pre>` above is
+    selectable text whether this runs or not. -#}
+<button class="primary" id="copy" type="button">{{ copy_label }}</button>
+<script>
+  (function () {
+    var copy = document.getElementById('copy');
+    var label = copy.textContent;
+    copy.addEventListener('click', function () {
+      navigator.clipboard.writeText(document.getElementById('paste').textContent).then(function () {
+        copy.classList.add('done');
+        copy.textContent = 'Copied';
+        setTimeout(function () { copy.classList.remove('done'); copy.textContent = label; }, 1800);
+      }).catch(function () {
+        // No clipboard permission, so select it instead and let the keyboard
+        // do what the button could not.
+        var range = document.createRange();
+        range.selectNodeContents(document.getElementById('paste'));
+        var selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+      });
+    });
+  })();
+</script>
+
+<p class="fine">{{ hint }}</p>
+
+<div class="next">
+  <p>{{ next_line }}</p>
+  <div class="cmd"><span class="p">$</span><span>craft dash</span></div>
+  <div class="acts">
+    {%- if can_default %}
+    <form method="post" action="/property">
+      <input type="hidden" name="id" value="{{ property_id }}">
+      <input type="hidden" name="back" value="{{ here }}&amp;saved=1">
+      <button class="lnk" type="submit">make this the default property</button>
+    </form>
+    {%- endif %}
+    <a class="lnk" href="/properties">pick a different property</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "layout.html" %}
+{% block title %}anacraft — open the URL the terminal printed{% endblock %}
+{% block pane %}
+<h2>{{ heading }}</h2>
+<p>
+  This page needs the token <code>craft serve</code> minted when it started —
+  it travels in the part of the URL after the <code>#</code>, which a request
+  never carries. Copy the whole line from the terminal, including the
+  <code>#k=…</code>, and open that.
+</p>
+
+{#- The one place a fragment has to be turned into something a server can
+    read. A fragment is deliberately never sent — that is why the token rides
+    in one — so a server-rendered flow needs it handed over once, exactly
+    here, and kept in a cookie afterwards. Nine lines, and then the browser is
+    following links and submitting forms like any other page. -#}
+<script>
+  (function () {
+    var found = (location.hash.match(/(?:^|[#&])k=([^&]+)/) || [])[1];
+    if (!found) { return; }
+    // Out of the address bar before anything else, so a shoulder or a
+    // screenshot does not carry it — and so the navigation below starts from
+    // a document with no fragment to inherit.
+    history.replaceState(null, '', location.pathname);
+    fetch('/session/key', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ k: decodeURIComponent(found) })
+    }).then(function (res) {
+      if (!res.ok) { return location.replace(location.origin + '/?bad=1'); }
+      // One navigation, onto the address the server just named. Not a
+      // redirect followed: a browser carries the fragment of the page it
+      // started on through a redirect, which would put the token straight
+      // back where this just took it from.
+      return res.text().then(function (next) {
+        location.replace(location.origin + next);
+      });
+    });
+  })();
+</script>
+{% endblock %}

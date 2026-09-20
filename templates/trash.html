@@ -1,0 +1,30 @@
+{#- Two steps, and the second one says what it is doing.
+
+    The page used to arm a button for five seconds; a route asks the question
+    on a page of its own, which is the same two deliberate acts without a
+    timer that can lapse while somebody reads. The endpoint underneath still
+    wants the id twice, and this form still sends it twice. -#}
+{% extends "layout.html" %}
+{% block title %}anacraft — trash this property?{% endblock %}
+{% block pane %}
+<h2>Move “{{ name }}” to the trash?</h2>
+<p>
+  It stops collecting straight away. Google keeps it restorable from the
+  Analytics console for 35 days, and nothing here can shorten that.
+</p>
+<div class="list">
+  <div class="row">
+    <span class="choose">
+      <span class="nm">{{ name }}</span>
+      <span class="id">{{ id }}</span>
+    </span>
+  </div>
+</div>
+<div class="acts">
+  <form method="post" action="/properties/{{ id }}/trash">
+    <input type="hidden" name="confirm" value="{{ id }}">
+    <button class="primary" type="submit" style="margin-top:0">Yes, trash it</button>
+  </form>
+  <a class="lnk" href="/properties">keep it</a>
+</div>
+{% endblock %}

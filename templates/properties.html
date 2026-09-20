@@ -1,0 +1,39 @@
+{% extends "layout.html" %}
+{% block title %}anacraft — pick this site's property{% endblock %}
+{% block pane %}
+<h2>Pick this site's property</h2>
+<p>
+  One property per site, so each site's numbers are its own. A site rebuilt a
+  few times leaves a few behind — hover a row to throw one into the Analytics
+  trash, where Google keeps it restorable for 35 days.
+</p>
+<div class="list">
+  <div class="row make">
+    <a class="choose" href="/properties/new"><span class="nm">+  Create a new property</span></a>
+  </div>
+  {%- for property in properties %}
+  <div class="row">
+    {#- Property names are somebody's typing. They arrive here as text and
+        never as markup, which is askama's default and the reason the views
+        are templates rather than `format!`. -#}
+    <a class="choose" href="/properties/{{ property.id }}/streams">
+      <span class="nm">{{ property.name }}</span>
+      <span class="id">{{ property.id }}</span>
+      <span class="ac">{{ property.account }}</span>
+    </a>
+    {#- The name travels with the id so the page that asks "really?" can say
+        which property it means without going back to Google for the word. -#}
+    <a class="bin" href="{{ property.trash }}"
+      title="Move this property to the Analytics trash">trash</a>
+  </div>
+  {%- endfor %}
+  {%- if properties.is_empty() %}
+  <div class="empty">no GA4 properties on this account yet — make the first one above</div>
+  {%- endif %}
+</div>
+<div class="acts">
+  <form method="post" action="/signout">
+    <button class="lnk" type="submit">sign out</button>
+  </form>
+</div>
+{% endblock %}

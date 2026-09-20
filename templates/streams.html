@@ -1,0 +1,19 @@
+{% extends "layout.html" %}
+{% block title %}anacraft — pick this site's data stream{% endblock %}
+{% block pane %}
+<h2>More than one website here</h2>
+<p>Each web data stream has its own measurement ID. Pick this site's.</p>
+<div class="list">
+  {%- for stream in streams %}
+  <div class="row">
+    <a class="choose" href="/tag/{{ stream.measurement_id }}?p={{ property_id }}">
+      <span class="nm">{{ stream.name }}</span>
+      <span class="ac">{{ stream.measurement_id }}</span>
+    </a>
+  </div>
+  {%- endfor %}
+</div>
+<div class="acts">
+  <a class="lnk" href="/properties">back to the properties</a>
+</div>
+{% endblock %}

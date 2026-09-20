@@ -1,0 +1,102 @@
+{#- The shell every view is served inside.
+
+    One card, one pane, one page. What used to be nine `data-pane` divs
+    switched by JavaScript is now nine templates behind nine routes, so the
+    thing in front of somebody has a URL, a back button and a reload that does
+    what a reload should do.
+
+    Everything the shell itself needs — the palette in force, who is signed
+    in, which dot the card wears — travels in `shell`, so a view only has to
+    describe its own middle. -#}
+<!DOCTYPE html>
+<html lang="en"{% if !shell.pal.is_empty() %} data-pal="{{ shell.pal }}"{% endif %}>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  {%- block head %}{% endblock %}
+  <title>{% block title %}anacraft{% endblock %}</title>
+  <!-- Served by `craft serve` off a machine that may have no network at all,
+       so the one thing this page fetches is this server's own stylesheet. -->
+  <link rel="stylesheet" href="/app.css">
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <svg class="pick" role="img" aria-label="A" width="14" height="14" viewBox="1 1 14 14"
+        shape-rendering="crispEdges" fill="currentColor">
+        <rect x="6" y="1" width="4" height="1" />
+        <rect x="5" y="2" width="6" height="1" />
+        <rect x="4" y="3" width="8" height="1" />
+        <rect x="4" y="4" width="8" height="1" />
+        <rect x="3" y="5" width="4" height="1" />
+        <rect x="9" y="5" width="4" height="1" />
+        <rect x="3" y="6" width="4" height="1" />
+        <rect x="9" y="6" width="4" height="1" />
+        <rect x="2" y="7" width="4" height="1" />
+        <rect x="10" y="7" width="4" height="1" />
+        <rect x="2" y="8" width="4" height="1" />
+        <rect x="10" y="8" width="4" height="1" />
+        <rect x="1" y="9" width="4" height="1" />
+        <rect x="11" y="9" width="4" height="1" />
+        <rect x="1" y="10" width="14" height="1" />
+        <rect x="1" y="11" width="14" height="1" />
+        <rect x="1" y="12" width="4" height="1" />
+        <rect x="11" y="12" width="4" height="1" />
+        <rect x="1" y="13" width="4" height="1" />
+        <rect x="11" y="13" width="4" height="1" />
+        <rect x="1" y="14" width="4" height="1" />
+        <rect x="11" y="14" width="4" height="1" />
+      </svg>nacraft
+    </div>
+
+    <h1>Get your GA4 tag.</h1>
+    <p class="lede">
+      Sign in with Google, pick or create the property for your site, and copy
+      the tag. This page is served by <code>craft serve</code> on your own
+      machine — nothing here leaves it but the calls to Google.
+    </p>
+
+    <div class="card" data-state="{{ shell.state }}">
+      <div class="head">
+        <span class="dot" aria-hidden="true"></span>
+        <span>ga4 tag</span>
+        <span class="who">{{ shell.who }}</span>
+      </div>
+      <div class="body">
+        <div class="pane on">
+          {%- block pane %}{% endblock %}
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <span>the endpoints behind this page: <a href="/docs">the API reference</a> ·
+        <a href="https://anacraft.dev/serve.html">the guide</a></span>
+      {#- Picking a palette writes the line `craft theme` writes, so the
+          terminal and this page are never wearing different clothes. A form
+          rather than a script: the chips are submit buttons, and the server
+          sends the browser back to where it was standing. -#}
+      <form class="pals" method="post" action="/themes" role="group" aria-label="Palette">
+        <input type="hidden" name="back" value="{{ shell.path }}">
+        {%- for chip in shell.themes %}
+        <button class="pal" type="submit" name="name" value="{{ chip.name }}" data-pal="{{ chip.name }}"
+          title="{{ chip.name }}" aria-label="{{ chip.name }}" aria-pressed="{{ chip.current }}"></button>
+        {%- endfor %}
+      </form>
+    </footer>
+  </div>
+  {#- A fragment has no business surviving on any view here.
+
+      The token arrives in one, on the way in, and the handshake takes it out
+      of the address bar itself — but a browser carries the fragment of the
+      page it started on through a redirect, and `/` redirects. So every page
+      sweeps, rather than one page being careful: it costs two lines and it
+      cannot be got wrong by adding a route later. -#}
+  <script>
+    if (location.hash) { history.replaceState(null, '', location.pathname + location.search); }
+  </script>
+</body>
+
+</html>

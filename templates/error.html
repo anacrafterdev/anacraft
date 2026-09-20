@@ -1,0 +1,8 @@
+{% extends "layout.html" %}
+{% block title %}anacraft — that did not work{% endblock %}
+{% block pane %}
+<div class="err"><b>that did not work</b><span>{{ message }}</span></div>
+<div class="acts">
+  <a class="go" href="{{ back }}" style="margin-top:0">Try again</a>
+</div>
+{% endblock %}

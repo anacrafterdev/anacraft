@@ -154,12 +154,33 @@ PAGES = [
     "privacy.html", "terms.html", "lovable.html",
 ]
 
-# The page `craft serve` carries in the binary. It gets the blocks and nothing
-# else: the palette it wears comes from the config file over its own API, not
-# from `localStorage`, because the port changes every run and a preference
-# stored against `127.0.0.1:52413` is a preference stored against an origin
-# that will not exist tomorrow.
-CARRIED = ["assets/serve.html"]
+# The stylesheet `craft serve` carries in the binary and serves at `/app.css`.
+# It gets the blocks and nothing else: the palette it wears comes from the
+# config file, written by the server that rendered the page, not from
+# `localStorage` — the port changes every run and a preference stored against
+# `127.0.0.1:52413` is a preference stored against an origin that will not
+# exist tomorrow.
+CARRIED = ["assets/serve.css"]
+
+SWATCH_START, SWATCH_END = "/* swatches:start */", "/* swatches:end */"
+
+
+def swatch(p):
+    """One palette chip, painted in its own palette.
+
+    The chips live in a footer styled by whichever palette is *in force*, so
+    they cannot read their colours off `html[data-pal]` the way everything
+    else does. The page used to borrow them at runtime by setting the
+    attribute on the document, reading the computed value and putting it back
+    — a probe that only worked because the page was one document that never
+    navigated. Server-rendered, each chip is told its two colours here, out of
+    the same `css()` numbers the blocks above are built from, so there is no
+    second list to drift.
+    """
+    block = dict(re.findall(r"--([a-z-]+): ([^;]+);", css(p)))
+    return (f'.pal[data-pal="{p["name"]}"] {{ '
+            f'--swatch-ground: {block["ground"]}; '
+            f'--swatch-accent: {block["jade"]}; }}')
 
 RESTORE_START = "<!-- palette-restore:start -->"
 RESTORE_END = "<!-- palette-restore:end -->"
@@ -220,13 +241,19 @@ def main():
         text = splice(text, RESTORE_START, RESTORE_END, RESTORE)
         page.write_text(text)
 
+    chips = "\n".join(swatch(p) for p in parse())
+
     for name in CARRIED:
         page = ROOT / name
         if not page.exists():
             sys.exit(f"{name}: not found")
         text = prepare(page.read_text(), name)
         pad = re.search(r"^([ \t]*)" + re.escape(START), text, re.M).group(1)
-        page.write_text(splice(text, START, END, body, indent=pad))
+        text = splice(text, START, END, body, indent=pad)
+        # The chips are the carried stylesheet's alone: `.pal` means something
+        # else on the site, where it is a row in the palette showcase.
+        text = splice(text, SWATCH_START, SWATCH_END, chips)
+        page.write_text(text)
 
     print(
         f"  {len(blocks)} palettes into {len(PAGES)} pages "

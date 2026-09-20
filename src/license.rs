@@ -464,7 +464,7 @@ pub async fn already_paid(account: Option<&Account>, token: Option<&str>) -> Opt
 
 /// Percent-encode an email for a query string. Only `@` and `+` really matter,
 /// but the unreserved set is the honest rule.
-fn encode(s: &str) -> String {
+pub(crate) fn encode(s: &str) -> String {
     s.bytes()
         .map(|b| match b {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {

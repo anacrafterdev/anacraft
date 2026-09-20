@@ -13,11 +13,16 @@
 //! who is allowed to ask, what an answer looks like, and what a refusal says.
 //!
 //! It binds loopback and nothing else. Every route but `/v1/health` and the
-//! page itself wants the bearer token minted at startup and printed once, and
+//! way into the pages wants the token minted at startup and printed once, and
 //! a browser reaching it has to come from this server's own origin. That is
 //! three locks on a door that only opens onto one machine, and they are there
 //! because a page on the public web can absolutely try to talk to
 //! `127.0.0.1` — it just cannot guess forty random characters while doing it.
+//!
+//! The pages themselves live in [`views`]. They are routes rather than one
+//! file with a script in it, they take the token in a cookie rather than a
+//! header because a `<form>` cannot send a header, and they call the same
+//! functions the handlers below do.
 
 use std::net::Ipv4Addr;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -34,14 +39,12 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+mod views;
+
 use crate::auth::{Auth, Cta, Landing, Tokens};
 use crate::config::Config;
 use crate::ga::Ga;
 use crate::license::{self, Tier};
-
-/// The page `craft serve` opens, carried in the binary so the server has no
-/// files to find and no directory to be run from.
-const PAGE: &str = include_str!("../assets/serve.html");
 
 /// The API reference at `/docs`, drawn from the document this server
 /// generates rather than from a second list of routes that could fall behind
@@ -154,7 +157,8 @@ pub async fn run(opts: Options) -> Result<()> {
         .layer(middleware::from_fn_with_state(app.clone(), guard));
 
     let router = Router::new()
-        .route("/", get(page))
+        // Every page this server renders, and the stylesheet behind them.
+        .merge(views::router(app.clone()))
         .route("/v1/health", get(health))
         // Open, like health. A description of the door is not a key to it:
         // this names the routes and the shape of an answer, all of which is
@@ -675,10 +679,6 @@ impl From<anyhow::Error> for Fail {
 }
 
 // ------------------------------------------------------------- the page ---
-
-async fn page() -> Html<&'static str> {
-    Html(PAGE)
-}
 
 /// The reference at `/docs`. It ships with no routes in it and fills itself in
 /// from `/v1/openapi.json`, so there is no second list of endpoints in this
@@ -1477,32 +1477,31 @@ mod tests {
     }
 
     #[test]
-    fn the_page_it_serves_fetches_nothing_from_anywhere_else() {
+    fn the_reference_fetches_nothing_from_anywhere_else() {
         // `craft serve` runs on machines behind corporate proxies, on
         // aeroplanes, and on a laptop whose only working connection is the one
         // to Google. A stylesheet or a font from a CDN would turn the page
         // that hands over a measurement id into a page that sometimes renders.
-        for (name, page) in [("assets/serve.html", PAGE), ("assets/api.html", API_PAGE)] {
-            for tag in [
-                "<script src",
-                "<link",
-                "@import",
-                "fonts.googleapis",
-                "cdn.",
-            ] {
-                assert!(
-                    !page.contains(tag),
-                    "{name} reaches for `{tag}` — these pages have to be self-contained"
-                );
-            }
-            // The only outbound addresses the markup points at are links a
-            // person clicks, never something the browser fetches on load.
-            // (Other `https://` strings in these files are a placeholder and
-            // an error message, which ask nothing of the network.)
-            assert!(page.contains("href=\"https://anacraft.dev/serve.html\""));
-            assert!(!page.contains("src=\"http"));
+        // The same test for the views is in `views.rs`, where a rendered page
+        // can be looked at rather than a template.
+        for tag in [
+            "<script src",
+            "<link",
+            "@import",
+            "fonts.googleapis",
+            "cdn.",
+        ] {
+            assert!(
+                !API_PAGE.contains(tag),
+                "assets/api.html reaches for `{tag}` — this page has to be self-contained"
+            );
         }
-        assert_eq!(PAGE.matches("href=\"http").count(), 1);
+        // The only outbound address the markup points at is a link a person
+        // clicks, never something the browser fetches on load. (The other
+        // `https://` strings in the file are a placeholder and an error
+        // message, which ask nothing of the network.)
+        assert!(API_PAGE.contains("href=\"https://anacraft.dev/serve.html\""));
+        assert!(!API_PAGE.contains("src=\"http"));
     }
 
     /// This module's own source, read at compile time, so the router can be
@@ -1541,8 +1540,10 @@ mod tests {
 
     /// Served, and deliberately not in the document: it answers HTML to a
     /// browser, and an OpenAPI path for it would describe the page as an
-    /// endpoint that returns a string.
-    const NOT_API: [&str; 2] = ["/", "/docs"];
+    /// endpoint that returns a string. The views have the same exemption and
+    /// never reach this scan — they are routed in `views.rs`, and checked by
+    /// the tests there.
+    const NOT_API: [&str; 1] = ["/docs"];
 
     #[test]
     fn the_openapi_document_describes_exactly_what_is_routed() {
@@ -1562,29 +1563,6 @@ mod tests {
                 route.path
             );
         }
-    }
-
-    #[test]
-    fn every_route_the_page_calls_is_a_route_the_server_has() {
-        // The page is a file; nothing type-checks the paths in it. This does.
-        let routes = [
-            "/v1/session",
-            "/v1/subscription",
-            "/v1/subscription/checkout",
-            "/v1/properties",
-            "/v1/property",
-            "/v1/tag/",
-        ];
-        for route in routes {
-            assert!(
-                PAGE.contains(route),
-                "{route} is served but the page never calls it — one of the two is wrong"
-            );
-        }
-        // And the other direction: no path in the page that this module does
-        // not route. `/v1/properties/' + id + '/streams` is built up, so it is
-        // checked by its tail.
-        assert!(PAGE.contains("/streams"));
     }
 
     #[test]

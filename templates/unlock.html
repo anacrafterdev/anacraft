@@ -1,0 +1,27 @@
+{% extends "layout.html" %}
+{% block title %}anacraft — unlock the tag{% endblock %}
+{% block pane %}
+<h2>{{ heading }}</h2>
+<p>{{ body }}</p>
+<div class="price">
+  <span class="fig">{{ price }}</span>
+  <span class="per">per month · cancel any time</span>
+</div>
+<form method="post" action="/unlock/checkout">
+  <button class="primary" type="submit">{{ action }}</button>
+</form>
+<p class="fine">
+  Stripe opens in a new tab; this page waits for it and carries on by itself.
+  Already subscribed? <a class="lnk" href="/">check again</a>
+</p>
+<div class="acts">
+  {#- Sign-out is offered here as well as on the property list. Somebody who
+      landed on a paywall having signed in with the wrong Google account — the
+      personal one, when the subscription is on the work one — otherwise has
+      two ways forward, and both of them are a credit card. -#}
+  <span class="fine" style="margin:0">{{ who }}</span>
+  <form method="post" action="/signout">
+    <button class="lnk" type="submit">sign out and use a different account</button>
+  </form>
+</div>
+{% endblock %}

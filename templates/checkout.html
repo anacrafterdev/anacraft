@@ -1,0 +1,24 @@
+{#- The checkout, opened rather than redirected to: Stripe is a different
+    place, and a person who closes that tab should find this one still here
+    and still waiting. The link carries `target="_blank"`, and the meta
+    refresh below asks the CLI every few seconds whether the plan has
+    landed. -#}
+{% extends "layout.html" %}
+{% block head %}<meta http-equiv="refresh" content="4">{% endblock %}
+{% block title %}anacraft — waiting for Stripe{% endblock %}
+{% block pane %}
+<h2>Finish in the Stripe tab</h2>
+<p>
+  The checkout is already tied to this account, so the payment lands on the
+  row every <code>craft</code> command reads afterwards.
+</p>
+<a class="primary" href="{{ url }}" target="_blank" rel="noopener">Open the checkout →</a>
+<div class="work">waiting for Stripe</div>
+<p class="fine">
+  This page notices by itself and moves on. Nothing was charged until the
+  Stripe tab says so.
+</p>
+<div class="acts">
+  <a class="lnk" href="/unlock">back</a>
+</div>
+{% endblock %}

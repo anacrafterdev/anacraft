@@ -1,0 +1,15 @@
+{#- Work that finishes somewhere else, on its own time: a Google window, a
+    Stripe tab. The page used to poll with `setInterval`; a page with a URL
+    asks the browser to fetch it again instead, which is the same question
+    without the JavaScript — and survives being reloaded, which the interval
+    did not. -#}
+{% extends "layout.html" %}
+{% block head %}<meta http-equiv="refresh" content="{{ every }}">{% endblock %}
+{% block title %}anacraft — {{ what }}{% endblock %}
+{% block pane %}
+<div class="work">{{ what }}</div>
+<p class="fine">{{ note }}</p>
+<div class="acts">
+  <a class="lnk" href="{{ giveup }}">{{ giveup_label }}</a>
+</div>
+{% endblock %}

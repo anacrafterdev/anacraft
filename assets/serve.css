@@ -1,0 +1,485 @@
+/* The stylesheet behind every page `craft serve` renders.
+ *
+ * Served at `/app.css` off a machine that may have no network at all, so
+ * there is nothing here to fetch from anywhere else: no font, no import, no
+ * second sheet. It is one file rather than a `<style>` in each view because
+ * the server now answers a page per route, and twenty kilobytes of identical
+ * rules on every navigation is twenty kilobytes the browser already has.
+ *
+ * The palette blocks below the `:root` are generated — `make palettes` reads
+ * them out of `src/theme.rs`, so the page wears the dashboard's colours and
+ * cannot drift from them.
+ */
+:root {
+  --ground: #060a09;
+  --ink: #09100d;
+  --panel: #0d1512;
+  --line: rgba(193, 196, 151, .11);
+  --line-2: rgba(193, 196, 151, .20);
+  --fg: #c1c497;
+  --white: #eef1dc;
+  --dim: #6c7f73;
+  --jade: #2dd5b7;
+  --jade-deep: #509475;
+  --gold: #ffe16b;
+  --coral: #ff5345;
+  --on-accent: #09100d;
+  --mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+/* palettes:start */
+  html[data-pal="solarized-dark"] {
+    --ground: #001f27;
+    --ink: #002b36;
+    --panel: #073642;
+    --line: rgba(88,110,117,.35);
+    --line-2: rgba(88,110,117,.55);
+    --fg: #9ca9ab;
+    --white: #c7cfd0;
+    --dim: #74888f;
+    --jade: #2aa198;
+    --jade-deep: #44908f;
+    --gold: #b58900;
+    --coral: #dc322f;
+    --on-accent: #001f27;
+  }
+  html[data-pal="tokyo-night"] {
+    --ground: #161823;
+    --ink: #1a1b26;
+    --panel: #24283b;
+    --line: rgba(57,63,81,.35);
+    --line-2: rgba(57,63,81,.55);
+    --fg: #c0caf5;
+    --white: #e3e7fa;
+    --dim: #898fb6;
+    --jade: #7aa2f7;
+    --jade-deep: #89dceb;
+    --gold: #e0af68;
+    --coral: #f7768e;
+    --on-accent: #161823;
+  }
+  html[data-pal="catppuccin"] {
+    --ground: #11111b;
+    --ink: #1e1e2e;
+    --panel: #313244;
+    --line: rgba(69,71,90,.35);
+    --line-2: rgba(69,71,90,.55);
+    --fg: #cdd6f4;
+    --white: #e8edfa;
+    --dim: #7b7e92;
+    --jade: #94e2d5;
+    --jade-deep: #74c7ec;
+    --gold: #f9e2af;
+    --coral: #f38ba8;
+    --on-accent: #11111b;
+  }
+  html[data-pal="github"] {
+    --ground: #010409;
+    --ink: #0d1117;
+    --panel: #161b22;
+    --line: rgba(48,54,61,.35);
+    --line-2: rgba(48,54,61,.55);
+    --fg: #c9d1d9;
+    --white: #e7eaee;
+    --dim: #8b949e;
+    --jade: #39c5cf;
+    --jade-deep: #2372eb;
+    --gold: #d29922;
+    --coral: #f85149;
+    --on-accent: #010409;
+  }
+  html[data-pal="solarized-light"] {
+    --ground: #e2dbc7;
+    --ink: #fdf6e3;
+    --panel: #eee8d5;
+    --line: rgba(147,161,161,.35);
+    --line-2: rgba(147,161,161,.55);
+    --fg: #394549;
+    --white: #2d373b;
+    --dim: #566263;
+    --jade: #1c6a64;
+    --jade-deep: #3f6760;
+    --gold: #b58900;
+    --coral: #dc322f;
+    --on-accent: #fdf6e3;
+  }
+  html[data-pal="catppuccin-latte"] {
+    --ground: #e6e9f0;
+    --ink: #fafbfe;
+    --panel: #f0f3f8;
+    --line: rgba(200,207,218,.35);
+    --line-2: rgba(200,207,218,.55);
+    --fg: #242938;
+    --white: #101219;
+    --dim: #616872;
+    --jade: #0965d1;
+    --jade-deep: #4068ae;
+    --gold: #996600;
+    --coral: #c92a2a;
+    --on-accent: #fafbfe;
+  }
+/* palettes:end */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--ground);
+  color: var(--fg);
+  font-family: var(--sans);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  padding: 48px 24px 72px;
+}
+
+::selection { background: var(--jade); color: #04120e; }
+
+.wrap { max-width: 720px; margin: 0 auto; }
+
+/* The same mark the site wears: the pick is the A, so the word beside it
+   is "nacraft" and nothing has to be typed twice. Archivo is not here —
+   the page is self-contained and fetches no font — so the heaviest system
+   sans stands in, at the same size and tracking. */
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  font-weight: 900;
+  font-size: 20px;
+  letter-spacing: -.03em;
+  color: var(--white);
+  margin-bottom: 20px;
+}
+
+.brand svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  margin-right: 2px;
+  color: var(--jade);
+}
+
+h1 {
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: clamp(26px, 5vw, 38px);
+  letter-spacing: -.035em;
+  line-height: 1.05;
+  color: var(--white);
+}
+
+.lede { margin-top: 12px; max-width: 54ch; color: var(--dim); font-size: 15px; }
+
+.card {
+  margin-top: 32px;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 20px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.dot { width: 7px; height: 7px; background: var(--jade-deep); flex: none; }
+.card[data-state="out"] .dot { background: var(--jade); }
+.card[data-state="err"] .dot { background: var(--coral); }
+.who { margin-left: auto; letter-spacing: .04em; color: var(--jade-deep); text-transform: none; }
+
+.body { padding: 26px 24px; }
+.pane { display: none; }
+.pane.on { display: block; }
+
+h2 { font-size: 19px; font-weight: 700; letter-spacing: -.02em; color: var(--white); }
+p { margin-top: 10px; font-size: 14.5px; color: var(--dim); max-width: 54ch; }
+code { font-family: var(--mono); font-size: 12.5px; color: var(--jade); }
+
+button { font: inherit; cursor: pointer; border-radius: 0; }
+
+/* Controls that are links now, because they are navigations now: a view has
+   a URL of its own, so picking a property is an `<a>` rather than a button
+   with a listener on it. `.lnk` and `.choose` were written for `<button>`,
+   which arrives with no underline and no inherited colour; this is the whole
+   of the difference. */
+a.lnk { display: inline-flex; }
+a.choose, a.bin, a.primary, a.go, a.tab { text-decoration: none; }
+a.bin { display: inline-block; }
+
+.go {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+  background: var(--ink);
+  border: 1px solid var(--line-2);
+  padding: 13px 20px;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--white);
+  transition: border-color .15s, background .15s;
+}
+
+.go:hover { border-color: var(--jade); }
+.go[disabled] { opacity: .5; cursor: default; }
+.go svg { width: 17px; height: 17px; display: block; flex: none; }
+
+.primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  background: var(--jade);
+  color: var(--on-accent);
+  border: 1px solid var(--jade);
+  padding: 12px 22px;
+  font-weight: 700;
+  font-size: 14.5px;
+}
+
+.primary:hover { filter: brightness(1.07); }
+.primary.done { background: none; color: var(--jade); }
+
+.lnk {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--dim);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.lnk:hover { color: var(--jade); }
+.acts { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-top: 22px; }
+
+.fine {
+  margin-top: 16px;
+  max-width: 62ch;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.95;
+  color: var(--dim);
+}
+
+.work { font-family: var(--mono); font-size: 13px; color: var(--fg); }
+.work::after { content: '▍'; color: var(--jade); margin-left: 3px; animation: caret 1.05s steps(1) infinite; }
+@keyframes caret { 50% { opacity: 0 } }
+@media (prefers-reduced-motion: reduce) { .work::after { animation: none } }
+
+.list { margin-top: 18px; border-top: 1px solid var(--line); max-height: 320px; overflow-y: auto; }
+
+.row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  transition: background .12s;
+}
+
+.row:hover { background: var(--ink); }
+
+.choose {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 13px 8px;
+  color: inherit;
+}
+
+.choose:focus-visible { outline: 1px solid var(--jade); outline-offset: -2px; }
+
+/* Quiet until the row is under the pointer: throwing a property away is
+   not something to offer as prominently as picking one. */
+.bin {
+  background: none;
+  border: 0;
+  padding: 13px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  opacity: 0;
+  transition: opacity .12s, color .12s;
+}
+
+.row:hover .bin, .bin:focus-visible, .bin.armed { opacity: 1; }
+.bin:hover { color: var(--coral); }
+.bin.armed { color: var(--coral); }
+.row .nm { font-size: 14.5px; color: var(--white); overflow-wrap: anywhere; }
+.row .id { font-family: var(--mono); font-size: 11.5px; color: var(--jade-deep); }
+.row .ac { margin-left: auto; padding-left: 12px; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.row.make .nm { color: var(--jade); }
+
+.empty { padding: 16px 8px; font-family: var(--mono); font-size: 12px; color: var(--dim); }
+
+label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin: 20px 0 7px;
+}
+
+input, select {
+  width: 100%;
+  max-width: 440px;
+  background: var(--ink);
+  border: 1px solid var(--line-2);
+  color: var(--white);
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 11px 12px;
+}
+
+input:focus, select:focus { outline: none; border-color: var(--jade); }
+
+.price { display: flex; align-items: baseline; gap: 12px; margin-top: 20px; }
+.price .fig { font-size: 36px; font-weight: 800; letter-spacing: -.04em; color: var(--white); line-height: 1; }
+.price .per { font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+
+.mid {
+  margin-top: 18px;
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: clamp(22px, 5vw, 30px);
+  color: var(--gold);
+  overflow-wrap: anywhere;
+}
+
+.sub { margin-top: 6px; font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+.tabs { display: flex; margin-top: 24px; border-bottom: 1px solid var(--line); }
+
+.tab {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 9px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.tab[aria-selected="true"] { color: var(--white); border-bottom-color: var(--jade); }
+
+pre {
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-top: 0;
+  padding: 20px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.85;
+  color: var(--white);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.next { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
+
+.cmd {
+  display: inline-flex;
+  gap: 10px;
+  background: var(--ink);
+  border: 1px solid var(--line-2);
+  padding: 11px 14px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--white);
+}
+
+.cmd .p { color: var(--jade-deep); }
+
+.err {
+  border-left: 3px solid var(--coral);
+  background: var(--ink);
+  padding: 15px 18px;
+  font-size: 14.5px;
+  color: var(--fg);
+  max-width: 62ch;
+}
+
+.err b {
+  display: block;
+  margin-bottom: 7px;
+  font-family: var(--mono);
+  font-weight: 400;
+  font-size: 10.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--coral);
+}
+
+footer {
+  margin-top: 28px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 18px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+
+footer a { color: var(--jade-deep); }
+
+/* The same seven the dashboard ships, and the choice is the same one:
+   picking here writes the line `craft theme` writes, so the terminal and
+   this page are never wearing different clothes. */
+.pals { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+
+/* A palette is a background with an accent on it, and a chip that showed
+   only the accent made every light theme look like a dark square. So the
+   chip is the palette: its ground, with its accent sitting on it, which is
+   what the page will actually look like. */
+.pal {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  background: var(--swatch-ground, #000);
+  opacity: .7;
+  transition: opacity .12s, outline-color .12s;
+  outline: 1px solid transparent;
+  outline-offset: 2px;
+}
+
+.pal::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  background: var(--swatch-accent, #fff);
+}
+
+.pal:hover { opacity: 1; }
+.pal[aria-pressed="true"] { opacity: 1; outline-color: var(--jade); }
+
+/* Each chip's own two colours, written by `scripts/gen-palettes.py` out of
+   the same numbers the blocks at the top are built from. */
+/* swatches:start */
+.pal[data-pal="osaka-jade"] { --swatch-ground: #09100d; --swatch-accent: #2dd5b7; }
+.pal[data-pal="solarized-dark"] { --swatch-ground: #001f27; --swatch-accent: #2aa198; }
+.pal[data-pal="tokyo-night"] { --swatch-ground: #161823; --swatch-accent: #7aa2f7; }
+.pal[data-pal="catppuccin"] { --swatch-ground: #11111b; --swatch-accent: #94e2d5; }
+.pal[data-pal="github"] { --swatch-ground: #010409; --swatch-accent: #39c5cf; }
+.pal[data-pal="solarized-light"] { --swatch-ground: #e2dbc7; --swatch-accent: #1c6a64; }
+.pal[data-pal="catppuccin-latte"] { --swatch-ground: #e6e9f0; --swatch-accent: #0965d1; }
+/* swatches:end */

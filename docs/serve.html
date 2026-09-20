@@ -411,7 +411,10 @@ run, so anything the browser stored would be stored against an origin that will 
   -H <span class="k">'Authorization: Bearer Jc8Kq2vXn0pLd4WbT7yS1rEo9ZmHfA6uG3iN5xQa'</span></pre>
 <p>Locally the token also arrives in the URL the browser is opened with, as <code>#k=…</code>. It is in
 the fragment rather than the query so it is never sent to the server as part of a request line and
-never lands in a log; the page reads it, keeps it in memory, and clears it out of the address bar.</p>
+never lands in a log. The pages are rendered a route at a time and a form cannot send a header, so
+the browser hands the fragment over once and carries the token in a cookie afterwards — set
+<code>HttpOnly</code>, so no script can read it back, and <code>SameSite=Strict</code>, so no other
+origin's form can spend it. The address bar is cleared either way.</p>
 <p>Browsers get no help reaching it from anywhere else: it answers CORS preflights for its own
 loopback origin and nothing besides. There is no wildcard and no flag that makes one — a page on the
 public web can absolutely try to talk to <code>127.0.0.1</code>, it just cannot guess forty random

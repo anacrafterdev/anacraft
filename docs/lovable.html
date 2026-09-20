@@ -484,6 +484,10 @@
       border-radius: 0;
       padding: 22px 24px;
       overflow-x: auto;
+      /* The blocks are written a line per line, so keep the line breaks. It
+         has to be `pre-line` rather than `pre`: the markup is indented to sit
+         in the page, and `pre` would print that indentation. */
+      white-space: pre-line;
       font-family: var(--mono);
       font-size: 13px;
       line-height: 2.05;
@@ -650,6 +654,503 @@
       border: 1px solid var(--line);
     }
 
+    /* ── the tag card ──────────────────────────────────── */
+    /* Step 01 is the one part of this site that does something rather than
+       describing something, so it is built from the same pieces as the rest —
+       panel, hairline, mono label, square corners — and not from a widget kit.
+       Every screen it can show is a `.tag-pane`; exactly one carries `.on`, and
+       `data-state` on the card names it, so what is on screen is readable from
+       the DOM without following the script. */
+    .tag-card {
+      margin-top: 44px;
+      /* Wide enough for a property list and a pasted tag, narrow enough that
+         neither runs past the measure the rest of the page reads at. */
+      max-width: 880px;
+      background: var(--panel);
+      border: 1px solid var(--line-2);
+    }
+
+    .tag-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 20px;
+      border-bottom: 1px solid var(--line);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+
+    /* The one light on the box. Deep jade while it is waiting for you, full
+       jade once there is a tag, coral when something went wrong. */
+    .tag-head .dot {
+      width: 7px;
+      height: 7px;
+      background: var(--jade-deep);
+      flex: none;
+    }
+
+    .tag-card[data-state="out"] .tag-head .dot {
+      background: var(--jade);
+    }
+
+    .tag-card[data-state="err"] .tag-head .dot {
+      background: var(--coral);
+    }
+
+    .tag-head .who {
+      margin-left: auto;
+      letter-spacing: .04em;
+      color: var(--jade-deep);
+    }
+
+    .tag-body {
+      padding: 28px 24px;
+    }
+
+    .tag-pane {
+      display: none;
+    }
+
+    .tag-pane.on {
+      display: block;
+    }
+
+    .tag-pane h4 {
+      font-family: 'Archivo', sans-serif;
+      font-weight: 700;
+      font-size: 19px;
+      letter-spacing: -.02em;
+      color: var(--white);
+    }
+
+    .tag-pane p {
+      margin-top: 10px;
+      font-size: 14.5px;
+      color: var(--dim);
+      max-width: 54ch;
+    }
+
+    .tag-pane code {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--jade);
+    }
+
+    /* Google's mark, the site's chrome. A white pill would be the one bright
+       rectangle on the page; the G is what people are actually looking for. */
+    .gbtn {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 22px;
+      background: var(--ink);
+      border: 1px solid var(--line-2);
+      border-radius: 0;
+      padding: 13px 20px;
+      cursor: pointer;
+      font-family: 'Archivo', sans-serif;
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: -.01em;
+      color: var(--white);
+      transition: border-color .15s, background .15s;
+    }
+
+    .gbtn:hover {
+      border-color: var(--jade);
+      background: #0b1512;
+      background: color-mix(in srgb, var(--jade) 6%, var(--ink));
+    }
+
+    .gbtn svg {
+      width: 17px;
+      height: 17px;
+      display: block;
+      flex: none;
+    }
+
+    .tag-fine {
+      margin-top: 18px;
+      max-width: 62ch;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.95;
+      color: var(--dim);
+    }
+
+    .tag-fine b {
+      color: var(--fg);
+      font-weight: 400;
+    }
+
+    .tag-fine a {
+      color: var(--jade-deep);
+      text-decoration: underline;
+    }
+
+    .tag-fine a:hover {
+      color: var(--jade);
+    }
+
+    /* Waiting looks like the terminal the rest of this page is about. */
+    .tag-work {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--fg);
+    }
+
+    .tag-work::after {
+      content: '▍';
+      color: var(--jade);
+      margin-left: 3px;
+      animation: caret 1.05s steps(1) infinite;
+    }
+
+    @keyframes caret {
+      50% {
+        opacity: 0;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .tag-work::after {
+        animation: none;
+      }
+    }
+
+    .tag-filter {
+      margin-top: 18px;
+      width: 100%;
+      max-width: 280px;
+      background: var(--ink);
+      border: 1px solid var(--line-2);
+      border-radius: 0;
+      color: var(--white);
+      font-family: var(--mono);
+      font-size: 12.5px;
+      padding: 9px 11px;
+    }
+
+    .tag-filter:focus {
+      outline: none;
+      border-color: var(--jade);
+    }
+
+    .tag-list {
+      margin-top: 18px;
+      border-top: 1px solid var(--line);
+      max-height: 336px;
+      overflow-y: auto;
+    }
+
+    .tag-row {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      padding: 13px 8px;
+      cursor: pointer;
+      color: inherit;
+      font-family: inherit;
+      transition: background .12s;
+    }
+
+    .tag-row:hover,
+    .tag-row:focus-visible {
+      background: var(--ink);
+      outline: none;
+    }
+
+    .tag-row .nm {
+      font-size: 14.5px;
+      color: var(--white);
+      overflow-wrap: anywhere;
+    }
+
+    .tag-row .id {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--jade-deep);
+    }
+
+    .tag-row .ac {
+      margin-left: auto;
+      padding-left: 12px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--dim);
+      text-align: right;
+    }
+
+    .tag-row.make .nm {
+      color: var(--jade);
+    }
+
+    .tag-empty {
+      padding: 16px 8px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--dim);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .tag-form {
+      display: grid;
+      gap: 16px;
+      max-width: 460px;
+      margin-top: 22px;
+    }
+
+    .tag-form label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-bottom: 7px;
+    }
+
+    .tag-form input,
+    .tag-form select {
+      width: 100%;
+      background: var(--ink);
+      border: 1px solid var(--line-2);
+      border-radius: 0;
+      color: var(--white);
+      font-family: var(--mono);
+      font-size: 13px;
+      padding: 11px 12px;
+    }
+
+    .tag-form input:focus,
+    .tag-form select:focus {
+      outline: none;
+      border-color: var(--jade);
+    }
+
+    .tag-acts {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 16px;
+      margin-top: 22px;
+    }
+
+    .tag-acts .btn {
+      font-size: 14px;
+      padding: 11px 20px;
+    }
+
+    .btn[disabled] {
+      opacity: .45;
+      cursor: default;
+    }
+
+    /* A quiet secondary action: the same voice as the nav, not a second CTA. */
+    .lnk {
+      background: none;
+      border: 0;
+      padding: 0;
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--dim);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    .lnk:hover {
+      color: var(--jade);
+    }
+
+    /* The id is gold because it is gold in the terminal — `craft configure`
+       paints it that way, and this is the same number arriving by another
+       road. */
+    .mid {
+      margin-top: 18px;
+      font-family: var(--mono);
+      font-weight: 700;
+      font-size: clamp(22px, 5vw, 32px);
+      letter-spacing: .01em;
+      color: var(--gold);
+      overflow-wrap: anywhere;
+    }
+
+    .tag-sub {
+      margin-top: 6px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--dim);
+    }
+
+    .tabs {
+      display: flex;
+      margin-top: 26px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .tab {
+      background: none;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      padding: 9px 14px;
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+
+    .tab:hover {
+      color: var(--fg);
+    }
+
+    .tab[aria-selected="true"] {
+      color: var(--white);
+      border-bottom-color: var(--jade);
+    }
+
+    .paste {
+      background: var(--ink);
+      border: 1px solid var(--line);
+      border-top: 0;
+      padding: 20px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.85;
+      color: var(--white);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+
+    .cbtn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 18px;
+      background: var(--jade);
+      color: var(--on-accent);
+      border: 1px solid var(--jade);
+      border-radius: 0;
+      padding: 12px 22px;
+      cursor: pointer;
+      font-family: 'Archivo', sans-serif;
+      font-weight: 700;
+      font-size: 14.5px;
+      letter-spacing: -.01em;
+    }
+
+    .cbtn:hover {
+      filter: brightness(1.07);
+    }
+
+    .cbtn.done {
+      background: none;
+      color: var(--jade);
+    }
+
+    .cbtn svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.7;
+      stroke-linecap: square;
+    }
+
+    .cbtn .tick {
+      display: none;
+    }
+
+    .cbtn.done .sheet {
+      display: none;
+    }
+
+    .cbtn.done .tick {
+      display: block;
+    }
+
+    .price {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .price .fig {
+      font-family: 'Archivo', sans-serif;
+      font-weight: 900;
+      font-size: 36px;
+      letter-spacing: -.04em;
+      color: var(--white);
+      line-height: 1;
+    }
+
+    .price .per {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--dim);
+    }
+
+    .tag-next {
+      margin-top: 30px;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+    }
+
+    .tag-next p {
+      margin: 0 0 14px;
+    }
+
+    .tag-err {
+      border-left: 3px solid var(--coral);
+      background: var(--ink);
+      padding: 15px 18px;
+      font-size: 14.5px;
+      color: var(--fg);
+      max-width: 62ch;
+    }
+
+    .tag-err b {
+      display: block;
+      margin-bottom: 7px;
+      font-family: var(--mono);
+      font-weight: 400;
+      font-size: 10.5px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--coral);
+    }
+
+    @media (max-width: 560px) {
+      .tag-body {
+        padding: 22px 16px;
+      }
+
+      .tag-row {
+        flex-wrap: wrap;
+        gap: 4px 10px;
+      }
+
+      .tag-row .ac {
+        margin-left: 0;
+        padding-left: 0;
+        width: 100%;
+      }
+    }
+
     /* closing cta */
     .close {
       text-align: center;
@@ -797,6 +1298,7 @@
           conversation.
         </p>
         <div class="cta">
+          <a href="#tag-sec" class="btn">Get your GA4 tag →</a>
           <button class="install" onclick="cp(this)">
             <span class="p">$</span>
             <span class="c">curl -fsSL https://anacraft.dev/install.sh | bash</span>
@@ -808,7 +1310,6 @@
                 <path class="tick" d="M3 8.6l3.2 3.2L13 4.8" />
               </svg></span>
           </button>
-          <a href="#setup" class="btn">See the setup ↓</a>
         </div>
       </div>
     </div>
@@ -881,59 +1382,234 @@
     </div>
   </section>
 
+  <!-- the tag, which needs nothing installed -->
+  <section id="tag-sec">
+    <div class="wrap">
+      <div class="sec-label">Your tag</div>
+      <h2>Get your tag. No install.</h2>
+      <p class="sec-sub">
+        Sign in with Google and this card hands you the measurement ID for
+        your app and the block to paste into Lovable. Nothing to download,
+        nothing to run — a browser is the whole of it. Making the property is
+        the paid half: Anacrafter Pro, $5.99 a month, the same subscription
+        the CLI reads.
+      </p>
+
+        <div class="tag-card" id="tag" data-state="signin">
+          <div class="tag-head">
+            <span class="dot" aria-hidden="true"></span>
+            <span>ga4 tag</span>
+            <span class="who" id="tag-who"></span>
+          </div>
+          <div class="tag-body">
+
+            <!-- sign in -->
+            <div class="tag-pane on" data-pane="signin">
+              <h4>Sign in with Google</h4>
+              <p>
+                Google shows you which account you are using and what it
+                is granting. anacraft then asks it one question — which
+                Analytics properties can this login see — and stops there.
+              </p>
+              <button class="gbtn" id="tag-go" type="button">
+                <svg viewBox="0 0 18 18" aria-hidden="true">
+                  <path fill="#4285F4"
+                    d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z" />
+                  <path fill="#34A853"
+                    d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z" />
+                  <path fill="#FBBC05"
+                    d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z" />
+                  <path fill="#EA4335"
+                    d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.9 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
+                </svg>
+                Sign in with Google
+              </button>
+              <p class="tag-fine">
+                <b>Read-only to start.</b> Permission to create a property
+                is a separate ask, made only if you ask for one.<br>
+                The token lives in this tab and dies with it — no server of
+                ours is in this flow, and nothing is written to your device.
+                <a href="/privacy.html#site">Privacy</a> ·
+                <a href="https://myaccount.google.com/permissions">revoke any
+                  time</a>
+              </p>
+            </div>
+
+            <!-- nothing to sign into: a build published without a web client -->
+            <div class="tag-pane" data-pane="unset">
+              <h4>Sign-in is not configured here</h4>
+              <p>
+                This copy of the site was published without a Google OAuth
+                web client, so the button would have nothing to call. The
+                two routes below land in the same place.
+              </p>
+            </div>
+
+
+            <!-- the gate -->
+            <div class="tag-pane" data-pane="pay">
+              <h4>Unlock the tag</h4>
+              <p>
+                Making the property and minting the measurement ID is the
+                paid half of anacraft — the same job <code>craft
+                  configure</code> does in the terminal. Anacrafter Pro
+                covers it, along with the audit and the Slack alerts.
+              </p>
+              <div class="price">
+                <span class="fig">$5.99</span>
+                <span class="per">per month · cancel any time</span>
+              </div>
+              <button class="cbtn" id="tag-pay" type="button">Continue to checkout →</button>
+              <div class="tag-work" id="tag-wait" hidden>waiting for Stripe</div>
+              <p class="tag-fine">
+                Stripe opens in a new tab and takes the payment; this card
+                notices by itself and carries on. Already subscribed, or paid
+                on another machine? <button class="lnk" id="tag-recheck"
+                  type="button">check again</button>
+              </p>
+            </div>
+
+            <!-- working -->
+            <div class="tag-pane" data-pane="work">
+              <div class="tag-work" id="tag-work">working</div>
+            </div>
+
+            <!-- pick a property -->
+            <div class="tag-pane" data-pane="pick">
+              <h4>Pick this app's property</h4>
+              <p>
+                One property per app, so each app's numbers are its own.
+                If this Lovable app is new, make it a new one.
+              </p>
+              <input class="tag-filter" id="tag-filter" type="search" placeholder="filter by name or id" hidden
+                aria-label="Filter properties">
+              <div class="tag-list" id="tag-rows"></div>
+              <div class="tag-acts">
+                <button class="lnk" id="tag-switch" type="button">use a different Google account</button>
+              </div>
+            </div>
+
+            <!-- pick a stream, when a property has several -->
+            <div class="tag-pane" data-pane="stream">
+              <h4>This property has more than one website</h4>
+              <p>
+                Each web data stream mints its own measurement ID. Pick the
+                one this app should report to.
+              </p>
+              <div class="tag-list" id="tag-streams"></div>
+              <div class="tag-acts">
+                <button class="lnk" id="tag-back-1" type="button">back to the properties</button>
+              </div>
+            </div>
+
+            <!-- create -->
+            <div class="tag-pane" data-pane="new">
+              <h4 id="tag-new-h">A new property for this app</h4>
+              <p id="tag-new-p"></p>
+              <div class="tag-form">
+                <div id="tag-acct-wrap" hidden>
+                  <label for="tag-acct">Analytics account</label>
+                  <select id="tag-acct"></select>
+                </div>
+                <div>
+                  <label for="tag-url">Your app's URL</label>
+                  <input id="tag-url" type="url" inputmode="url" autocomplete="url"
+                    placeholder="https://myapp.lovable.app">
+                </div>
+                <div id="tag-name-wrap">
+                  <label for="tag-name">Property name</label>
+                  <input id="tag-name" type="text" placeholder="My app" maxlength="100">
+                </div>
+              </div>
+              <p class="tag-fine" id="tag-defaults"></p>
+              <div class="tag-acts">
+                <button class="btn" id="tag-create" type="button">Create the property</button>
+                <button class="lnk" id="tag-back-2" type="button">back to the list</button>
+              </div>
+            </div>
+
+            <!-- the tag -->
+            <div class="tag-pane" data-pane="out">
+              <h4>Your tag is ready</h4>
+              <div class="mid" id="tag-mid"></div>
+              <div class="tag-sub" id="tag-sub"></div>
+
+              <div class="tabs" role="tablist" aria-label="What to copy">
+                <button class="tab" type="button" role="tab" aria-selected="true" data-tab="prompt">Lovable
+                  prompt</button>
+                <button class="tab" type="button" role="tab" aria-selected="false" data-tab="html">Raw tag</button>
+              </div>
+              <pre class="paste" id="tag-paste"></pre>
+              <button class="cbtn" id="tag-copy" type="button">
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <g class="sheet">
+                    <rect x="5.9" y="5.9" width="8.2" height="8.2" />
+                    <path d="M10.4 3.4a1.5 1.5 0 0 0-1.5-1.5H3.4a1.5 1.5 0 0 0-1.5 1.5v5.5a1.5 1.5 0 0 0 1.5 1.5" />
+                  </g>
+                  <path class="tick" d="M3 8.6l3.2 3.2L13 4.8" />
+                </svg>
+                <span id="tag-copy-label">Copy for Lovable</span>
+              </button>
+              <p class="tag-fine" id="tag-hint"></p>
+
+              <div class="tag-next">
+                <p>
+                  Then point anacraft at the property, so the dashboard and
+                  the MCP server read this one:
+                </p>
+                <button class="install" onclick="cp(this)">
+                  <span class="p">$</span>
+                  <span class="c" id="tag-use"></span>
+                  <span class="copy" aria-label="Copy command"><svg viewBox="0 0 16 16" aria-hidden="true">
+                      <g class="sheet">
+                        <rect x="5.9" y="5.9" width="8.2" height="8.2" />
+                        <path
+                          d="M10.4 3.4a1.5 1.5 0 0 0-1.5-1.5H3.4a1.5 1.5 0 0 0-1.5 1.5v5.5a1.5 1.5 0 0 0 1.5 1.5" />
+                      </g>
+                      <path class="tick" d="M3 8.6l3.2 3.2L13 4.8" />
+                    </svg></span>
+                </button>
+              </div>
+
+              <div class="tag-acts">
+                <button class="lnk" id="tag-other" type="button">pick a different property</button>
+              </div>
+            </div>
+
+            <!-- something went wrong -->
+            <div class="tag-pane" data-pane="err">
+              <div class="tag-err"><b>that did not work</b><span id="tag-msg"></span></div>
+              <div class="tag-acts">
+                <button class="btn" id="tag-retry" type="button">Try again</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+    </div>
+  </section>
+
   <!-- setup -->
   <section id="setup">
     <div class="wrap">
-      <div class="sec-label">Setup</div>
-      <h2>Two prompts, one install.</h2>
+      <div class="sec-label">Then read it</div>
+      <h2>Now put the numbers where you work.</h2>
       <p class="sec-sub">
-        anacraft is a CLI that runs on your machine. It reads your GA4 data
-        and serves it to any MCP-compatible AI client — Claude, ChatGPT,
-        Cursor, VS Code. One install, one sign-in, and your assistant has
-        the numbers.
+        The tag above is already collecting. This is the other half: anacraft
+        is a CLI on your machine that reads that property and serves it to any
+        MCP client — Claude, ChatGPT, Cursor, VS Code — so you ask instead of
+        opening the GA4 console.
       </p>
 
       <div class="steps">
         <div class="step">
           <div class="step-n">01</div>
           <div>
-            <h3>Add analytics to your Lovable app</h3>
-            <p>
-              Open your Lovable project and tell the agent:
-            </p>
-            <div class="code">
-              <span class="c">// in the Lovable chat</span>
-              <span class="w">Add Google Analytics to this project</span>
-            </div>
-            <p style="margin-top:12px;">
-              Lovable will create a GA4 property and add the gtag snippet.
-              You get a <code>G-XXXXXXX</code> measurement ID back. If you
-              prefer to do it yourself, ask Lovable for the
-              <code>index.html</code> and paste the tag into
-              <code>&lt;head&gt;</code>.
-            </p>
-
-            <div class="callout">
-              <h4>Already have GA4 on your Lovable app?</h4>
-              <p>
-                Skip to step 2. If you set up analytics through the Google
-                Analytics console instead of Lovable, you already have what
-                you need.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-n">02</div>
-          <div>
             <h3>Install anacraft</h3>
             <p>
               One command downloads the binary. macOS, Linux, Windows.
             </p>
-            <div class="code">
-              <span class="w">curl -fsSL https://anacraft.dev/install.sh | bash</span>
-            </div>
+            <div class="code"><span class="w">curl -fsSL https://anacraft.dev/install.sh | bash</span></div>
             <p style="margin-top:12px;">
               This gives you the <code>craft</code> command. It is a single
               binary with no dependencies — uninstall by deleting it.
@@ -942,27 +1618,39 @@
         </div>
 
         <div class="step">
-          <div class="step-n">03</div>
+          <div class="step-n">02</div>
           <div>
-            <h3>Sign in and connect your property</h3>
+            <h3>Point it at your property</h3>
             <p>
-              Sign in with your Google account, then point anacraft at the
-              GA4 property Lovable created.
+              Two commands. The first opens a browser to sign the CLI in —
+              it keeps its own credentials, since the token from the card
+              above never left that tab.
             </p>
-            <div class="code">
-              <span class="c"># sign in to Google (once, opens browser)</span>
+            <div class="code"><span class="c"># sign the CLI in to Google (once, opens a browser)</span>
               <span class="w">craft login</span>
 
-              <span class="c"># if Lovable created the property, find its ID</span>
-              <span class="w">craft props</span>
+              <span class="c"># the ID the card above gave you</span>
+              <span class="w">craft use &lt;id&gt;</span></div>
+          </div>
+        </div>
 
-              <span class="c"># or let anacraft create one for your domain</span>
-              <span class="w">craft configure yoursite.com</span>
-            </div>
+        <div class="step">
+          <div class="step-n">03</div>
+          <div>
+            <h3>Wire it into your assistant</h3>
+            <p>
+              One command per client. anacraft runs as a child process of the
+              client — no port, no server, nothing to keep running.
+            </p>
+            <div class="code"><span class="c"># Claude Desktop</span>
+              <span class="w">craft mcp --install</span>
+
+              <span class="c"># Claude Code</span>
+              <span class="w">claude mcp add anacraft craft mcp</span></div>
             <p style="margin-top:12px;">
-              <code>craft props</code> lists every GA4 property your account
-              can see. Pick the one Lovable made and set it as default with
-              <code>craft use &lt;id&gt;</code>.
+              Restart the client and the tools are there. Cursor, Windsurf,
+              VS Code and the raw JSON are on the
+              <a href="/mcp.html" style="color:var(--jade);text-decoration:underline;">MCP page</a>.
             </p>
           </div>
         </div>
@@ -970,87 +1658,8 @@
         <div class="step">
           <div class="step-n">04</div>
           <div>
-            <h3>Add the MCP server to your AI client</h3>
-            <p>
-              anacraft speaks MCP over stdio — your client spawns it as a
-              child process. No port, no server to run, no config file to
-              babysit. The easiest way:
-            </p>
-            <div class="code">
-              <span class="c"># writes directly into Claude Desktop's config</span>
-              <span class="w">craft mcp --install</span>
-            </div>
-            <p style="margin-top:12px;">
-              Or add it manually to your client's MCP config:
-            </p>
-
-            <h4
-              style="color:var(--fg);font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin:24px 0 8px;">
-              Claude Code</h4>
-            <div class="code">
-              <span class="w">claude mcp add anacraft craft mcp</span>
-            </div>
-
-            <h4
-              style="color:var(--fg);font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin:24px 0 8px;">
-              Claude Desktop (or run <code
-                style="font-family:var(--mono);color:var(--jade);font-size:12px;">craft mcp --install</code>)</h4>
-            <div class="code">
-              <span class="c">// ~/Library/Application Support/Claude/claude_desktop_config.json</span>
-              {
-              <span class="w">"mcpServers"</span>: {
-              <span class="w">"anacraft"</span>: {
-              <span class="w">"command"</span>: <span class="w">"/absolute/path/to/craft"</span>,
-              <span class="w">"args"</span>: [<span class="w">"mcp"</span>]
-              }
-              }
-              }
-            </div>
-
-            <h4
-              style="color:var(--fg);font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin:24px 0 8px;">
-              Cursor / Windsurf</h4>
-            <div class="code">
-              <span class="c">// ~/.cursor/mcp.json</span>
-              {
-              <span class="w">"mcpServers"</span>: {
-              <span class="w">"anacraft"</span>: {
-              <span class="w">"command"</span>: <span class="w">"craft"</span>,
-              <span class="w">"args"</span>: [<span class="w">"mcp"</span>]
-              }
-              }
-              }
-            </div>
-
-            <p style="margin-top:16px;">
-              Restart the client after saving. The tools appear in your
-              assistant's tool list automatically.
-            </p>
-
-            <div class="callout" style="margin-top:20px;">
-              <h4>No subscription yet?</h4>
-              <p>
-                <code>craft mcp --demo</code> serves synthetic data — no
-                Google account, no subscription. It is the fastest way to
-                see the tools work. Live data requires an
-                <a href="/pricing.html" style="color:var(--jade);text-decoration:underline;">Elite plan</a>
-                ($9.99/mo).
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-n">05</div>
-          <div>
-            <h3>Ask your assistant</h3>
-            <p>
-              Open Claude, ChatGPT, or Cursor and ask about your site.
-              The assistant reads live GA4 data and answers with real
-              numbers.
-            </p>
-            <div class="code">
-              <span class="d">you:</span> <span class="w">how is the site doing this week?</span>
+            <h3>Ask</h3>
+            <div class="code"><span class="d">you:</span> <span class="w">how is the site doing this week?</span>
 
               <span class="d">assistant:</span> <span class="c">[calls site_status — reads GA4]</span>
               <span class="d">assistant:</span> <span class="w">12,481 users this week, up 9% from last week.
@@ -1060,12 +1669,16 @@
 
               <span class="d">assistant:</span> <span class="c">[calls list_pages]</span>
               <span class="d">assistant:</span> <span class="w">Top pages: / (6,714), /pricing (3,917),
-                /docs/quickstart (2,765), /blog (2,136).</span>
+                /docs/quickstart (2,765), /blog (2,136).</span></div>
 
-              <span class="d">you:</span> <span class="w">is anyone on the site right now?</span>
-
-              <span class="d">assistant:</span> <span class="c">[calls live_visitors]</span>
-              <span class="d">assistant:</span> <span class="w">124 active users. US: 46, India: 16, Germany: 11.</span>
+            <div class="callout" style="margin-top:24px;">
+              <h4>Want to see it before you commit?</h4>
+              <p>
+                <code>craft mcp --demo</code> serves synthetic data — no
+                Google account, no subscription. Live data needs an
+                <a href="/pricing.html" style="color:var(--jade);text-decoration:underline;">Elite plan</a>
+                ($9.99/mo).
+              </p>
             </div>
           </div>
         </div>
@@ -1156,8 +1769,7 @@
         anything.
       </p>
 
-      <div class="code">
-        <span class="d">you:</span> <span class="w">switch to the booking app</span>
+      <div class="code"><span class="d">you:</span> <span class="w">switch to the booking app</span>
 
         <span class="d">assistant:</span> <span class="c">[calls list_properties]</span>
         <span class="d">assistant:</span> <span class="w">Found: "My SaaS" (397412345), "Booking App" (397890123),
@@ -1165,8 +1777,7 @@
 
         <span class="d">you:</span> <span class="w">how is it doing?</span>
 
-        <span class="d">assistant:</span> <span class="c">[calls site_status — reads the booking app's GA4]</span>
-      </div>
+        <span class="d">assistant:</span> <span class="c">[calls site_status — reads the booking app's GA4]</span></div>
     </div>
   </section>
 
@@ -1182,11 +1793,9 @@
         numbers move.
       </p>
 
-      <div class="code">
-        <span class="w">craft dash</span> <span class="c"># live dashboard for the default property</span>
+      <div class="code"><span class="w">craft dash</span> <span class="c"># live dashboard for the default property</span>
         <span class="w">craft dash --demo</span> <span class="c"># synthetic data, no account needed</span>
-        <span class="w">craft overview --format json</span> <span class="c"># one-shot, scriptable</span>
-      </div>
+        <span class="w">craft overview --format json</span> <span class="c"># one-shot, scriptable</span></div>
     </div>
   </section>
 
@@ -1228,6 +1837,647 @@
   </div>
 </footer>
 <!-- footer:end -->
+
+  <!-- tag:start -->
+  <script>
+    /* Step 01's card: `craft configure` with the terminal taken off.
+     *
+     * Sign in, find or make the GA4 property, read the measurement id off its
+     * web data stream, and hand back the one block of text that has to reach
+     * Lovable. The same two Admin API writes the CLI makes — properties.create
+     * and dataStreams.create — and no others.
+     *
+     * It talks to Google from the tab, and there is no server in this flow
+     * because there is nothing for one to do: the access token Google hands
+     * back is held in a variable, spent on the two or three calls the person
+     * asked for, and lost when the tab closes. Nothing is written to storage,
+     * which is also why a reload lands back on the sign-in button — a page
+     * that cannot keep a token cannot leak one.
+     *
+     * Every name that comes back from Google is somebody's typing, so it
+     * reaches the page through textContent and never through innerHTML.
+     */
+    (function () {
+      /* The OAuth *web* client for anacraft.dev — same Cloud project as the
+       * desktop client the binary carries, so the same consent screen and the
+       * same verified scopes cover it. Public by design: a web client holds no
+       * secret, and Google will only mint a token for it on an origin listed
+       * in its Cloud entry, so a copy of this id on another domain gets an
+       * origin mismatch rather than a session.
+       *
+       * Authorized JavaScript origins must list https://anacraft.dev, plus
+       * http://localhost:8000 to work against `make serve`.
+       *
+       * Empty means the card says so rather than offering a button that
+       * cannot work — see the `unset` pane.
+       */
+      var CLIENT_ID = '';
+
+      /* The subscription service the binary talks to, reached the same way it
+       * reaches it: the publishable key, which is public by design — the table
+       * has RLS on and no policies, so the key reaches nothing but the two
+       * `security definer` functions below, each of which answers about one
+       * account and nothing else.
+       *
+       * Left empty, the gate cannot be asked and is not enforced. That is for
+       * a checkout of this page against `make serve`, and it is worth knowing
+       * before publishing: an empty key here is a free tag for everybody.
+       */
+      var SUPABASE_URL = '';
+      var SUPABASE_KEY = '';
+
+      /* Anacrafter Pro. The same Payment Link `craft subscribe --pro` opens,
+       * so a subscription bought here is the subscription the CLI reads. */
+      var PAY_URL = 'https://buy.stripe.com/cNieVd1kMacvgIGab79MY03';
+
+      var READ = 'https://www.googleapis.com/auth/analytics.readonly';
+      var WHO = 'https://www.googleapis.com/auth/userinfo.email';
+      var EDIT = 'https://www.googleapis.com/auth/analytics.edit';
+      var ADMIN = 'https://analyticsadmin.googleapis.com/v1beta';
+
+      var card = document.getElementById('tag');
+      if (!card) return;
+      var $ = function (id) { return document.getElementById(id); };
+
+      var token = null;            // in memory, and nowhere else
+      var granted = {};            // scopes this token actually carries
+      var accounts = [];           // { parent: 'accounts/1', name: 'Acme' }
+      var props = [];              // { id, name, account, parent }
+      var chosen = null;           // the property being worked on
+      var me = { sub: null, email: null };   // who Google says is signed in
+      var minted = null;           // the checkout token, if one was started
+      var poll = null;             // the interval watching for the payment
+      var mode = 'property';       // what the create form is creating
+      var zone = 'America/Los_Angeles';
+      try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || zone; } catch (e) { }
+
+      // ── screens ──────────────────────────────────────────────────────
+
+      function show(name) {
+        card.dataset.state = name;
+        var panes = card.querySelectorAll('.tag-pane');
+        for (var i = 0; i < panes.length; i++) {
+          panes[i].classList.toggle('on', panes[i].dataset.pane === name);
+        }
+      }
+
+      function busy(what) {
+        $('tag-work').textContent = what;
+        show('work');
+      }
+
+      function stop(err) {
+        $('tag-msg').textContent = (err && err.message) || String(err);
+        show('err');
+      }
+
+      function who() {
+        var right = granted[EDIT] ? 'read + create' : 'read-only';
+        $('tag-who').textContent = !token ? '' : me.email ? me.email + ' · ' + right : right;
+      }
+
+      // ── Google ───────────────────────────────────────────────────────
+
+      /* Google's sign-in script, fetched the first time it is wanted and then
+       * kept. Prefetched on approach — a hover, a focus, or the card coming
+       * within a screen of the viewport — because `requestAccessToken` opens a
+       * window, and a window opened after an await is a window some browsers
+       * decide was not the user's idea. */
+      var gis = null;
+      function loadGis() {
+        if (!gis) {
+          gis = new Promise(function (ok, no) {
+            var s = document.createElement('script');
+            s.src = 'https://accounts.google.com/gsi/client';
+            s.async = true;
+            s.onload = function () { ok(); };
+            s.onerror = function () {
+              gis = null;
+              no(new Error('Google’s sign-in script did not load. A blocker or a dropped connection is the usual reason.'));
+            };
+            document.head.appendChild(s);
+          });
+        }
+        return gis;
+      }
+
+      function authorize(scopes) {
+        return loadGis().then(function () {
+          return new Promise(function (ok, no) {
+            window.google.accounts.oauth2.initTokenClient({
+              client_id: CLIENT_ID,
+              scope: scopes.join(' '),
+              callback: function (res) {
+                if (!res || !res.access_token) {
+                  return no(new Error((res && (res.error_description || res.error)) || 'Google returned no access token.'));
+                }
+                token = res.access_token;
+                (res.scope || '').split(' ').forEach(function (s) { granted[s] = true; });
+                who();
+                ok();
+              },
+              error_callback: function (err) {
+                var type = err && err.type;
+                no(new Error(
+                  type === 'popup_closed' ? 'The Google window closed before sign-in finished.'
+                    : type === 'popup_failed_to_open' ? 'The browser blocked the Google window. Allow pop-ups for this site, then try again.'
+                      : 'Sign-in did not complete.'
+                ));
+              }
+            }).requestAccessToken();
+          });
+        });
+      }
+
+      /* Google's errors, said in the same words the CLI says them in. */
+      function explain(status, detail) {
+        var tail = detail ? ' (' + detail + ')' : '';
+        if (status === 401) return 'That sign-in has expired. Sign in again and the list comes back.';
+        if (status === 403) return 'Google refused. The account needs Viewer on the property to read it, or Editor on the account to create one.' + tail;
+        if (status === 429) return 'Google is rate-limiting this request. Give it a moment and try again.';
+        return 'Google Analytics API error ' + status + tail + '.';
+      }
+
+      function api(path, body) {
+        return fetch(ADMIN + path, {
+          method: body ? 'POST' : 'GET',
+          headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+          body: body ? JSON.stringify(body) : undefined
+        }).then(function (res) {
+          return res.json().catch(function () { return {}; }).then(function (data) {
+            if (!res.ok) throw new Error(explain(res.status, data.error && data.error.message));
+            return data;
+          });
+        });
+      }
+
+      // ── the flow ─────────────────────────────────────────────────────
+
+      function signIn() {
+        busy('opening Google’s sign-in window');
+        authorize([WHO, READ]).then(identify).then(gate).catch(stop);
+      }
+
+      /* Who Google says this is. Two keys, both of which the subscription
+       * service knows how to answer about: the account id, which is what a
+       * payment made from the CLI is filed under, and the address, which is
+       * what a payment made from the pricing page was filed under. */
+      function identify() {
+        return fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { authorization: 'Bearer ' + token }
+        }).then(function (res) {
+          return res.ok ? res.json() : {};
+        }).catch(function () {
+          return {};
+        }).then(function (info) {
+          me = { sub: info.sub || null, email: info.email || null };
+          who();
+        });
+      }
+
+      function rpc(name, body) {
+        return fetch(SUPABASE_URL + '/rest/v1/rpc/' + name, {
+          method: 'POST',
+          headers: {
+            apikey: SUPABASE_KEY,
+            authorization: 'Bearer ' + SUPABASE_KEY,
+            'content-type': 'application/json'
+          },
+          body: JSON.stringify(body)
+        }).then(function (res) {
+          if (!res.ok) throw new Error('The subscription service answered ' + res.status + '. Nothing was charged; try again in a moment.');
+          return res.json();
+        });
+      }
+
+      function subscribed() {
+        return rpc('subscription_status', {
+          p_user_id: me.sub,
+          p_token: minted,
+          p_email: me.email
+        }).then(function (rows) {
+          var row = (Array.isArray(rows) ? rows[0] : rows) || {};
+          return row.subscribed === true;
+        });
+      }
+
+      /* Paid, or not. Any live plan opens this — somebody already paying for
+       * Basic or Elite is not asked for a second subscription. */
+      function gate() {
+        if (!SUPABASE_URL || !SUPABASE_KEY) {
+          if (window.console) console.warn('anacraft: no subscription service configured, so the tag is not gated');
+          return list();
+        }
+        busy('checking your subscription');
+        return subscribed().then(function (yes) {
+          if (yes) return list();
+          show('pay');
+        });
+      }
+
+      /* Open the checkout, having first told the service that this token
+       * belongs to this account — so the webhook's row lands on the right
+       * person even if the browser never comes back. */
+      function pay() {
+        minted = mint();
+
+        // Opened in the same tick as the click, before anything is awaited:
+        // a tab opened after a fetch is a tab the browser blocks. The claim
+        // goes out alongside it — it only has to land before Stripe's webhook
+        // does, and a checkout takes longer than a POST.
+        window.open(
+          PAY_URL + '?client_reference_id=' + encodeURIComponent(minted) +
+          (me.email ? '&prefilled_email=' + encodeURIComponent(me.email) : ''),
+          '_blank',
+          'noopener'
+        );
+        rpc('claim_checkout', { p_token: minted, p_user_id: me.sub, p_email: me.email })
+          .catch(function () { });   // a failed claim is not a failed payment
+
+        $('tag-pay').disabled = true;
+        $('tag-wait').textContent = 'waiting for Stripe';
+        $('tag-wait').hidden = false;
+        watch();
+      }
+
+      /* 40 alphanumeric characters, the same shape the CLI mints. */
+      function mint() {
+        var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        var bytes = new Uint8Array(40);
+        window.crypto.getRandomValues(bytes);
+        return Array.prototype.map.call(bytes, function (b) {
+          return alphabet[b % alphabet.length];
+        }).join('');
+      }
+
+      /* Stripe redirects the *other* tab, so this one has to notice for
+       * itself. Ten minutes of asking, then it stops and says so rather than
+       * polling a service forever behind a tab nobody is looking at. */
+      function watch() {
+        var until = Date.now() + 10 * 60 * 1000;
+        clearInterval(poll);
+        poll = setInterval(function () {
+          if (Date.now() > until) {
+            clearInterval(poll);
+            $('tag-wait').textContent = 'gave up waiting — if the payment went through, check again';
+            $('tag-pay').disabled = false;
+            return;
+          }
+          subscribed().then(function (yes) {
+            if (!yes) return;
+            clearInterval(poll);
+            $('tag-wait').hidden = true;
+            $('tag-pay').disabled = false;
+            list();
+          }).catch(function () { });
+        }, 4000);
+      }
+
+      function recheck() {
+        busy('asking the subscription service again');
+        subscribed().then(function (yes) {
+          if (yes) return list();
+          show('pay');
+          $('tag-pay').disabled = false;
+          $('tag-wait').hidden = false;
+          $('tag-wait').textContent = 'no live subscription on ' + (me.email || 'this account') + ' yet';
+        }).catch(stop);
+      }
+
+      /* Every property this login can see, in one pass over accountSummaries —
+       * the accounts come along for the ride because creating a property needs
+       * one to create it in. */
+      function list() {
+        busy('reading the Analytics accounts this login can see');
+        accounts = [];
+        props = [];
+
+        var page = function (pageToken) {
+          return api('/accountSummaries?pageSize=200' + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : ''))
+            .then(function (data) {
+              (data.accountSummaries || []).forEach(function (acct) {
+                accounts.push({ parent: acct.account, name: acct.displayName || acct.account });
+                (acct.propertySummaries || []).forEach(function (p) {
+                  props.push({
+                    id: (p.property || '').replace('properties/', ''),
+                    name: p.displayName || p.property,
+                    account: acct.displayName || '',
+                    parent: acct.account
+                  });
+                });
+              });
+              if (data.nextPageToken) return page(data.nextPageToken);
+            });
+        };
+
+        return page('').then(drawProps).catch(stop);
+      }
+
+      function row(name, id, account, onPick, make) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'tag-row' + (make ? ' make' : '');
+        [['nm', name], ['id', id], ['ac', account]].forEach(function (pair) {
+          if (!pair[1]) return;
+          var span = document.createElement('span');
+          span.className = pair[0];
+          span.textContent = pair[1];
+          b.appendChild(span);
+        });
+        b.addEventListener('click', onPick);
+        return b;
+      }
+
+      function drawProps() {
+        var filter = ($('tag-filter').value || '').trim().toLowerCase();
+        var rows = $('tag-rows');
+        rows.textContent = '';
+
+        rows.appendChild(row('+  Create a new property', '', '', function () { form('property'); }, true));
+
+        var shown = props.filter(function (p) {
+          return !filter || (p.name + ' ' + p.id + ' ' + p.account).toLowerCase().indexOf(filter) > -1;
+        });
+
+        shown.forEach(function (p) {
+          rows.appendChild(row(p.name, p.id, p.account, function () { pick(p); }));
+        });
+
+        if (!shown.length) {
+          var empty = document.createElement('div');
+          empty.className = 'tag-empty';
+          empty.textContent = props.length
+            ? 'nothing matches "' + filter + '"'
+            : 'this account has no GA4 properties yet — make the first one above';
+          rows.appendChild(empty);
+        }
+
+        // A filter earns its place only once the list is long enough to need one.
+        $('tag-filter').hidden = props.length < 9;
+        show('pick');
+      }
+
+      /* A property is only half an answer: the measurement id lives on a web
+       * data stream, and a property can have none, one, or several. */
+      function pick(p) {
+        chosen = p;
+        busy('reading the data streams on ' + p.name);
+        api('/properties/' + encodeURIComponent(p.id) + '/dataStreams?pageSize=200').then(function (data) {
+          var web = (data.dataStreams || []).filter(function (s) {
+            return s.webStreamData && s.webStreamData.measurementId;
+          });
+          if (web.length === 1) return done(web[0].webStreamData.measurementId);
+          if (!web.length) return form('stream');
+          drawStreams(web);
+        }).catch(stop);
+      }
+
+      function drawStreams(web) {
+        var rows = $('tag-streams');
+        rows.textContent = '';
+        web.forEach(function (s) {
+          rows.appendChild(row(
+            s.displayName || s.webStreamData.defaultUri || 'web stream',
+            s.webStreamData.measurementId,
+            s.webStreamData.defaultUri || '',
+            function () { done(s.webStreamData.measurementId); }
+          ));
+        });
+        show('stream');
+      }
+
+      function form(which) {
+        mode = which;
+        var stream = which === 'stream';
+
+        $('tag-new-h').textContent = stream
+          ? 'This property measures no website yet'
+          : 'A new property for this app';
+        $('tag-new-p').textContent = stream
+          ? '“' + chosen.name + '” exists, but nothing on it measures a website, so there is no measurement ID to hand out. A web data stream mints one.'
+          : 'anacraft creates the property and its web data stream, then reads the measurement ID back — the two calls craft configure makes, and nothing else.';
+        $('tag-create').textContent = stream ? 'Add the web stream' : 'Create the property';
+        $('tag-name-wrap').hidden = stream;
+
+        var wrap = $('tag-acct-wrap');
+        var select = $('tag-acct');
+        select.textContent = '';
+        accounts.forEach(function (a) {
+          var option = document.createElement('option');
+          option.value = a.parent;
+          option.textContent = a.name;
+          select.appendChild(option);
+        });
+        // One account is not a choice, and a property that is being added to
+        // an existing one is not a choice either.
+        wrap.hidden = stream || accounts.length < 2;
+
+        $('tag-defaults').textContent = stream
+          ? 'The URL is what GA4 shows beside the stream; it does not restrict what the tag may report.'
+          : 'Reported in ' + zone + ' and USD. Both are yours to change later in the Analytics console, and neither changes the tag.';
+
+        show('new');
+      }
+
+      /* A URL typed by a person, made into one Google will accept. */
+      function url() {
+        var raw = ($('tag-url').value || '').trim();
+        if (!raw) return null;
+        if (!/^https?:\/\//i.test(raw)) raw = 'https://' + raw;
+        try {
+          var parsed = new URL(raw);
+          if (!parsed.hostname || parsed.hostname.indexOf('.') < 0) return null;
+          return parsed.origin;
+        } catch (e) { return null; }
+      }
+
+      function create() {
+        var site = url();
+        if (!site) {
+          $('tag-url').focus();
+          return stop(new Error('That URL does not look like one. Something of the shape https://myapp.lovable.app.'));
+        }
+        var host = site.replace(/^https?:\/\//, '');
+
+        // The write scope is asked for here rather than at sign-in, so a
+        // person who only wanted to read an id is never asked for more than
+        // reading. Same shape as the CLI's `ensure_scope`.
+        var permission = granted[EDIT] ? Promise.resolve() : (
+          busy('asking Google for permission to create'),
+          authorize([READ, EDIT]).then(function () {
+            if (!granted[EDIT]) {
+              throw new Error('Google did not grant permission to create. Tick the Analytics edit box on the consent screen, or pick a property that already exists.');
+            }
+          })
+        );
+
+        permission.then(function () {
+          if (mode === 'stream') return chosen;
+          var parent = $('tag-acct').value || (accounts[0] && accounts[0].parent);
+          if (!parent) {
+            throw new Error('This Google account is not on any Analytics account, so there is nowhere to put a property. Make one at analytics.google.com — it takes a minute — then come back.');
+          }
+          busy('creating the property');
+          return api('/properties', {
+            parent: parent,
+            displayName: (($('tag-name').value || '').trim() || host).slice(0, 100),
+            timeZone: zone,
+            currencyCode: 'USD'
+          }).then(function (made) {
+            var account = accounts.filter(function (a) { return a.parent === parent; })[0];
+            chosen = {
+              id: (made.name || '').replace('properties/', ''),
+              name: made.displayName || host,
+              account: (account && account.name) || '',
+              parent: parent
+            };
+            props.unshift(chosen);
+            return chosen;
+          });
+        }).then(function (property) {
+          busy('adding the web data stream');
+          return api('/properties/' + encodeURIComponent(property.id) + '/dataStreams', {
+            type: 'WEB_DATA_STREAM',
+            displayName: host,
+            webStreamData: { defaultUri: site }
+          });
+        }).then(function (stream) {
+          var id = stream.webStreamData && stream.webStreamData.measurementId;
+          if (!id) {
+            throw new Error('Google made the stream but returned no measurement ID. The property is there — open it in the Analytics console and read the ID off the stream.');
+          }
+          done(id);
+        }).catch(stop);
+      }
+
+      // ── the tag ──────────────────────────────────────────────────────
+
+      /* The id goes in both places it belongs. Both places is the point: the
+       * commonest broken install is an id pasted into the src and left as a
+       * placeholder in the config call, which loads a tag that records
+       * nothing and a console that says only that no data has arrived. */
+      function tagFor(id) {
+        return [
+          '<!-- Google tag (gtag.js) -->',
+          '<script async src="https://www.googletagmanager.com/gtag/js?id=' + id + '"><\/script>',
+          '<script>',
+          'window.dataLayer = window.dataLayer || [];',
+          'function gtag(){dataLayer.push(arguments);}',
+          'gtag(\'js\', new Date());',
+          'gtag(\'config\', \'' + id + '\');',
+          '<\/script>'
+        ].join('\n');
+      }
+
+      /* What you actually paste. An agent is being told what to do, so it is
+       * written as instructions with the tag inside them, and the three ways
+       * an agent usually improves on this are named and ruled out. */
+      function promptFor(id) {
+        return [
+          'Add Google Analytics 4 to this app.',
+          '',
+          'Paste this tag into index.html as the last thing inside <head>, exactly as written:',
+          '',
+          tagFor(id),
+          '',
+          'Rules:',
+          '- Keep the measurement ID ' + id + ' exactly as it is, in both of the places it appears.',
+          '- Do not install an analytics npm package or a React wrapper. The tag is the whole job.',
+          '- If the project already has a Google Analytics tag, replace it. Two tags double every number.',
+          '- Do not send your own page_view on route changes. GA4 already counts them from history events, and a second one counts every navigation twice.',
+          '',
+          'Then publish the project so the tag goes live.'
+        ].join('\n');
+      }
+
+      var texts = { prompt: '', html: '' };
+
+      function done(id) {
+        texts.prompt = promptFor(id);
+        texts.html = tagFor(id);
+
+        $('tag-mid').textContent = id;
+        $('tag-sub').textContent = chosen ? chosen.name + ' · property ' + chosen.id : '';
+        $('tag-use').textContent = chosen ? 'craft use ' + chosen.id : 'craft props';
+        tab('prompt');
+        show('out');
+
+        // This site runs on the thing it sells, so the card reports on itself.
+        if (window.gtag) window.gtag('event', 'tag_generated');
+      }
+
+      function tab(which) {
+        var tabs = card.querySelectorAll('.tab');
+        for (var i = 0; i < tabs.length; i++) {
+          tabs[i].setAttribute('aria-selected', String(tabs[i].dataset.tab === which));
+        }
+        $('tag-paste').textContent = texts[which];
+        $('tag-paste').scrollTop = 0;
+        $('tag-copy-label').textContent = which === 'prompt' ? 'Copy for Lovable' : 'Copy the tag';
+        $('tag-hint').textContent = which === 'prompt'
+          ? 'Paste it into the Lovable chat and send. Lovable edits index.html, you publish, and the first hits land a minute or two later.'
+          : 'Into <head>, on every page, and only once — a second GA4 tag doubles every number.';
+        $('tag-copy').classList.remove('done');
+      }
+
+      function copy() {
+        var button = $('tag-copy');
+        var label = $('tag-copy-label').textContent;
+        navigator.clipboard.writeText($('tag-paste').textContent).then(function () {
+          button.classList.add('done');
+          $('tag-copy-label').textContent = 'Copied';
+          setTimeout(function () {
+            button.classList.remove('done');
+            $('tag-copy-label').textContent = label;
+          }, 1800);
+        }).catch(function () {
+          // No clipboard permission: select it so ⌘C still works.
+          var range = document.createRange();
+          range.selectNodeContents($('tag-paste'));
+          var selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+        });
+      }
+
+      // ── wiring ───────────────────────────────────────────────────────
+
+      $('tag-go').addEventListener('click', signIn);
+      $('tag-retry').addEventListener('click', function () {
+        if (!token) return signIn();
+        gate();
+      });
+      $('tag-pay').addEventListener('click', pay);
+      $('tag-recheck').addEventListener('click', recheck);
+      $('tag-switch').addEventListener('click', signIn);
+      $('tag-filter').addEventListener('input', drawProps);
+      $('tag-back-1').addEventListener('click', drawProps);
+      $('tag-back-2').addEventListener('click', drawProps);
+      $('tag-other').addEventListener('click', drawProps);
+      $('tag-create').addEventListener('click', create);
+      $('tag-copy').addEventListener('click', copy);
+      $('tag-url').addEventListener('keydown', function (e) { if (e.key === 'Enter') create(); });
+      $('tag-name').addEventListener('keydown', function (e) { if (e.key === 'Enter') create(); });
+
+      var tabs = card.querySelectorAll('.tab');
+      for (var i = 0; i < tabs.length; i++) {
+        tabs[i].addEventListener('click', function (e) { tab(e.currentTarget.dataset.tab); });
+      }
+
+      var warm = function () { loadGis().catch(function () { }); };
+      $('tag-go').addEventListener('pointerenter', warm, { once: true });
+      $('tag-go').addEventListener('focus', warm, { once: true });
+      if (window.IntersectionObserver) {
+        var eye = new IntersectionObserver(function (entries) {
+          if (entries.some(function (e) { return e.isIntersecting; })) { eye.disconnect(); warm(); }
+        }, { rootMargin: '400px' });
+        eye.observe(card);
+      }
+
+      show(CLIENT_ID ? 'signin' : 'unset');
+    })();
+  </script>
+  <!-- tag:end -->
 
   <script>
     function cp(btn) {

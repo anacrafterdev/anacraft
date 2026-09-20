@@ -49,6 +49,25 @@ both:
 | [`properties.create`](https://developers.google.com/analytics/devguides/config/admin/v1/rest/v1beta/properties/create) | `https://www.googleapis.com/auth/analytics.edit` |
 | [`properties.dataStreams.create`](https://developers.google.com/analytics/devguides/config/admin/v1/rest/v1beta/properties.dataStreams/create) | `https://www.googleapis.com/auth/analytics.edit` |
 
+### The tag card on `anacraft.dev/lovable.html`
+
+The same two calls as `craft configure`, made from a browser instead of a
+terminal, for people who have not installed anything yet: sign in with Google,
+pick a GA4 property or create one, and take the measurement id away with the
+gtag.js snippet already written around it.
+
+It runs on a **web** OAuth client in this same Cloud project — so the same
+consent screen, the same verified scopes — using Google Identity Services'
+token flow. That flow issues an access token to the page and no refresh token,
+which suits what happens to it: it is held in a variable, spent on the calls
+the person asked for, and lost when the tab closes. Nothing is stored, so
+there is no sign-out to offer and a reload starts at the sign-in button.
+
+Scopes are asked for in the order they are needed rather than all at once:
+`analytics.readonly` to list `accountSummaries` and read `dataStreams`, and
+`analytics.edit` only when somebody asks for a property that does not exist
+yet — the browser's version of `ensure_scope`.
+
 ### `craft audit --fix`
 
 `craft audit` reads a property and reports what is wrong with how it measures:

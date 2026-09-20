@@ -418,6 +418,15 @@ have been here before. Google receives the page you viewed and derives an approx
 your IP address, which GA4 does not log or retain — see <a href="https://policies.google.com/privacy">Google's
 privacy policy</a>. GitHub may log request metadata such as IP addresses, and two typefaces are fetched
 from Google Fonts.</p>
+<p><b>The sign-in card on the Lovable page is the one place the site asks for a Google account.</b> It
+exists so you can get a measurement ID without installing anything, and it talks to Google from your
+browser: the access token Google returns is held in that tab's memory, spent on the Analytics Admin API
+calls you asked for — listing your properties, and creating a property or a data stream if you ask for
+one — and gone when the tab closes. It is never sent to us, and there is no server of ours in that flow
+to send it to. Nothing is written to your device, which is why reloading the page starts at the sign-in
+button again. Permission to create is requested separately from permission to read, and only if you ask
+to create something. You can withdraw both at
+<a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</p>
 <p>If this policy changes materially, the date above changes with it and the revision stays visible in the
 site's Git history. anacraft is published by Smartloop Inc. Questions about this policy: <a href="mailto:support@anacraft.dev">support@anacraft.dev</a>.</p>
 

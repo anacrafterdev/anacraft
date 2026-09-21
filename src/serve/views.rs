@@ -151,10 +151,27 @@ impl Shell {
 /// reading it. A person is reading this, so it is the error pane with the
 /// sentence in it — the same sentence, kept whole from `ga.rs` — and a link
 /// back to wherever trying again makes sense.
-struct Oops {
+struct Fault {
     shell: Shell,
     message: String,
     back: String,
+}
+
+/// A [`Fault`] on the heap, which is what every handler here actually
+/// returns.
+///
+/// A `Fault` is a shell and two strings — a hundred and sixty bytes — and
+/// `Result<Response, Fault>` makes every future in this module at least that
+/// big whether or not anything ever goes wrong. The refusal is the rare case,
+/// and it is already on its way to rendering a whole page; it can afford a
+/// pointer chase, and the path where nothing went wrong should not pay for
+/// it. `clippy::result_large_err` is the lint that says so.
+struct Oops(Box<Fault>);
+
+impl From<Fault> for Oops {
+    fn from(fault: Fault) -> Oops {
+        Oops(Box::new(fault))
+    }
 }
 
 #[derive(Template)]
@@ -167,15 +184,16 @@ struct ErrorView {
 
 impl IntoResponse for Oops {
     fn into_response(self) -> Response {
-        let status = if self.message.contains("needs the ") {
+        let Oops(fault) = self;
+        let status = if fault.message.contains("needs the ") {
             StatusCode::PAYMENT_REQUIRED
         } else {
             StatusCode::BAD_GATEWAY
         };
         let view = ErrorView {
-            shell: self.shell,
-            message: self.message,
-            back: self.back,
+            shell: fault.shell,
+            message: fault.message,
+            back: fault.back,
         };
         (status, page(view)).into_response()
     }
@@ -302,10 +320,12 @@ async fn landing(State(app): State<Arc<App>>, request: Request) -> View {
         }));
     }
 
-    let stand = stand(&app).await.map_err(|message| Oops {
-        shell: Shell::new("err", "/"),
-        message,
-        back: "/".into(),
+    let stand = stand(&app).await.map_err(|message| {
+        Oops::from(Fault {
+            shell: Shell::new("err", "/"),
+            message,
+            back: "/".into(),
+        })
     })?;
 
     Ok(Redirect::to(where_to(&stand)).into_response())
@@ -443,11 +463,11 @@ async fn signin(State(app): State<Arc<App>>) -> View {
         // Signed in already, or mid-flight: `/` is the route that knows.
         Ok(_) => return Ok(Redirect::to("/").into_response()),
         Err(message) => {
-            return Err(Oops {
+            return Err(Oops::from(Fault {
                 shell: Shell::new("err", "/signin"),
                 message,
                 back: "/".into(),
-            })
+            }))
         }
     };
     Ok(page(SignInView {
@@ -539,10 +559,12 @@ async fn signin_waiting(State(app): State<Arc<App>>) -> View {
 /// Revoke the credentials and forget them, then start over at `/` — which
 /// will send them to the sign-in, because that is now where they stand.
 async fn signout(State(app): State<Arc<App>>) -> View {
-    let oops = |err: anyhow::Error| Oops {
-        shell: Shell::new("err", "/"),
-        message: why(err),
-        back: "/".into(),
+    let oops = |err: anyhow::Error| {
+        Oops::from(Fault {
+            shell: Shell::new("err", "/"),
+            message: why(err),
+            back: "/".into(),
+        })
     };
     if !app.demo {
         let auth = Auth::new(reqwest::Client::new()).map_err(oops)?;
@@ -580,11 +602,11 @@ async fn unlock(State(app): State<Arc<App>>) -> View {
         // the wrong thing to show either of them.
         Ok(_) => return Ok(Redirect::to("/").into_response()),
         Err(message) => {
-            return Err(Oops {
+            return Err(Oops::from(Fault {
                 shell,
                 message,
                 back: "/".into(),
-            })
+            }))
         }
     };
 
@@ -625,10 +647,12 @@ async fn unlock(State(app): State<Arc<App>>) -> View {
 /// `craft subscribe` takes, and the same two [`super::checkout`] takes.
 async fn unlock_checkout(State(app): State<Arc<App>>) -> View {
     let shell = Shell::new("pay", "/unlock");
-    let oops = |message: String| Oops {
-        shell: Shell::new("err", "/unlock"),
-        message,
-        back: "/unlock".into(),
+    let oops = |message: String| {
+        Oops::from(Fault {
+            shell: Shell::new("err", "/unlock"),
+            message,
+            back: "/unlock".into(),
+        })
     };
     if app.demo {
         return Err(oops(
@@ -685,10 +709,12 @@ struct PropertiesView {
 
 async fn properties(State(app): State<Arc<App>>) -> View {
     let shell = Shell::new("pick", "/properties");
-    let oops = |message: String| Oops {
-        shell: Shell::new("err", "/properties"),
-        message,
-        back: "/".into(),
+    let oops = |message: String| {
+        Oops::from(Fault {
+            shell: Shell::new("err", "/properties"),
+            message,
+            back: "/".into(),
+        })
     };
 
     // Asked here rather than assumed: somebody who signed out in another tab,
@@ -759,10 +785,12 @@ async fn new_property() -> View {
 /// both — so this is the same behaviour `craft configure` has and the same
 /// [`super::register`] answers in JSON.
 async fn create(State(app): State<Arc<App>>, Form(body): Form<Site>) -> View {
-    let oops = |message: String| Oops {
-        shell: Shell::new("err", "/properties/new"),
-        message,
-        back: "/properties/new".into(),
+    let oops = |message: String| {
+        Oops::from(Fault {
+            shell: Shell::new("err", "/properties/new"),
+            message,
+            back: "/properties/new".into(),
+        })
     };
     let host = crate::configure::host_of(&body.url).map_err(|err| oops(err.to_string()))?;
 
@@ -819,10 +847,12 @@ struct StreamsView {
 /// page, which is why this route redirects more often than it renders.
 async fn streams(State(app): State<Arc<App>>, Path(id): Path<String>) -> View {
     let property = bare(&id);
-    let oops = |message: String| Oops {
-        shell: Shell::new("err", "/properties"),
-        message,
-        back: "/properties".into(),
+    let oops = |message: String| {
+        Oops::from(Fault {
+            shell: Shell::new("err", "/properties"),
+            message,
+            back: "/properties".into(),
+        })
     };
 
     if app.demo {
@@ -888,10 +918,12 @@ async fn add_stream(
 ) -> View {
     let property = bare(&id);
     let back = format!("/properties/{property}/streams");
-    let oops = |message: String| Oops {
-        shell: Shell::new("err", &back),
-        message,
-        back: back.clone(),
+    let oops = |message: String| {
+        Oops::from(Fault {
+            shell: Shell::new("err", &back),
+            message,
+            back: back.clone(),
+        })
     };
     let host = crate::configure::host_of(&body.url).map_err(|err| oops(err.to_string()))?;
 
@@ -973,10 +1005,12 @@ async fn trash_do(
     Form(body): Form<Confirm>,
 ) -> View {
     let property = bare(&id);
-    let oops = |message: String| Oops {
-        shell: Shell::new("err", "/properties"),
-        message,
-        back: "/properties".into(),
+    let oops = |message: String| {
+        Oops::from(Fault {
+            shell: Shell::new("err", "/properties"),
+            message,
+            back: "/properties".into(),
+        })
     };
     if bare(&body.confirm) != property {
         return Err(oops(
@@ -1047,11 +1081,11 @@ struct Which {
 async fn tag(Path(measurement_id): Path<String>, Query(which): Query<Which>) -> View {
     let id = measurement_id.trim().to_uppercase();
     if !id.starts_with("G-") || id.len() < 4 {
-        return Err(Oops {
+        return Err(Oops::from(Fault {
             shell: Shell::new("err", "/properties"),
             message: "a measurement id looks like G-XXXXXXXXXX".into(),
             back: "/properties".into(),
-        });
+        }));
     }
 
     let property = which.p.map(|p| bare(&p)).unwrap_or_default();
@@ -1140,10 +1174,12 @@ struct Chosen {
 /// nothing can read is a dashboard that opens on an error.
 async fn use_property(State(app): State<Arc<App>>, Form(body): Form<Chosen>) -> View {
     let back = back_to(body.back.as_deref());
-    let oops = |message: String| Oops {
-        shell: Shell::new("err", "/properties"),
-        message,
-        back: "/properties".into(),
+    let oops = |message: String| {
+        Oops::from(Fault {
+            shell: Shell::new("err", "/properties"),
+            message,
+            back: "/properties".into(),
+        })
     };
     if app.demo {
         return Ok(Redirect::to(&back).into_response());
@@ -1180,11 +1216,11 @@ struct Palette {
 async fn use_theme(State(app): State<Arc<App>>, Form(body): Form<Palette>) -> View {
     let back = back_to(body.back.as_deref());
     if !crate::theme::select(&body.name) {
-        return Err(Oops {
+        return Err(Oops::from(Fault {
             shell: Shell::new("err", &back),
             message: format!("no palette called {}", body.name),
             back,
-        });
+        }));
     }
     // A demo changes nothing on this machine, and a line in the config file
     // is something on this machine. The run still wears it; it just does not
@@ -1414,6 +1450,22 @@ mod tests {
         assert_eq!(back_to(Some("https://evil.example")), "/");
         assert_eq!(back_to(Some("javascript:alert(1)")), "/");
         assert_eq!(back_to(None), "/");
+    }
+
+    #[test]
+    fn a_refusal_is_a_pointer_and_not_a_pane() {
+        // Every handler here returns `Result<Response, Oops>`, so whatever an
+        // `Oops` weighs, every future in this module weighs too — on the path
+        // where nothing goes wrong as much as on the one where something
+        // does. `clippy::result_large_err` says this out loud at 128 bytes;
+        // this says it whatever clippy the toolchain happens to ship.
+        assert!(
+            std::mem::size_of::<Oops>() <= 16,
+            "an Oops is {} bytes — it is meant to be a boxed pointer",
+            std::mem::size_of::<Oops>()
+        );
+        // And the thing it points at is the one carrying the weight.
+        assert!(std::mem::size_of::<Fault>() > 100);
     }
 
     #[test]

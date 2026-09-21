@@ -2472,10 +2472,17 @@ impl Tile {
 /// a cell: switching one on takes another row and pushes the rest of the
 /// board down to pay for it.
 ///
-/// However many are on, the board is balanced: the rows carry within one tile
-/// of each other, so four panels make a 2×2 and not a row of three over a
-/// lone stretched fourth. Switching one off re-tiles the rest over the space
-/// it gave up, the way closing a window in a tiling manager does.
+/// The board splits the way a tiling manager does rather than filling the
+/// widest row it is allowed. One panel takes the whole body; the second
+/// halves it; the third drops a full-width row beneath the pair instead of
+/// wedging a third column in beside them; the fourth joins that row and makes
+/// a 2×2. Only from the fifth does a row go three across, and only where the
+/// body is wide enough to grant it.
+///
+/// However they fall, the rows carry within one tile of each other — no row
+/// of three over a lone stretched fourth. Switching one off re-tiles the rest
+/// over the space it gave up, the way closing a window in a tiling manager
+/// does.
 ///
 /// A tile that a row cannot fit is dropped from the last row up: the grid
 /// gives up the panel, never the dashboard. Spare rows go to the panels that
@@ -2484,9 +2491,9 @@ impl Tile {
 /// it can spend the extra row; the least-fillable tile sets its ceiling, so
 /// a row's height does not swing when a neighbour joins it.
 fn grid(frame: &mut Frame, dash: &Dash, area: Rect, wide: bool) {
-    // Shape the grid by the terminal: three across and two rows when the
-    // terminal is half again as wide as it is tall; two across and three rows
-    // when it is squarer.
+    // The terminal sets the ceiling on a row's width: at most three across
+    // when it is half again as wide as it is tall, two when it is squarer.
+    // How many of those a row actually takes is the tile count's call, below.
     //
     // The aspect only ever asks for columns — the body's width is what grants
     // them. A 60-column terminal is wider than it is tall and so asked for
@@ -2498,7 +2505,7 @@ fn grid(frame: &mut Frame, dash: &Dash, area: Rect, wide: bool) {
         .rev()
         .find(|n| n * MIN_TILE_COLS + (n - 1) <= area.width)
         .unwrap_or(1) as usize;
-    let cells = if wide { 3 } else { 2 }.min(fits);
+    let most = if wide { 3 } else { 2 }.min(fits);
 
     // The panels the board could hold, in key order — which is the order an
     // untouched board draws them in. A switched-off panel is skipped; the
@@ -2534,13 +2541,17 @@ fn grid(frame: &mut Frame, dash: &Dash, area: Rect, wide: bool) {
         return;
     }
 
-    // The board is balanced rather than filled a row at a time. Four panels
-    // on a three-across grid used to run three along the top and stretch the
-    // fourth across the whole row beneath, leaving the cell beside it bare;
-    // they make a 2×2 instead. `cells` is the widest a row may be, not the
-    // width every row must be — the rows carry within one tile of each other,
-    // the fuller ones first, the way a tiling window manager splits its space.
-    let rows_deep = on.len().div_ceil(cells);
+    // `most` is the widest a row may be, not the width every row must be. The
+    // board used to take it as the target, which is why three panels on a
+    // wide terminal came out as three narrow strips across the top instead of
+    // a pair over a full-width row. It splits to the count instead — the
+    // smallest square that holds every tile — and the terminal's ceiling caps
+    // that. Three panels ask for two and get a pair over a full-width row;
+    // four fill the 2×2; five ask for three and get it where the body is wide
+    // enough. The rows then carry within one tile of each other, the fuller
+    // ones first, the way a tiling window manager splits its space.
+    let across = (1..=most).find(|n| n * n >= on.len()).unwrap_or(most);
+    let rows_deep = on.len().div_ceil(across);
     let per = on.len() / rows_deep;
     let wider = on.len() % rows_deep;
 
@@ -5482,6 +5493,75 @@ mod tests {
     }
 
     #[test]
+    fn the_board_splits_rather_than_filling_the_widest_row_it_may() {
+        // The first few panels split the body the way a tiling manager does.
+        // One takes the whole of it, the second halves it, the third drops a
+        // full-width row beneath the pair — it used to wedge itself in as a
+        // third column, which left three panels on a wide terminal reading as
+        // three narrow strips rather than a board — and the fourth joins that
+        // row to make the 2×2.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+        // Pinned to craft mode: it finds its tiles by their craft headers.
+        let _vocab = Vocab::lock();
+
+        let (w, h) = (160u16, 44u16);
+        let mut dash = capture_dash();
+        // The shape of the board, row by row: how many tiles each row carries,
+        // top to bottom. Tiles on one row share a top border, so the corners
+        // along a row count the tiles on it.
+        let shape = |dash: &Dash| -> Vec<usize> {
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            terminal
+                .draw(|frame| body(frame, dash, Rect::new(0, 0, w, h), false, true))
+                .unwrap();
+            let buffer = terminal.backend().buffer().clone();
+            (0..h)
+                .map(|y| (0..w).filter(|&x| buffer[(x, y)].symbol() == "┌").count())
+                .filter(|corners| *corners > 0)
+                .collect()
+        };
+
+        let off = Panels {
+            events: false,
+            live: false,
+            map: false,
+            chunks: false,
+            vitals: false,
+            realms_ranked: false,
+            trend: false,
+            portals: false,
+        };
+
+        dash.panels = Panels {
+            events: true,
+            ..off
+        };
+        assert_eq!(shape(&dash), vec![1], "one panel did not take the body");
+
+        dash.panels.live = true;
+        assert_eq!(shape(&dash), vec![2], "two panels did not halve the body");
+
+        dash.panels.map = true;
+        assert_eq!(
+            shape(&dash),
+            vec![2, 1],
+            "three panels did not put a full-width row under the pair"
+        );
+
+        dash.panels.chunks = true;
+        assert_eq!(shape(&dash), vec![2, 2], "four panels did not make a 2×2");
+
+        // Five is where a row first goes three across — the square the count
+        // asks for is wider than the pair, and the body can pay for it.
+        dash.panels.vitals = true;
+        assert_eq!(
+            shape(&dash),
+            vec![3, 2],
+            "five panels did not go three across"
+        );
+    }
+
+    #[test]
     fn the_squarish_grid_earns_a_third_row() {
         // A 4:3-shaped body runs two tiles across, and its taller body earns
         // a third row — six tiles again, filled in key order: the vitals sit
@@ -6005,10 +6085,10 @@ mod tests {
     #[test]
     fn switching_a_panel_off_re_tiles_the_rest_over_its_space() {
         // The board behaves like a tiling window manager: closing a window
-        // does not leave its frame behind, the survivors grow over it. With
-        // 1, 3 and 4 across the top and 8 alone beneath them, switching 4 off
-        // pulls 8 up into the row — and what is left is still a full board,
-        // with no strip of bare ground where the panel used to be.
+        // does not leave its frame behind, the survivors re-split the space.
+        // With 1 and 3 over 4 and 8 in a 2×2, switching 4 off leaves three,
+        // which is a pair over a full-width row — and what is left is still a
+        // full board, with no strip of bare ground where the panel used to be.
         use ratatui::{backend::TestBackend, layout::Rect, Terminal};
         // Pinned to craft mode: it finds its tiles by `VITALS` and `PORTALS`.
         let _vocab = Vocab::lock();
@@ -6077,12 +6157,24 @@ mod tests {
             "the board did not use its second row"
         );
 
+        // Three left: 1 and 3 keep the top row and 8 takes the whole row
+        // beneath, rather than a third column being wedged in beside them.
         dash.panels.chunks = false;
         let after = tiled(&dash);
         assert_eq!(
-            row_of(&after, "^8 PORTALS"),
             row_of(&after, "^1 EVENTS"),
-            "the panel below did not take the space the closed one gave up"
+            row_of(&after, "^3 COUNTRIES"),
+            "the pair did not keep the top row"
+        );
+        let below = row_of(&after, "^8 PORTALS");
+        assert!(
+            below > row_of(&after, "^1 EVENTS"),
+            "the third panel squeezed into the row above instead of taking its own"
+        );
+        assert_eq!(
+            after[below].matches('\u{250c}').count(),
+            1,
+            "the third panel did not take the full row"
         );
     }
 

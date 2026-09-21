@@ -491,15 +491,24 @@ impl Dash {
             error: None,
             in_flight: 0,
             live_fetching: false,
+            // The board opens on the first five keys and holds 6, 7 and 8 in
+            // reserve. All eight used to be on, which meant the dashboard
+            // opened at its most crowded and every key a newcomer pressed
+            // took something away — the wrong direction for a first move.
+            // Five is the board at a glance: the chart, the realtime panel,
+            // the map, the pages and the figures, three across over two,
+            // every tile at a size worth reading. What is left is a panel
+            // you go and get, and the number that fetches it is the number
+            // in its title.
             panels: Panels {
-                vitals: true,
-                live: true,
-                chunks: true,
-                realms_ranked: true,
-                portals: true,
-                trend: true,
-                map: true,
                 events: true,
+                live: true,
+                map: true,
+                chunks: true,
+                vitals: true,
+                realms_ranked: false,
+                trend: false,
+                portals: false,
             },
             help: false,
             forget: None,
@@ -4716,6 +4725,28 @@ mod tests {
         dash
     }
 
+    /// A board with every panel switched on.
+    ///
+    /// The dashboard opens on five of the eight, so a test about how the grid
+    /// lays out a *full* board has to ask for one rather than take the
+    /// default. These are tests about the grid, not about which panels the
+    /// dashboard chooses to open on — that one is pinned on its own, by
+    /// `the_board_opens_on_five_tiles`.
+    fn crowded_dash() -> Dash {
+        let mut dash = capture_dash();
+        dash.panels = Panels {
+            events: true,
+            live: true,
+            map: true,
+            chunks: true,
+            vitals: true,
+            realms_ranked: true,
+            trend: true,
+            portals: true,
+        };
+        dash
+    }
+
     /// Renders a widget into a fixed grid and hands back the rows as text.
     fn rendered<W: ratatui::widgets::Widget>(width: u16, height: u16, widget: W) -> Vec<String> {
         use ratatui::{backend::TestBackend, Terminal};
@@ -5445,7 +5476,7 @@ mod tests {
         // Pinned to craft mode: it finds its tiles by `VITALS` and `PORTALS`.
         let _vocab = Vocab::lock();
 
-        let dash = capture_dash();
+        let dash = crowded_dash();
         let mut terminal = Terminal::new(TestBackend::new(132, 38)).unwrap();
         terminal
             .draw(|frame| body(frame, &dash, Rect::new(0, 0, 132, 38), false, true))
@@ -5490,6 +5521,82 @@ mod tests {
         let (_, y8) = at("^8 PORTALS");
         assert_eq!(y7, y8, "the last two tiles are not sharing a row");
         assert!(y7 > y1, "the third row climbed onto the first");
+    }
+
+    #[test]
+    fn the_board_opens_on_five_tiles() {
+        // The dashboard opens on the first five keys, all five drawn and none
+        // given up. It used to open on all eight, which put the board at its
+        // most crowded before anyone had pressed anything. Six, seven and
+        // eight wait behind their numbers.
+        use ratatui::{backend::TestBackend, Terminal};
+        // Pinned to craft mode: it finds its tiles by their craft headers.
+        let _vocab = Vocab::lock();
+
+        let dash = capture_dash();
+        let on = &dash.panels;
+        assert!(
+            on.events && on.live && on.map && on.chunks && on.vitals,
+            "the board did not open on the first five keys"
+        );
+        assert!(
+            !on.realms_ranked && !on.trend && !on.portals,
+            "the board opened on more than five tiles"
+        );
+
+        // And all five reach the screen — a default that drops a panel the
+        // moment it is drawn is not a default.
+        let (w, h) = (132u16, 40u16);
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal.draw(|frame| draw(frame, &dash)).unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let screen: String = (0..h)
+            .map(|y| (0..w).map(|x| buffer[(x, y)].symbol()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n");
+        for needle in [
+            "^1 EVENTS",
+            "^2 RIGHT NOW",
+            "^3 COUNTRIES",
+            "^4 TOP PAGES",
+            "^5 VITALS",
+        ] {
+            assert!(screen.contains(needle), "{needle} did not reach the screen");
+        }
+        for needle in ["^6 TOP COUNTRIES", "^7 DAILY USERS", "^8 PORTALS"] {
+            assert!(
+                !screen.contains(needle),
+                "{needle} was drawn without being asked for"
+            );
+        }
+    }
+
+    #[test]
+    fn a_number_takes_its_panel_off_the_board_and_brings_it_back() {
+        // The number in a tile's title is the key that fetches it. Pressing
+        // it once takes the panel out of the active set and the survivors
+        // re-tile over its space; pressing it again brings it back, at the
+        // back of the board.
+        let mut dash = capture_dash();
+        assert!(dash.panels.events, "the board did not open on the chart");
+
+        dash.toggle(Tile::Events);
+        assert!(!dash.panels.events, "the number did not take the panel off");
+
+        dash.toggle(Tile::Portals);
+        assert!(dash.panels.portals, "the number did not bring a panel on");
+
+        // Back on, and behind the ones that were already up — a panel that
+        // returns joins the stack at the back, it does not reclaim its slot.
+        dash.toggle(Tile::Events);
+        assert!(
+            dash.panels.events,
+            "the number did not bring the panel back"
+        );
+        assert!(
+            dash.joined[Tile::Events.index()] > dash.joined[Tile::Portals.index()],
+            "the returning panel jumped back into its old slot"
+        );
     }
 
     #[test]
@@ -5570,7 +5677,7 @@ mod tests {
         // Pinned to craft mode: it finds its tiles by `VITALS` and `PORTALS`.
         let _vocab = Vocab::lock();
 
-        let dash = capture_dash();
+        let dash = crowded_dash();
         let mut terminal = Terminal::new(TestBackend::new(100, 75)).unwrap();
         terminal
             .draw(|frame| body(frame, &dash, Rect::new(0, 0, 100, 75), false, false))
@@ -5652,7 +5759,7 @@ mod tests {
         // Pinned to craft mode: it finds its tiles by `VITALS` and `PORTALS`.
         let _vocab = Vocab::lock();
 
-        let dash = capture_dash();
+        let dash = crowded_dash();
         let mut terminal = Terminal::new(TestBackend::new(132, 25)).unwrap();
         terminal
             .draw(|frame| body(frame, &dash, Rect::new(0, 0, 132, 25), false, true))
@@ -5688,7 +5795,7 @@ mod tests {
         // board.
         use ratatui::{backend::TestBackend, layout::Rect, Terminal};
 
-        let mut dash = capture_dash();
+        let mut dash = crowded_dash();
         let at = |dash: &Dash| -> [(usize, usize); 3] {
             let mut terminal = Terminal::new(TestBackend::new(132, 38)).unwrap();
             terminal
@@ -6044,7 +6151,7 @@ mod tests {
         };
         let shows = |rows: &[String], needle: &str| rows.iter().any(|row| row.contains(needle));
 
-        let mut dash = capture_dash();
+        let mut dash = crowded_dash();
         dash.panels.portals = false;
         let before = drawn(&dash);
         assert!(

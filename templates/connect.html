@@ -1,0 +1,87 @@
+{% extends "layout.html" %}
+{% block title %}anacraft — wire an AI tool to this property{% endblock %}
+{% block pane %}
+<h2>Wire an AI tool to this property</h2>
+<p>
+  {{ reads }} An assistant on the other end of this line gets the same twelve
+  tools <code>craft mcp</code> serves — for a client that cannot spawn a
+  process of its own, this is how it gets them.
+</p>
+
+<pre id="link">{{ link }}</pre>
+<button class="primary" type="button" data-copy="link">Copy the link</button>
+<p class="fine">
+  One string, token and all — for the clients whose whole configuration is a
+  URL field. Treat it like a password: anything holding this link can read
+  this property's numbers from this machine.
+</p>
+
+{%- if note == "named" %}
+<p class="fine">
+  This server was started with <code>--token</code>, so that one token is what
+  every property here answers to, and the tools read whichever property the
+  config has. Start <code>craft serve</code> without the flag for a token per
+  property.
+</p>
+{%- else if note == "demo" %}
+<p class="fine">
+  The demo serves one synthetic property, so this is the one token this server
+  has. Sign in and pick a real property for a token per site.
+</p>
+{%- else %}
+<p class="fine">
+  It stays true. The port is the one this server takes every time, and the
+  token is worked out from your account and this property rather than minted
+  fresh — so a client configured today is still configured next week, and it
+  goes on reading this property whatever the dashboard is showing. Both are
+  only good on this machine: the server listens on loopback and nowhere else.
+</p>
+{%- endif %}
+
+<div class="next">
+  <p>For <b>Claude Code</b>, the same thing as a command:</p>
+  <pre id="cmd">{{ command }}</pre>
+  <p>And for a client that asks for the two halves separately — the token goes
+    in an <code>Authorization: Bearer</code> header, which this server takes
+    as readily as it takes the query:</p>
+  <pre id="url">{{ url }}</pre>
+  <pre id="token">{{ token }}</pre>
+  <div class="acts">
+    <button class="lnk" type="button" data-copy="cmd">copy the command</button>
+    <button class="lnk" type="button" data-copy="url">copy the url</button>
+    <button class="lnk" type="button" data-copy="token">copy the token</button>
+  </div>
+</div>
+
+{#- The same button the tag page has, written once for three of them.
+    Reaching the clipboard is JavaScript by definition; the blocks above are
+    selectable text whether or not this runs. -#}
+<script>
+  (function () {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-copy]'), function (button) {
+      var source = document.getElementById(button.getAttribute('data-copy'));
+      var label = button.textContent;
+      button.addEventListener('click', function () {
+        navigator.clipboard.writeText(source.textContent).then(function () {
+          button.classList.add('done');
+          button.textContent = 'Copied';
+          setTimeout(function () { button.classList.remove('done'); button.textContent = label; }, 1800);
+        }).catch(function () {
+          // No clipboard permission, so select it instead and let the
+          // keyboard do what the button could not.
+          var range = document.createRange();
+          range.selectNodeContents(source);
+          var selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+        });
+      });
+    });
+  })();
+</script>
+
+<div class="acts">
+  <a class="lnk" href="/properties">pick a different property</a>
+  <a class="lnk" href="https://anacraft.dev/mcp.html">what the tools do</a>
+</div>
+{% endblock %}

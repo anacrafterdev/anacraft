@@ -28,6 +28,11 @@ ratatui = "0.29"
 crossterm = "0.28"
 base64 = "0.22"
 sha2 = "0.10"
+# The one thing `craft serve`'s bearer token is mixed with that nobody can
+# look up. A property id is printed in the tag on every page of the site it
+# measures and a Google `sub` rides in every id token, so the token derived
+# from them is only as private as the key it is derived under.
+hmac = { version = "0.12", default-features = false }
 rand = "0.8"
 open = "5"
 dirs = "5"

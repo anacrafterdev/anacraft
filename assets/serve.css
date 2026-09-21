@@ -316,6 +316,12 @@ a.bin { display: inline-block; }
 .row:hover .bin, .bin:focus-visible, .bin.armed { opacity: 1; }
 .bin:hover { color: var(--coral); }
 .bin.armed { color: var(--coral); }
+
+/* The one link on a row that is not destructive, so it does not wait to be
+   hovered over the way the trash does — somebody looking for how to wire up
+   an assistant has to be able to see that there is a way. */
+.bin.mcp { opacity: .55; color: var(--jade-deep); }
+.bin.mcp:hover { color: var(--jade); }
 .row .nm { font-size: 14.5px; color: var(--white); overflow-wrap: anywhere; }
 .row .id { font-family: var(--mono); font-size: 11.5px; color: var(--jade-deep); }
 .row .ac { margin-left: auto; padding-left: 12px; font-family: var(--mono); font-size: 11px; color: var(--dim); }

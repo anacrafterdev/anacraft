@@ -72,6 +72,8 @@ pub(super) fn router(app: Arc<App>) -> Router<Arc<App>> {
         .route("/property", post(use_property))
         .route("/themes", post(use_theme))
         .route("/tag/:measurement_id", get(tag))
+        .route("/connect", get(connect))
+        .route("/connect/:id", get(connect_to))
         .layer(middleware::from_fn_with_state(app, keyed));
 
     Router::new()
@@ -687,12 +689,22 @@ pub(super) struct Row {
     /// property it means, and a name with an `&` in it has to be
     /// percent-encoded, which escaping for HTML does not do.
     trash: String,
+    /// The name, percent-encoded, for the query the connector link carries.
+    /// The path around it is in the template — the way the streams link's is
+    /// — so that a test can see which route the list points at; what has to
+    /// be encoded is still encoded here.
+    encoded: String,
 }
 
 impl Row {
     fn new(id: String, name: String, account: String) -> Row {
         Row {
             trash: format!("/properties/{id}/trash?n={}", license::encode(&name)),
+            // The name rides along so the connector page can say which site
+            // an assistant wired up here would be reading, and can write the
+            // word into the config it registers, without a second round trip
+            // to Google for it.
+            encoded: license::encode(&name),
             id,
             name,
             account,
@@ -1147,6 +1159,133 @@ async fn tag(Path(measurement_id): Path<String>, Query(which): Query<Which>) -> 
     }))
 }
 
+// -------------------------------------------------------------- the connector ---
+
+#[derive(Template)]
+#[template(path = "connect.html")]
+struct ConnectView {
+    shell: Shell,
+    /// The property an assistant wired up here would be reading, in words.
+    reads: String,
+    url: String,
+    token: String,
+    /// Both in one string, which is the one most clients have room for and
+    /// so the one the page leads with.
+    link: String,
+    command: String,
+    /// The small print under the command. Three different truths, depending
+    /// on where the token came from, and a page that told the wrong one
+    /// would be promising something it cannot keep.
+    note: &'static str,
+}
+
+/// The active property's connector, for the link that does not name one.
+async fn connect(State(app): State<Arc<App>>) -> View {
+    let id = app
+        .property
+        .clone()
+        .or_else(|| Config::load().ok().and_then(|cfg| cfg.active))
+        .unwrap_or_default();
+    wire_up(&app, &id, None).await
+}
+
+/// One property's connector.
+///
+/// The id is in the path rather than read off the config, because this page
+/// is reached from the list — where the whole point is picking which of
+/// several sites the assistant should be reading.
+async fn connect_to(
+    State(app): State<Arc<App>>,
+    Path(id): Path<String>,
+    Query(named): Query<Named>,
+) -> View {
+    let id = bare(&id);
+    wire_up(&app, &id, named.n.as_deref()).await
+}
+
+/// The three strings, on a page, with a button beside each.
+///
+/// They are on the banner too. They are here because the banner scrolls away,
+/// sits in a terminal somebody has since used for something else, and cannot
+/// be clicked — and the person wiring up a sandboxed client is doing it in a
+/// window next to this one.
+async fn wire_up(app: &App, id: &str, name: Option<&str>) -> View {
+    let oops = |message: String| {
+        Oops::from(Fault {
+            shell: Shell::new("err", "/connect"),
+            message,
+            back: "/properties".into(),
+        })
+    };
+
+    // The same look `/properties` takes, for the same reason: `/v1/mcp`
+    // answers only on the plan, and handing a connector to somebody who
+    // cannot use it has sent them off to debug a 402.
+    let (email, tier) = match stand(app).await {
+        Ok(Stand::In { email, tier }) => (email, tier),
+        Ok(_) => return Ok(Redirect::to("/").into_response()),
+        Err(message) => return Err(oops(message)),
+    };
+
+    // Registered on the way past, because the token is only worth copying if
+    // this server will answer to it — and it answers for the properties this
+    // machine knows about. Nothing else moves: the active property is a
+    // separate choice, made by a button that says so.
+    if !app.demo && !id.is_empty() {
+        if let Ok(mut cfg) = Config::load() {
+            if cfg.find(id).is_none() {
+                cfg.upsert(id, name.map(str::to_string));
+                cfg.save().map_err(|err| oops(why(err)))?;
+            }
+        }
+    }
+
+    let wire = super::Connector::new(app.port, app.token_for(id));
+    Ok(page(ConnectView {
+        shell: Shell::new("out", format!("/connect/{id}")).signed(email.as_deref(), tier),
+        reads: reads(app, id, name),
+        url: wire.url,
+        token: wire.token,
+        link: wire.link,
+        command: wire.command,
+        note: note(app),
+    }))
+}
+
+/// What to promise about the token on the page.
+fn note(app: &App) -> &'static str {
+    if app.demo {
+        "demo"
+    } else if app.one_token() {
+        "named"
+    } else {
+        "derived"
+    }
+}
+
+/// The one sentence that says what an assistant wired up here would be
+/// reading, so nobody hands an agent the numbers for the wrong site.
+fn reads(app: &App, id: &str, name: Option<&str>) -> String {
+    if app.demo {
+        return "Synthetic data, on the same tools as the real thing.".into();
+    }
+    if id.is_empty() {
+        return "No property is selected yet — pick one from the list first.".into();
+    }
+    let named = name
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            Config::load()
+                .ok()
+                .and_then(|cfg| cfg.find(id).map(|p| p.display()))
+        });
+    match named {
+        Some(named) => format!("Reads {named} — property {id}."),
+        None => format!("Reads property {id}."),
+    }
+}
+
 // ------------------------------------------------------- the two small writes ---
 
 /// Where a form sends the browser afterwards.
@@ -1209,10 +1348,9 @@ struct Palette {
 }
 
 /// The page wears whichever palette the CLI is set to rather than keeping a
-/// preference of its own: the port changes every run, so anything this page
-/// stored would be stored against an origin that will not exist tomorrow.
-/// The config file is the one place a choice survives, and it is the same
-/// line `craft theme` writes and the dashboard reads.
+/// preference of its own. The config file is the one place a choice
+/// survives, and it is the same line `craft theme` writes and the dashboard
+/// reads.
 async fn use_theme(State(app): State<Arc<App>>, Form(body): Form<Palette>) -> View {
     let back = back_to(body.back.as_deref());
     if !crate::theme::select(&body.name) {
@@ -1295,7 +1433,7 @@ mod tests {
     }
 
     /// The templates, by the name askama knows them by.
-    const TEMPLATES: [(&str, &str); 12] = [
+    const TEMPLATES: [(&str, &str); 13] = [
         ("layout.html", include_str!("../../templates/layout.html")),
         ("start.html", include_str!("../../templates/start.html")),
         ("signin.html", include_str!("../../templates/signin.html")),
@@ -1313,6 +1451,7 @@ mod tests {
         ("new.html", include_str!("../../templates/new.html")),
         ("trash.html", include_str!("../../templates/trash.html")),
         ("tag.html", include_str!("../../templates/tag.html")),
+        ("connect.html", include_str!("../../templates/connect.html")),
         ("error.html", include_str!("../../templates/error.html")),
     ];
 

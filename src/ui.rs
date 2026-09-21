@@ -376,6 +376,61 @@ struct Forget {
     name: String,
 }
 
+/// What `c` copied, and for which property.
+///
+/// The strings are on the overlay as well as on the clipboard, because OSC 52
+/// is a request a terminal is free to ignore and it never says which it did.
+/// A line somebody can select with the mouse is the fallback that always
+/// works.
+struct Wired {
+    property: String,
+    /// Endpoint and token in one string — what goes on the clipboard, because
+    /// a URL field is all most of these clients have.
+    link: String,
+    command: String,
+    /// Set when there was no connector to work out — no home directory to
+    /// keep the secret in, most likely.
+    trouble: Option<String>,
+}
+
+impl Wired {
+    /// Work out the connector for a property and ask the terminal to take it.
+    fn copy(property: &Property) -> Wired {
+        let mut wired = Wired {
+            property: property.display(),
+            link: String::new(),
+            command: String::new(),
+            trouble: None,
+        };
+        match crate::serve::connector(&property.id) {
+            Ok(wire) => {
+                to_clipboard(&wire.link);
+                wired.link = wire.link;
+                wired.command = wire.command;
+            }
+            Err(err) => wired.trouble = Some(err.to_string()),
+        }
+        wired
+    }
+}
+
+/// Hand a line to the clipboard of the machine somebody is sitting at.
+///
+/// OSC 52 rather than a clipboard crate, because the terminal running this
+/// may be on the far end of an ssh connection — in which case the X or
+/// Wayland clipboard this process could reach is on the wrong computer. The
+/// terminal never answers, and some are configured not to listen at all, so
+/// this cannot report success; that is what the overlay is for.
+fn to_clipboard(text: &str) {
+    use base64::Engine;
+    use std::io::Write;
+
+    let payload = base64::engine::general_purpose::STANDARD.encode(text);
+    let mut out = std::io::stdout();
+    let _ = write!(out, "\x1b]52;c;{payload}\x07");
+    let _ = out.flush();
+}
+
 struct Dash {
     title: String,
     days: u32,
@@ -408,6 +463,10 @@ struct Dash {
     /// and id here rather than reading the rotation at draw time keeps the
     /// overlay showing what was confirmed, not what the rotation says after.
     forget: Option<Forget>,
+    /// The connector `c` put on the clipboard, while its overlay is up. Held
+    /// here for the same reason: it shows what was copied, not what the
+    /// rotation has moved on to.
+    wired: Option<Wired>,
     /// Highest realtime count seen this session — the meter's high-water mark.
     peak: f64,
     /// Drives every phase-based effect, so they all share one clock.
@@ -512,6 +571,7 @@ impl Dash {
             },
             help: false,
             forget: None,
+            wired: None,
             peak: live.max(1.0),
             started: Instant::now(),
             last_report: Instant::now(),
@@ -1552,6 +1612,10 @@ async fn event_loop(
                             );
                         }
                         _ if dash.forget.is_some() => dash.forget = None,
+                        // Same rule for the connector: it is up to be read
+                        // and copied from, so the next key puts it away
+                        // rather than toggling a panel behind it.
+                        _ if dash.wired.is_some() => dash.wired = None,
                         KeyCode::Char('q') => return Ok(landed(rotation, index)),
                         // Esc closes the help overlay first, so it isn't a
                         // surprise exit for anyone who opened it to look.
@@ -1562,6 +1626,14 @@ async fn event_loop(
                             last_live = now - dash.live_every;
                         }
                         KeyCode::Char('?') | KeyCode::Char('h') => dash.help = !dash.help,
+                        // The property in front of somebody is the one an
+                        // assistant should be reading, so `c` copies that
+                        // one's connector rather than the config's default.
+                        KeyCode::Char('c') => {
+                            if let Some(property) = rotation.get(index) {
+                                dash.wired = Some(Wired::copy(property));
+                            }
+                        }
                         // Ctrl+digit and the bare digit do the same thing: the
                         // titles advertise Ctrl, but not every terminal can
                         // send it.
@@ -2343,6 +2415,8 @@ fn draw(frame: &mut Frame, dash: &Dash) {
     // on an answer and the help is not.
     if let Some(target) = &dash.forget {
         forget_overlay(frame, area, target);
+    } else if let Some(wired) = &dash.wired {
+        wired_overlay(frame, area, wired);
     } else if dash.help {
         help_overlay(frame, area, dash.demo);
     }
@@ -2961,6 +3035,7 @@ fn help_overlay(frame: &mut Frame, area: Rect, demo: bool) {
             "^8 / 8",
             theme::say("portals — who sent them", "traffic sources"),
         ),
+        ("c", "copy the MCP connector"),
         ("t", "next theme"),
         ("b", "boring - plain GA4 names"),
         ("tab", "next property"),
@@ -3001,6 +3076,123 @@ fn help_overlay(frame: &mut Frame, area: Rect, demo: bool) {
         Paragraph::new(lines).block(framed("KEYS", "", ore::gold())),
         rect,
     );
+}
+
+/// What `c` copied, wide enough to read the line it copied.
+///
+/// Wider than the other two overlays on purpose. The command is a hundred and
+/// forty characters and it is the thing somebody came here for — wrapped over
+/// four lines it is still selectable with a mouse, which is the fallback for
+/// every terminal that quietly declines OSC 52.
+fn wired_overlay(frame: &mut Frame, area: Rect, wired: &Wired) {
+    let half = |text: String| {
+        Line::from(Span::styled(
+            format!("  {text}"),
+            Style::default().fg(theme::sage()),
+        ))
+    };
+
+    let mut lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            format!("  {}", wired.property),
+            Style::default()
+                .fg(ore::diamond())
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+    ];
+
+    match &wired.trouble {
+        Some(trouble) => {
+            lines.push(Line::from(Span::styled(
+                format!("  {trouble}"),
+                Style::default().fg(ore::redstone()),
+            )));
+        }
+        None => {
+            lines.push(Line::from(Span::styled(
+                "  on the clipboard, if this terminal takes OSC 52:",
+                Style::default().fg(theme::sage()),
+            )));
+            lines.push(Line::from(""));
+            for chunk in wrapped(&wired.link, 60) {
+                lines.push(Line::from(Span::styled(
+                    format!("  {chunk}"),
+                    Style::default().fg(theme::fg()),
+                )));
+            }
+            lines.push(Line::from(""));
+            lines.push(half("paste it into the client's URL field, or:".into()));
+            for chunk in wrapped(&wired.command, 60) {
+                lines.push(half(chunk));
+            }
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                "  `craft serve` has to be running for it to answer",
+                Style::default().fg(theme::sage()),
+            )));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled(
+            "  any key",
+            Style::default()
+                .fg(ore::gold())
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" closes this", Style::default().fg(theme::fg())),
+    ]));
+    lines.push(Line::from(""));
+
+    let width = 68.min(area.width.saturating_sub(4));
+    let height = (lines.len() as u16 + 2).min(area.height.saturating_sub(2));
+    let rect = Rect {
+        x: area.x + (area.width.saturating_sub(width)) / 2,
+        y: area.y + (area.height.saturating_sub(height)) / 2,
+        width,
+        height,
+    };
+
+    frame.render_widget(Clear, rect);
+    frame.render_widget(
+        // No key chip: `framed` spells one `^c`, and Ctrl-C is how this
+        // dashboard quits. The key that opens this is in the `?` list, and
+        // anyone reading this overlay has already pressed it.
+        Paragraph::new(lines).block(framed("MCP CONNECTOR", "", ore::gold())),
+        rect,
+    );
+}
+
+/// Split a line into chunks that fit, on spaces where there are any.
+///
+/// The command has spaces in it and the token does not, so this has to do
+/// both: break where it can, and cut where it cannot rather than running off
+/// the side of the overlay.
+fn wrapped(text: &str, width: usize) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for word in text.split(' ') {
+        let mut word = word;
+        // A single word longer than the box: cut it into pieces that fit.
+        while word.chars().count() > width {
+            let cut = word
+                .char_indices()
+                .nth(width)
+                .map_or(word.len(), |(at, _)| at);
+            out.push(word[..cut].to_string());
+            word = &word[cut..];
+        }
+        match out.last_mut() {
+            Some(line) if line.chars().count() + 1 + word.chars().count() <= width => {
+                line.push(' ');
+                line.push_str(word);
+            }
+            _ => out.push(word.to_string()),
+        }
+    }
+    out
 }
 
 /// A panel, captioned with the key that shows and hides it, set in a block —
@@ -6800,5 +6992,91 @@ mod live_graph_tests {
             colors[1][last], colors[1][2],
             "the newest column is not distinguished"
         );
+    }
+}
+
+#[cfg(test)]
+mod wired_tests {
+    use super::*;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    fn render(wired: &Wired, width: u16, height: u16) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                wired_overlay(frame, area, wired);
+            })
+            .unwrap();
+
+        let buffer = terminal.backend().buffer().clone();
+        (0..height)
+            .map(|y| {
+                (0..width)
+                    .map(|x| buffer[(x, y)].symbol().to_string())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn wired() -> Wired {
+        Wired {
+            property: "example.com".to_string(),
+            link: "http://127.0.0.1:7777/v1/mcp?token=abc123".to_string(),
+            command: "claude mcp add --transport http anacraft \
+                      'http://127.0.0.1:7777/v1/mcp?token=abc123'"
+                .to_string(),
+            trouble: None,
+        }
+    }
+
+    #[test]
+    fn the_overlay_shows_what_it_put_on_the_clipboard() {
+        // OSC 52 is a request, and a terminal that ignores it says nothing.
+        // The line has to be on screen to be selected by hand, or this key
+        // silently does nothing on the terminals that decline.
+        let drawn = render(&wired(), 80, 24);
+        assert!(drawn.contains("MCP CONNECTOR"), "got:\n{drawn}");
+        assert!(drawn.contains("claude mcp add"), "got:\n{drawn}");
+        // Wrapped, so the halves may land on different lines — what matters
+        // is that the whole link is on screen to be selected.
+        assert!(drawn.contains("token="), "got:\n{drawn}");
+        assert!(drawn.contains("abc123"), "got:\n{drawn}");
+        // Which property, because an assistant pointed at the wrong site is
+        // worse than one pointed at none.
+        assert!(drawn.contains("example.com"), "got:\n{drawn}");
+        // And the caveat: none of this answers unless the server is up.
+        assert!(drawn.contains("craft serve"), "got:\n{drawn}");
+    }
+
+    #[test]
+    fn nothing_to_copy_says_so_instead_of_showing_an_empty_box() {
+        let mut broken = wired();
+        broken.trouble = Some("no home directory to keep the secret in".into());
+        let drawn = render(&broken, 80, 24);
+        assert!(drawn.contains("no home directory"), "got:\n{drawn}");
+        assert!(!drawn.contains("claude mcp add"), "got:\n{drawn}");
+    }
+
+    #[test]
+    fn a_long_line_is_broken_rather_than_cut_off() {
+        // Every piece fits, and putting them back together gives the line
+        // that went to the clipboard — a wrap that drops a character hands
+        // somebody a command that fails after they stop looking.
+        let line = wired().command;
+        let pieces = wrapped(&line, 60);
+        assert!(pieces.iter().all(|piece| piece.chars().count() <= 60));
+        assert_eq!(pieces.join(" "), line);
+    }
+
+    #[test]
+    fn a_word_longer_than_the_box_is_cut_rather_than_overflowing() {
+        // A token has no spaces in it. Wrapping on spaces alone would run it
+        // off the side of the overlay and out of sight.
+        let long = "a".repeat(25);
+        let pieces = wrapped(&long, 10);
+        assert_eq!(pieces, vec!["a".repeat(10), "a".repeat(10), "a".repeat(5)]);
     }
 }

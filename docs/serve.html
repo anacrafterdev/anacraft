@@ -401,12 +401,14 @@ rather than leaving it on a sentence about returning to a terminal nobody was in
 sign-in is not a thing to make somebody click through.</p>
 <p>It wears the palette the dashboard is set to, and the swatches in its footer change it — for the
 page and for <code>craft dash</code> both, because picking one writes the same line
-<code>craft theme</code> writes. It keeps no preference of its own on purpose: the port changes every
-run, so anything the browser stored would be stored against an origin that will not exist tomorrow.</p>
+<code>craft theme</code> writes. It keeps no preference of its own on purpose: everything worth
+remembering is already in the config the terminal reads.</p>
 
 <h2><span class="n">03</span>Talking to it yourself</h2>
 <p>JSON in, JSON out, one version prefix. Every endpoint but <code>/v1/health</code> and
-<code>/v1/openapi.json</code> wants the bearer token the server printed when it started:</p>
+<code>/v1/openapi.json</code> wants the bearer token the server printed when it started — the same
+one it printed last time, since it is derived rather than minted. In a header, or as
+<code>?token=</code> on the URL for anything that cannot send one:</p>
 <pre class="code">curl -s http://127.0.0.1:52413<span class="k">/v1/session</span> \
   -H <span class="k">'Authorization: Bearer Jc8Kq2vXn0pLd4WbT7yS1rEo9ZmHfA6uG3iN5xQa'</span></pre>
 <p>Locally the token also arrives in the URL the browser is opened with, as <code>#k=…</code>. It is in

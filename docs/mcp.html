@@ -409,13 +409,30 @@ usually sits and where <code>~/.anacraft/</code> keeps the credentials; a <b>Mac
 is walled into its container; a <b>container</b> may have no home directory worth the name. All of
 them can open a loopback socket. So leave the process outside the sandbox and give the client a URL
 instead of a command:</p>
-<pre class="code"><span class="k">$</span> craft serve --port 7777 --token <span class="k">$(openssl rand -hex 20)</span> --idle 0 --no-open</pre>
-<p>The server prints the URL and the token. Point the client at
-<code>http://127.0.0.1:7777/v1/mcp</code> with that token as a bearer header — for
-<b>Claude Code</b>, <code>claude mcp add --transport http anacraft
-http://127.0.0.1:7777/v1/mcp --header "Authorization: Bearer &lt;token&gt;"</code>. Your Google
-credentials stay in <code>~/.anacraft/</code> and never enter the sandbox; the client only ever
-holds a token to a port on your own machine. It is the same twelve tools, answering the same way.</p>
+<pre class="code"><span class="k">$</span> craft serve --idle 0 --no-open</pre>
+<p>The server prints one string with the token already in it:</p>
+<pre class="code">http://127.0.0.1:7777/v1/mcp?token=&lt;token&gt;</pre>
+<p>That is the whole configuration for a client whose only field is a URL. For <b>Claude Code</b>
+the server prints the command too — <code>claude mcp add --transport http anacraft
+'http://127.0.0.1:7777/v1/mcp?token=&lt;token&gt;'</code> — and a client with somewhere to put a
+header can send the token as <code>Authorization: Bearer &lt;token&gt;</code> against the bare
+<code>/v1/mcp</code> instead. All three are on the server's own page, behind one <b>mcp</b> link
+per property in the list, and on <code>c</code> in <code>craft</code>, which puts the link on the
+clipboard. Your Google credentials stay in <code>~/.anacraft/</code> and never enter the sandbox;
+the client only ever holds a token to a port on your own machine. It is the same twelve tools,
+answering the same way.</p>
+<p>A token in a query string is usually a thing to avoid, because query strings turn up in access
+logs and <code>Referer</code> headers. This one goes to a server on loopback that writes no log
+and is never a web page's origin, and it was going to sit in the client's config file either way —
+so treat the link like a password and nothing more.</p>
+<p><b>It is the same line tomorrow.</b> The port is the one the server took last time, and the
+token is an HMAC of your Google account id and the property id under a secret minted once and kept
+at <code>0600</code> in <code>~/.anacraft/mcp-http.json</code> — so a client configured today is
+still configured next week, where a freshly minted token would have quietly stopped working
+overnight. There is one token per property and it names the property it was cut for, so a
+connector goes on reading the site it was wired to no matter which property the dashboard is
+showing. <code>--token</code> still overrides the lot, for a caller that has to know the token in
+advance.</p>
 
 <h2><span class="n">02</span>The twelve tools</h2>
 <table class="tbl">

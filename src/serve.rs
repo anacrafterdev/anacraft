@@ -13,7 +13,8 @@
 //! who is allowed to ask, what an answer looks like, and what a refusal says.
 //!
 //! It binds loopback and nothing else. Every route but `/v1/health` and the
-//! way into the pages wants the token minted at startup and printed once, and
+//! way into the pages wants this machine's token — derived, not minted, so a
+//! connector configured once stays configured — and
 //! a browser reaching it has to come from this server's own origin. That is
 //! three locks on a door that only opens onto one machine, and they are there
 //! because a page on the public web can absolutely try to talk to
@@ -36,7 +37,7 @@ use axum::middleware::{self, Next};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, put};
 use axum::{Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 mod views;
@@ -74,9 +75,327 @@ const IDLE_TICK: Duration = Duration::from_secs(20);
 /// and a server that refused to start would leave them nowhere to do either.
 const PLAN: Tier = Tier::Elite;
 
+/// Where this server is reachable, and the one ingredient its token is not
+/// derived from.
+///
+/// `craft serve` used to mint forty random characters and take whatever port
+/// the OS offered. That is right for a browser session, which reads both off
+/// the banner and forgets them when the tab closes. It is wrong for
+/// `/v1/mcp`: a connector is configured once, by hand, in a file somebody
+/// then stops thinking about, and a URL or a token that changed overnight is
+/// a connector that quietly stopped working — with nothing in the client to
+/// say why.
+///
+/// So neither is left to chance. The port is the one last served from. The
+/// token is [`derive`]d from the signed-in account and the property, which
+/// are stable but public, under the secret below, which is neither — minted
+/// once and never shown. It lives beside the credentials at 0600 rather than
+/// in `~/.config`, because it is a secret and `~/.config` is a directory
+/// people sync to public repos.
+#[derive(Default, Serialize, Deserialize)]
+struct Endpoint {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    secret: Option<String>,
+}
+
+/// The port to try first: the one named, then the one this server was last
+/// reachable at, then whatever the OS has going spare.
+///
+/// The middle case is the whole point. A connector holds a URL with a port in
+/// it, and an OS-assigned port that differs every run makes that URL a guess.
+fn wanted_port(given: u16, remembered: Option<u16>) -> u16 {
+    match given {
+        0 => remembered.unwrap_or(0),
+        port => port,
+    }
+}
+
+impl Endpoint {
+    fn path() -> Result<std::path::PathBuf> {
+        Ok(crate::config::home()?.join("mcp-http.json"))
+    }
+
+    /// Best effort throughout. Every way this can fail — no file yet, no home
+    /// directory, JSON somebody edited by hand — means the same thing:
+    /// nothing is remembered, so mint and bind as if this were the first run.
+    fn load() -> Endpoint {
+        Self::path()
+            .ok()
+            .filter(|path| path.exists())
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .and_then(|raw| serde_json::from_str(&raw).ok())
+            .unwrap_or_default()
+    }
+
+    /// Also best effort: failing to write this file down is not a reason to
+    /// refuse to serve. The caller has the port and the token either way —
+    /// they are on the banner.
+    fn save(&self) {
+        if let (Ok(path), Ok(raw)) = (Self::path(), serde_json::to_string_pretty(self)) {
+            let _ = crate::config::write_private(&path, &raw);
+        }
+    }
+
+    /// The key every token on this machine is derived under, minted on first
+    /// use and kept forever after.
+    ///
+    /// Losing it is survivable and obvious: every derived token changes at
+    /// once, and the connectors are rewired the same way they were wired.
+    /// Leaking it is the thing the 0600 is for.
+    fn secret(&mut self) -> String {
+        if let Some(secret) = &self.secret {
+            return secret.clone();
+        }
+        let secret = license::mint_token();
+        self.secret = Some(secret.clone());
+        self.save();
+        secret
+    }
+
+    /// Write the port back, unless it is already what is on disk.
+    fn remember(&mut self, port: u16) {
+        if self.port == Some(port) {
+            return;
+        }
+        self.port = Some(port);
+        self.save();
+    }
+}
+
+/// The bearer token for one account and one property.
+///
+/// HMAC rather than a hash of the two ids, because neither id is a secret: a
+/// Google `sub` rides in every id token, and a GA4 property id is printed in
+/// the tag on every page of the site it measures. Hashing them would put the
+/// key to this server behind two strings that are already published. The
+/// secret is what makes the token unguessable; the ids are what make it the
+/// same one tomorrow.
+///
+/// Twenty bytes, spelled in hex, which is the forty characters the minted
+/// token was — the same length in the same places, so nothing downstream has
+/// to learn a new shape.
+fn derive(secret: &str, account: &str, property: &str) -> String {
+    use hmac::Mac;
+
+    let mut mac = <hmac::Hmac<sha2::Sha256>>::new_from_slice(secret.as_bytes())
+        .expect("hmac accepts a key of any length");
+    // Length-prefixed rather than joined on a separator, so no pair of ids
+    // can be rearranged into another pair with the same token. Neither field
+    // can contain a digit-then-colon prefix of its own length by accident,
+    // but the cost of not having to argue about it is one `format!`.
+    mac.update(format!("{}:{account}{}:{property}", account.len(), property.len()).as_bytes());
+    mac.finalize()
+        .into_bytes()
+        .iter()
+        .take(20)
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+/// Every token this server answers to, and the property each one names.
+///
+/// One per property, and not only the active one, because switching property
+/// is a thing people do from the dashboard between breakfast and lunch — and
+/// a connector wired up yesterday against the property that was active then
+/// should not start refusing because of it. Answering to all of them widens
+/// nothing: they are one account's, and whoever holds any of these tokens
+/// already holds the secret they were derived under.
+///
+/// The active property is first, because that is the token this server
+/// advertises on its banner and its page.
+fn keyring(
+    secret: &str,
+    account: &str,
+    active: &str,
+    configured: &[String],
+) -> Vec<(String, String)> {
+    let mut ring: Vec<(String, String)> = Vec::new();
+    for id in std::iter::once(active.to_string()).chain(configured.iter().cloned()) {
+        if ring.iter().any(|(known, _)| known == &id) {
+            continue;
+        }
+        let token = derive(secret, account, &id);
+        ring.push((id, token));
+    }
+    ring
+}
+
+/// What a presented token turned out to be.
+enum Opened {
+    /// It was derived for this property, so this is the property its holder
+    /// is asking about — whatever the dashboard has in front of it.
+    Property(String),
+    /// It is the token this server was started with under `--token`, which
+    /// names no property. The reads fall back to the flag and the config, the
+    /// way they did before any of this was derived from anything.
+    Server,
+}
+
+/// How this server decides whether a request may pass, and what it is about.
+enum Keys {
+    /// `--token`: one token, named by the caller.
+    Named(String),
+    /// The derived ring.
+    Derived { secret: String, account: String },
+}
+
+impl Keys {
+    /// The ring as it stands right now.
+    ///
+    /// Worked out per request rather than at startup, because the config it
+    /// is derived from changes while the server is running: registering a
+    /// property on the page hands out a token for it, and a token that only
+    /// worked after a restart would be a button that does nothing.
+    /// It is a small TOML read and a handful of HMACs, in front of handlers
+    /// that are about to call Google.
+    fn ring(&self, flag: Option<&str>) -> Vec<(String, String)> {
+        match self {
+            Keys::Named(token) => vec![(String::new(), token.clone())],
+            Keys::Derived { secret, account } => {
+                let (_, active, configured) = identity(flag);
+                keyring(secret, account, &active, &configured)
+            }
+        }
+    }
+
+    /// What the presented token opens, if anything.
+    fn opens(&self, presented: &str, flag: Option<&str>) -> Option<Opened> {
+        opened(&self.ring(flag), presented)
+    }
+}
+
+/// Which of a ring's tokens was presented, and what it names.
+///
+/// Split out from [`Keys::opens`] because that one reads the config to build
+/// its ring, and the rule being applied to the ring is worth a test that does
+/// not depend on what is in the config of the machine running it.
+fn opened(ring: &[(String, String)], presented: &str) -> Option<Opened> {
+    ring.iter()
+        .find(|(_, token)| same(presented, token))
+        .map(|(id, _)| {
+            if id.is_empty() {
+                Opened::Server
+            } else {
+                Opened::Property(id.clone())
+            }
+        })
+}
+
+/// The three strings an MCP client is configured with, spelled out rather
+/// than left as an exercise.
+///
+/// The clients this endpoint exists for are the ones that cannot spawn `craft
+/// mcp`: a confined snap, a Mac App Store build, a container. Wiring one up
+/// means copying strings into a sandboxed app's config file, and a URL
+/// somebody has to assemble from a line of output and a path they read in the
+/// docs is one they will get wrong once.
+pub struct Connector {
+    /// The endpoint on its own, for a client with a field for the token.
+    pub url: String,
+    pub token: String,
+    /// Both halves in one string.
+    ///
+    /// The thing most of these clients actually have room for is a URL, and
+    /// nothing else — no header, no second field. A token in a query string
+    /// is normally a thing to avoid, because query strings end up in access
+    /// logs and `Referer` headers; this one goes to a server on loopback that
+    /// keeps no log and is never a web page's origin, and it was going to sit
+    /// in the client's config file either way. So it is offered, and it is
+    /// the one to copy.
+    pub link: String,
+    /// Ready to paste into a shell, for the clients that take it that way.
+    pub command: String,
+}
+
+impl Connector {
+    fn new(port: u16, token: String) -> Connector {
+        let url = format!("http://127.0.0.1:{port}/v1/mcp");
+        let link = format!("{url}?token={}", license::encode(&token));
+        Connector {
+            // One line, no continuation. It is long, and it is going through
+            // a clipboard into a shell or a config file — neither of which is
+            // improved by a backslash somebody has to keep. Quoted, because
+            // the `?` in it is a glob to every shell that will see it.
+            command: format!("claude mcp add --transport http anacraft '{link}'"),
+            url,
+            token,
+            link,
+        }
+    }
+}
+
+/// The connector for one property on this machine, whether or not `craft
+/// serve` is running.
+///
+/// The dashboard calls this: somebody looking at a property's numbers is
+/// exactly the person who wants an assistant looking at them too, and the
+/// alternative is starting a server, reading a banner and retyping it.
+/// Because the port and the token are both settled off disk, the answer is
+/// the same one `craft serve` will print — even on a machine where it has
+/// never run, since picking the port here is also remembering it for when it
+/// does.
+pub fn connector(property: &str) -> Result<Connector> {
+    let mut endpoint = Endpoint::load();
+
+    let port = match endpoint.port {
+        Some(port) => port,
+        None => {
+            // Bound and dropped, purely to be told a number nothing else is
+            // using. `run` re-binds it, and falls back if the gap between the
+            // two was long enough for somebody to take it.
+            let port = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+                .and_then(|listener| listener.local_addr())
+                .context("could not find a free local port")?
+                .port();
+            endpoint.remember(port);
+            port
+        }
+    };
+
+    let (account, active, _) = identity(None);
+    let property = if property.is_empty() {
+        active
+    } else {
+        property.to_string()
+    };
+    Ok(Connector::new(
+        port,
+        derive(&endpoint.secret(), &account, &property),
+    ))
+}
+
+/// Who this machine is signed in as, which property is in front of them, and
+/// which others they have configured.
+///
+/// Every part is allowed to be missing, and missing is spelled as the empty
+/// string rather than refused. A token derived from nothing at all is still a
+/// token nobody can guess — the secret is doing that work — and refusing to
+/// serve because somebody has not signed in yet would be refusing to open the
+/// page where they sign in.
+fn identity(flag: Option<&str>) -> (String, String, Vec<String>) {
+    let account = crate::auth::Auth::account()
+        .ok()
+        .flatten()
+        .map(|account| account.sub)
+        .unwrap_or_default();
+
+    let cfg = crate::config::Config::load().unwrap_or_default();
+    let configured: Vec<String> = cfg.properties.iter().map(|p| p.id.clone()).collect();
+    let active = flag
+        .map(str::to_string)
+        .or_else(|| cfg.active.clone())
+        .or_else(|| configured.first().cloned())
+        .unwrap_or_default();
+
+    (account, active, configured)
+}
+
 pub struct Options {
-    /// 0 lets the OS pick, which is the default: a fixed port is a thing to
-    /// collide with, and the URL is printed either way.
+    /// 0 means the port this server was last reachable at, and the OS's
+    /// choice on the first run ever — see [`Endpoint`]. Naming one here
+    /// outranks both.
     pub port: u16,
     /// Open a browser at the page. Off with `--no-open`.
     pub open: bool,
@@ -101,9 +420,16 @@ enum Login {
 }
 
 struct App {
+    /// The one this server advertises: the active property's. The pages use
+    /// it as the browser session's key; the ring below is what the API takes.
     token: String,
+    /// What the API answers to, and what each token turns out to mean.
+    keys: Keys,
     /// The one origin a browser may call from — this server's own.
     origin: String,
+    /// The port behind that origin, so the page that hands out the connector
+    /// can build the same line the banner printed.
+    port: u16,
     demo: bool,
     property: Option<String>,
     login: Mutex<Login>,
@@ -115,21 +441,101 @@ struct App {
     /// is where they sign in. A `tokio` mutex because `dispatch` is async and
     /// holds `&mut self` across awaits; the stdio transport is serial too, so
     /// one call at a time is the shape this server already had.
-    mcp: tokio::sync::Mutex<Option<crate::mcp::Server>>,
+    /// Paired with the property it was built for, because the token names
+    /// one and two connectors on this server may name two different ones.
+    mcp: tokio::sync::Mutex<Option<(String, crate::mcp::Server)>>,
+}
+
+impl App {
+    /// What a presented token opens here, if anything.
+    fn opens(&self, presented: &str) -> Option<Opened> {
+        self.keys.opens(presented, self.property.as_deref())
+    }
+
+    /// The token a client should present to read this property.
+    ///
+    /// Under `--token` there is only the one the caller named, and it names
+    /// no property — so every property's page shows that, which is the truth:
+    /// it is what opens the door, and the door leads to whichever property
+    /// the flag and the config picked.
+    pub(super) fn token_for(&self, property: &str) -> String {
+        match &self.keys {
+            Keys::Named(token) => token.clone(),
+            // The demo serves one synthetic property whatever the config
+            // says, and its id is not in the config at all — so deriving one
+            // for it would hand out a token this server does not answer to.
+            // There is one token here, and it is the one on the banner.
+            Keys::Derived { .. } if self.demo => self.token.clone(),
+            Keys::Derived { secret, account } => derive(secret, account, property),
+        }
+    }
+
+    /// Whether that token is the same one whatever property is asked for.
+    pub(super) fn one_token(&self) -> bool {
+        self.demo || matches!(self.keys, Keys::Named(_))
+    }
 }
 
 pub async fn run(opts: Options) -> Result<()> {
-    let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, opts.port))
-        .await
-        .with_context(|| match opts.port {
-            0 => "could not open a local port".to_string(),
-            port => format!("could not open port {port} — something else may have it"),
-        })?;
+    let mut endpoint = Endpoint::load();
+
+    let wanted = wanted_port(opts.port, endpoint.port);
+    let mut squatted = false;
+    let listener = match tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, wanted)).await {
+        Ok(listener) => listener,
+        // Something else has the remembered port — most often another copy of
+        // this server, still running. That is not a reason to refuse to
+        // start: take whatever is free. A port the caller named is a
+        // different matter — they meant that one, and being given another
+        // silently would be worse.
+        Err(_) if opts.port == 0 && wanted != 0 => {
+            squatted = true;
+            tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+                .await
+                .context("could not open a local port")?
+        }
+        Err(err) => {
+            return Err(err).with_context(|| match opts.port {
+                0 => "could not open a local port".to_string(),
+                port => format!("could not open port {port} — something else may have it"),
+            })
+        }
+    };
     let port = listener.local_addr()?.port();
 
+    // Not the fallback, though. The connectors already out there point at
+    // the remembered port, and writing a port taken around a squatter into
+    // the file would move every one of them the next time this starts alone.
+    // The banner and the page say where this run actually is.
+    if !squatted {
+        endpoint.remember(port);
+    }
+
+    // The token is derived, not minted: same account and same property, same
+    // forty characters, run after run. `--token` still outranks it — a caller
+    // that has to know the token in advance is naming it, not asking.
+    let (account, active, configured) = identity(opts.property.as_deref());
+    let keys = match opts.token {
+        Some(token) => Keys::Named(token),
+        None => Keys::Derived {
+            secret: endpoint.secret(),
+            account: account.clone(),
+        },
+    };
+    let token = match &keys {
+        Keys::Named(token) => token.clone(),
+        Keys::Derived { secret, account } => keyring(secret, account, &active, &configured)
+            .into_iter()
+            .next()
+            .map(|(_, token)| token)
+            .expect("a keyring is never empty"),
+    };
+
     let app = Arc::new(App {
-        token: opts.token.unwrap_or_else(license::mint_token),
+        token,
+        keys,
         origin: format!("http://127.0.0.1:{port}"),
+        port,
         demo: opts.demo,
         property: opts.property,
         login: Mutex::new(Login::Idle),
@@ -183,7 +589,12 @@ pub async fn run(opts: Options) -> Result<()> {
         .with_state(app.clone());
 
     let url = format!("{}/#k={}", app.origin, app.token);
-    banner(&app.origin, &app.token, opts.idle, opts.demo);
+    banner(
+        &app.origin,
+        &Connector::new(port, app.token.clone()),
+        opts.idle,
+        opts.demo,
+    );
     if opts.open {
         let _ = open::that(&url);
     }
@@ -194,7 +605,7 @@ pub async fn run(opts: Options) -> Result<()> {
         .context("the local server stopped unexpectedly")
 }
 
-fn banner(origin: &str, token: &str, idle: u64, demo: bool) {
+fn banner(origin: &str, wire: &Connector, idle: u64, demo: bool) {
     use crate::render::{bold, dim};
     use crate::theme::glyph;
 
@@ -203,13 +614,16 @@ fn banner(origin: &str, token: &str, idle: u64, demo: bool) {
         glyph::PICKAXE,
         bold(origin)
     );
-    println!("  {} {}", dim("token"), dim(token));
-    // The connector URL, spelled out rather than left as an exercise. The
-    // clients this endpoint exists for are the ones that cannot spawn `craft
-    // mcp`, so wiring one up means copying strings from here into a sandboxed
-    // app's config file — and a URL somebody has to assemble from a line above
-    // and a path they read in the docs is one they will get wrong once.
-    println!("  {} {}/v1/mcp", dim("mcp"), dim(origin));
+    // The link first, and whole. It is the one string a client that has room
+    // for nothing else can be given, and somebody asked to assemble it from a
+    // URL on one line and a token on another will get it wrong once.
+    println!("  {} {}", dim("mcp"), dim(&wire.link));
+    println!("  {} {}", dim("token"), dim(&wire.token));
+    println!("\n  {}", dim(&wire.command));
+    println!(
+        "  {}",
+        dim("the same link is on the page, and on `c` in `craft`")
+    );
     if demo {
         println!("  {}", dim("synthetic data — no account, no subscription"));
     }
@@ -510,13 +924,25 @@ async fn openapi(State(app): State<Arc<App>>) -> Json<Value> {
                             Loopback only. https://anacraft.dev/serve.html",
         },
         "servers": [{ "url": app.origin }],
-        "security": [{ "bearer": [] }],
+        // Either one opens any of these doors. The query is spelled out
+        // rather than left undocumented, because it is what the MCP link
+        // uses and a generated client should know it is allowed.
+        "security": [{ "bearer": [] }, { "query": [] }],
         "components": {
             "securitySchemes": {
                 "bearer": {
                     "type": "http",
                     "scheme": "bearer",
-                    "description": "The token `craft serve` printed when it started.",
+                    "description": "The token `craft serve` printed when it started, \
+                                    which is the same one it printed last time.",
+                },
+                "query": {
+                    "type": "apiKey",
+                    "in": "query",
+                    "name": "token",
+                    "description": "The same token, for a client that can be given \
+                                    a URL and nothing else. Loopback only, and this \
+                                    server keeps no log.",
                 },
             },
         },
@@ -558,19 +984,28 @@ async fn guard(State(app): State<Arc<App>>, request: Request, next: Next) -> Res
         return cors(StatusCode::NO_CONTENT.into_response(), origin.as_deref());
     }
 
-    let presented = request
+    let header = request
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
-        .unwrap_or("");
-    if !same(presented, &app.token) {
+        .unwrap_or("")
+        .to_string();
+    // A client that can only be handed a URL has nowhere to put a header, and
+    // that is most of the clients this endpoint exists for. See
+    // [`Connector::link`] for why a query string is an acceptable place for
+    // this particular token.
+    let query = request.uri().query().and_then(token_in).unwrap_or_default();
+    let presented = if header.is_empty() { &query } else { &header };
+    let opened = app.opens(presented);
+    if opened.is_none() {
         return cors(
             Fail::new(
                 StatusCode::UNAUTHORIZED,
                 "unauthorized",
-                "this server was started with a token, and the request did not carry it. \
-                 It was printed once, where `craft serve` is running."
+                "this server wants its token, and the request did not carry it. \
+                 It is on the banner where `craft serve` is running, on that \
+                 server's own page, and on `c` in `craft`."
                     .into(),
             )
             .into_response(),
@@ -578,8 +1013,21 @@ async fn guard(State(app): State<Arc<App>>, request: Request, next: Next) -> Res
         );
     }
 
+    // The token said which property its holder is asking about. Carried on
+    // the request rather than read again in the handler, so there is one
+    // place where a token becomes a property and it is the place that checked
+    // the token.
+    let mut request = request;
+    if let Some(Opened::Property(id)) = opened {
+        request.extensions_mut().insert(Asked(id));
+    }
+
     cors(next.run(request).await, origin.as_deref())
 }
+
+/// The property a request's token named, put on the request by [`guard`].
+#[derive(Clone)]
+struct Asked(String);
 
 fn allowed(app: &App, origin: &str) -> bool {
     // localhost and 127.0.0.1 are the same machine and different origins, so
@@ -607,6 +1055,53 @@ fn cors(mut response: Response, origin: Option<&str>) -> Response {
 /// Compared in constant time. The token is short-lived and local, but a
 /// comparison that returns early is a comparison that can be measured, and
 /// writing the four lines costs nothing.
+/// The `token` parameter out of a query string, percent-decoded.
+///
+/// Hand-rolled rather than reached for: the router hands this middleware a
+/// `Request`, not a typed `Query`, and one parameter out of one string is not
+/// worth a second extractor on every route.
+fn token_in(query: &str) -> Option<String> {
+    query
+        .split('&')
+        .filter_map(|pair| pair.split_once('='))
+        .find(|(name, _)| *name == "token")
+        .map(|(_, value)| unpercent(value))
+}
+
+/// Percent-decoding, the other half of [`license::encode`].
+///
+/// A malformed escape is left as the characters it is made of rather than
+/// refused: this feeds a constant-time comparison against a token, and every
+/// wrong answer lands in the same place.
+fn unpercent(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len() => match u8::from_str_radix(&value[i + 1..i + 3], 16) {
+                Ok(byte) => {
+                    out.push(byte);
+                    i += 3;
+                }
+                Err(_) => {
+                    out.push(b'%');
+                    i += 1;
+                }
+            },
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            byte => {
+                out.push(byte);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 fn same(a: &str, b: &str) -> bool {
     let (a, b) = (a.as_bytes(), b.as_bytes());
     if a.len() != b.len() {
@@ -1166,10 +1661,9 @@ fn tag_payload(measurement_id: &str) -> Value {
 /// The palettes the dashboard ships, and which one is in force.
 ///
 /// The page wears whichever the CLI is set to, rather than keeping a
-/// preference of its own: the port changes every run, so anything this page
-/// stored would be stored against an origin that will not exist tomorrow. The
-/// config file is the one place a choice survives, and it is the same line
-/// `craft theme` writes and the dashboard reads.
+/// preference of its own. The config file is the one place a choice
+/// survives, and it is the same line `craft theme` writes and the dashboard
+/// reads.
 async fn themes() -> Answer {
     let cfg = Config::load().map_err(Fail::from)?;
     let current = cfg
@@ -1427,7 +1921,11 @@ fn demo_only(what: &str) -> Fail {
 /// own business and it answers a missing one as a tool error carrying the
 /// sentence that fixes it, which an assistant can relay. A 402 from this layer
 /// would reach the user as a connector that is simply broken.
-async fn mcp(State(app): State<Arc<App>>, body: axum::body::Bytes) -> Response {
+async fn mcp(
+    State(app): State<Arc<App>>,
+    asked: Option<axum::Extension<Asked>>,
+    body: axum::body::Bytes,
+) -> Response {
     let message: Value = match serde_json::from_slice(&body) {
         Ok(message) => message,
         // The answer the stdio pump gives, for the same reason: bad JSON is a
@@ -1443,20 +1941,33 @@ async fn mcp(State(app): State<Arc<App>>, body: axum::body::Bytes) -> Response {
         }
     };
 
+    // The property the token named, else `--property`, else whatever the
+    // config has. A connector is wired up against one property and should go
+    // on reading that one — an assistant that started answering about another
+    // site because somebody pressed `tab` in the dashboard is worse than one
+    // that stopped.
+    let want = asked
+        .map(|axum::Extension(Asked(id))| id)
+        .or_else(|| app.property.clone())
+        .unwrap_or_default();
+
     let mut slot = app.mcp.lock().await;
 
     // Built on the first call, and built again while it is locked. The reason
     // it is locked can go away underneath us: `craft serve` opens the page
     // where somebody signs in or subscribes, and a server built one request
     // earlier would otherwise answer "not logged in" for the rest of the run.
-    // Once it is serving numbers this costs one comparison.
-    if slot.as_ref().map_or(true, |s| s.lock_reason().is_some()) {
-        match crate::mcp::build(app.demo, app.property.as_deref()).await {
-            Ok(server) => *slot = Some(server),
+    // Rebuilt too when the property changed, which is the other connector
+    // asking. Once it is serving numbers this costs two comparisons.
+    if slot.as_ref().map_or(true, |(built, server)| {
+        built != &want || server.lock_reason().is_some()
+    }) {
+        match crate::mcp::build(app.demo, Some(want.as_str()).filter(|id| !id.is_empty())).await {
+            Ok(server) => *slot = Some((want.clone(), server)),
             Err(err) => return Fail::from(err).into_response(),
         }
     }
-    let server = slot.as_mut().expect("just built or already there");
+    let (_, server) = slot.as_mut().expect("just built or already there");
 
     // A batch is a 2025-03-26 spelling that 2025-06-18 withdrew. Answering one
     // is a loop, and it saves a client on the older revision from getting
@@ -1556,7 +2067,9 @@ mod tests {
     fn only_this_servers_own_origin_is_answered() {
         let app = App {
             token: "t".into(),
+            keys: Keys::Named("t".into()),
             origin: "http://127.0.0.1:52413".into(),
+            port: 52413,
             demo: false,
             property: None,
             login: Mutex::new(Login::Idle),
@@ -1570,6 +2083,237 @@ mod tests {
         assert!(!allowed(&app, "http://127.0.0.1:3000"));
         assert!(!allowed(&app, "https://anacraft.dev"));
         assert!(!allowed(&app, "null"));
+    }
+
+    #[test]
+    fn the_port_last_served_from_is_the_one_tried_next() {
+        // Nothing remembered, nothing asked: the OS chooses, as it always did.
+        assert_eq!(wanted_port(0, None), 0);
+        // Remembered and not overridden — the case a connector depends on.
+        assert_eq!(wanted_port(0, Some(7777)), 7777);
+        // `--port` is the caller saying which, and outranks the memory.
+        assert_eq!(wanted_port(7788, Some(7777)), 7788);
+        assert_eq!(wanted_port(7788, None), 7788);
+    }
+
+    #[test]
+    fn a_port_taken_around_a_squatter_is_not_the_one_remembered() {
+        // Two servers, and the second one cannot have the port the first is
+        // on. Writing the port it settled for into the file would move the
+        // connectors that point at the first — so the memory is only written
+        // when the port was this run's to choose.
+        //
+        // The flag on `run` is the whole of the rule; this is it stated
+        // against the two cases that reach it.
+        let remembered = Some(39999u16);
+        // Nothing asked, something remembered: that is the port to try, and
+        // failing to get it is the case that must not be written down.
+        assert_eq!(wanted_port(0, remembered), 39999);
+        // Nothing asked, nothing remembered: whatever the OS gives is this
+        // run's own choice, and worth remembering.
+        assert_eq!(wanted_port(0, None), 0);
+    }
+
+    #[test]
+    fn a_half_written_endpoint_remembers_nothing_rather_than_failing() {
+        // The file is 0600 next to the credentials, but it is still a file on
+        // somebody's disk: hand-edited, truncated, or written by a version
+        // that had one field. None of that should stop the server starting,
+        // so every unreadable shape has to land on the same answer as "no
+        // file yet" — mint and bind afresh.
+        let full: Endpoint =
+            serde_json::from_str(r#"{"port":7777,"secret":"abc"}"#).expect("the whole pair");
+        assert_eq!(
+            (full.port, full.secret.as_deref()),
+            (Some(7777), Some("abc"))
+        );
+
+        let partial: Endpoint = serde_json::from_str(r#"{"secret":"abc"}"#).expect("secret only");
+        assert_eq!(wanted_port(0, partial.port), 0);
+
+        // The shape this field replaced. A file left by the version that
+        // remembered a minted token reads as a file with no secret in it,
+        // which is the same as no file: one gets minted.
+        let stale: Endpoint =
+            serde_json::from_str(r#"{"port":7777,"token":"abc"}"#).expect("the old pair");
+        assert_eq!(stale.secret, None);
+
+        assert!(serde_json::from_str::<Endpoint>("{}").is_ok());
+        assert!(serde_json::from_str::<Endpoint>("not json").is_err());
+    }
+
+    #[test]
+    fn the_token_is_the_same_one_tomorrow() {
+        // The property of the whole scheme: nothing here is random, so a
+        // connector configured once stays configured.
+        let a = derive("s3cret", "110147", "397412345");
+        assert_eq!(a, derive("s3cret", "110147", "397412345"));
+        // Forty characters of hex, which is the length and the alphabet the
+        // minted token had — nothing downstream sees a new shape.
+        assert_eq!(a.len(), 40);
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn the_ids_alone_do_not_give_the_token() {
+        // Why this is an HMAC and not a hash. A property id is printed in the
+        // tag on every page of the site it measures; if knowing it and the
+        // account were enough, the token would be public.
+        let known = derive("secret-one", "110147", "397412345");
+        assert_ne!(known, derive("secret-two", "110147", "397412345"));
+        // And each id still moves it, so two properties are two tokens.
+        assert_ne!(known, derive("secret-one", "110147", "397412346"));
+        assert_ne!(known, derive("secret-one", "110148", "397412345"));
+    }
+
+    #[test]
+    fn no_pair_of_ids_can_be_rearranged_into_another() {
+        // Joined on a separator, account "1" with property "10:2" and account
+        // "1:10" with property "2" would feed the same bytes in. Length
+        // prefixes are what stop that being a second valid token.
+        assert_ne!(derive("k", "1", "10:2"), derive("k", "1:10", "2"));
+        assert_ne!(derive("k", "", "a"), derive("k", "a", ""));
+    }
+
+    #[test]
+    fn a_property_switched_away_from_still_opens_the_door() {
+        // The failure this guards against: a connector wired up against the
+        // property that was active yesterday, and a dashboard `tab` press
+        // since. It must not start refusing.
+        let ring = keyring(
+            "k",
+            "110147",
+            "397412345",
+            &["397412345".into(), "88".into()],
+        );
+        assert_eq!(ring.len(), 2);
+        // The active one is what gets advertised.
+        assert_eq!(
+            ring[0],
+            ("397412345".into(), derive("k", "110147", "397412345"))
+        );
+        assert!(ring.contains(&("88".into(), derive("k", "110147", "88"))));
+
+        // Switched: the other property is advertised now, and yesterday's
+        // token is still on the ring, still naming the property it was cut
+        // for.
+        let after = keyring("k", "110147", "88", &["397412345".into(), "88".into()]);
+        assert_eq!(after[0].0, "88");
+        assert!(after.contains(&("397412345".into(), derive("k", "110147", "397412345"))));
+    }
+
+    #[test]
+    fn a_token_names_the_property_it_reads() {
+        // The whole reason the ring is pairs. A connector copied from one row
+        // of the list must go on reading that row's property, whatever the
+        // dashboard is showing — otherwise copying per property is a lie.
+        let ring = keyring(
+            "k",
+            "110147",
+            "397412345",
+            &["397412345".into(), "88".into()],
+        );
+        for (id, token) in &ring {
+            match opened(&ring, token) {
+                Some(Opened::Property(named)) => assert_eq!(&named, id),
+                _ => panic!("{id}'s own token did not open it"),
+            }
+        }
+        assert!(opened(&ring, "not a token of this ring").is_none());
+    }
+
+    #[test]
+    fn a_named_token_names_no_property() {
+        // `--token` is a caller saying which token, not which property, so
+        // the reads fall back to the flag and the config the way they did
+        // before any of this was derived.
+        let ring = Keys::Named("given".into()).ring(None);
+        assert!(matches!(opened(&ring, "given"), Some(Opened::Server)));
+        assert!(opened(&ring, "guessed").is_none());
+    }
+
+    #[test]
+    fn a_keyring_is_never_empty() {
+        // Nobody signed in, nothing configured — the first run, which is the
+        // run that opens the page where signing in happens. There is still a
+        // token, and it is still unguessable, because the secret is what was
+        // doing that work all along.
+        let ring = keyring("k", "", "", &[]);
+        assert_eq!(ring, vec![(String::new(), derive("k", "", ""))]);
+    }
+
+    #[test]
+    fn the_demo_hands_out_the_token_it_actually_answers_to() {
+        // The demo's property id is not in anybody's config, so a token
+        // derived for it would be one this server has never heard of — a page
+        // handing out a key to its own front door that does not turn.
+        let app = App {
+            token: "banner".into(),
+            keys: Keys::Derived {
+                secret: "k".into(),
+                account: "110147".into(),
+            },
+            origin: "http://127.0.0.1:52413".into(),
+            port: 52413,
+            demo: true,
+            property: None,
+            login: Mutex::new(Login::Idle),
+            last: AtomicU64::new(0),
+            mcp: tokio::sync::Mutex::new(None),
+        };
+        assert_eq!(app.token_for("demo"), "banner");
+        assert_eq!(app.token_for("397412345"), "banner");
+        assert!(app.one_token());
+    }
+
+    #[test]
+    fn the_link_carries_both_halves() {
+        // What somebody pastes into a client that has room for a URL and
+        // nothing else. If the token is not in it, it is a link that fails
+        // after they have stopped looking.
+        let wire = Connector::new(7777, "abc123".into());
+        assert_eq!(wire.url, "http://127.0.0.1:7777/v1/mcp");
+        assert_eq!(wire.link, "http://127.0.0.1:7777/v1/mcp?token=abc123");
+        assert!(wire.command.contains(&wire.link));
+        // Quoted in the command, because `?` is a glob to every shell that
+        // will see it.
+        assert!(wire.command.contains(&format!("'{}'", wire.link)));
+        // One line each: they go through a clipboard into a shell.
+        assert!(!wire.command.contains('\n'));
+        assert!(!wire.link.contains('\n'));
+    }
+
+    #[test]
+    fn a_token_with_punctuation_in_it_survives_the_query() {
+        // `--token` takes anything, and a `&` or a `?` in one would otherwise
+        // end the parameter early and hand back a token that is not the one.
+        let awkward = "a&b?c=d e/f%g";
+        let wire = Connector::new(7777, awkward.into());
+        let query = wire.link.split_once('?').expect("a query").1;
+        assert_eq!(token_in(query).as_deref(), Some(awkward));
+    }
+
+    #[test]
+    fn the_query_gives_up_the_token_and_nothing_else() {
+        assert_eq!(token_in("token=abc").as_deref(), Some("abc"));
+        // Beside other parameters, in either order.
+        assert_eq!(token_in("x=1&token=abc").as_deref(), Some("abc"));
+        assert_eq!(token_in("token=abc&x=1").as_deref(), Some("abc"));
+        // Not a parameter that merely ends in the word.
+        assert_eq!(token_in("mytoken=abc"), None);
+        assert_eq!(token_in("x=1"), None);
+        assert_eq!(token_in(""), None);
+    }
+
+    #[test]
+    fn a_malformed_escape_is_left_alone_rather_than_refused() {
+        // It is about to be compared against a token, and every wrong answer
+        // lands in the same place — so decoding has no reason to have a
+        // failure case of its own.
+        assert_eq!(unpercent("ab%"), "ab%");
+        assert_eq!(unpercent("ab%zz"), "ab%zz");
+        assert_eq!(unpercent("a%20b"), "a b");
+        assert_eq!(unpercent("a+b"), "a b");
     }
 
     #[test]

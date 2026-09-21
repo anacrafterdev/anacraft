@@ -109,6 +109,13 @@ struct App {
     login: Mutex<Login>,
     /// Unix seconds of the last request, for the idle clock.
     last: AtomicU64,
+    /// The MCP server behind `/v1/mcp`, built on the first call rather than at
+    /// startup: building it syncs the subscription and opens a GA4 client, and
+    /// `craft serve` starts for people who have neither yet — the page it opens
+    /// is where they sign in. A `tokio` mutex because `dispatch` is async and
+    /// holds `&mut self` across awaits; the stdio transport is serial too, so
+    /// one call at a time is the shape this server already had.
+    mcp: tokio::sync::Mutex<Option<crate::mcp::Server>>,
 }
 
 pub async fn run(opts: Options) -> Result<()> {
@@ -127,6 +134,7 @@ pub async fn run(opts: Options) -> Result<()> {
         property: opts.property,
         login: Mutex::new(Login::Idle),
         last: AtomicU64::new(now()),
+        mcp: tokio::sync::Mutex::new(None),
     });
 
     // Two routers, because one route has to be reachable without the token:
@@ -154,6 +162,7 @@ pub async fn run(opts: Options) -> Result<()> {
         .route("/v1/countries", get(countries))
         .route("/v1/live", get(live))
         .route("/v1/audit", get(audit))
+        .route("/v1/mcp", axum::routing::post(mcp).get(mcp_no_stream))
         .layer(middleware::from_fn_with_state(app.clone(), guard));
 
     let router = Router::new()
@@ -195,6 +204,12 @@ fn banner(origin: &str, token: &str, idle: u64, demo: bool) {
         bold(origin)
     );
     println!("  {} {}", dim("token"), dim(token));
+    // The connector URL, spelled out rather than left as an exercise. The
+    // clients this endpoint exists for are the ones that cannot spawn `craft
+    // mcp`, so wiring one up means copying strings from here into a sandboxed
+    // app's config file — and a URL somebody has to assemble from a line above
+    // and a path they read in the docs is one they will get wrong once.
+    println!("  {} {}/v1/mcp", dim("mcp"), dim(origin));
     if demo {
         println!("  {}", dim("synthetic data — no account, no subscription"));
     }
@@ -399,6 +414,12 @@ const ROUTES: &[Route] = &[
         path: "/v1/live",
         summary: "Who is on the site right now, by country.",
         needs: "plan",
+    },
+    Route {
+        method: "post",
+        path: "/v1/mcp",
+        summary: "The Model Context Protocol, for a client that cannot spawn `craft mcp`.",
+        needs: "token",
     },
     Route {
         method: "get",
@@ -1379,6 +1400,109 @@ fn demo_only(what: &str) -> Fail {
     )
 }
 
+// --------------------------------------------------------------- the mcp ---
+
+/// `POST /v1/mcp` — the Model Context Protocol, for a client that cannot spawn
+/// `craft mcp` as a child process.
+///
+/// That client is not hypothetical. A strictly confined snap cannot read a
+/// top-level hidden directory in `$HOME`, which is both where the binary
+/// usually sits and where `~/.anacraft/` keeps the credentials; a Mac App
+/// Store build has no equivalent of even that much; a container may have no
+/// home directory worth the name. All three can open a loopback socket. So the
+/// process stays out here, where the credentials are readable, and the client
+/// is handed a URL and the bearer token instead of a command line.
+///
+/// This is the Streamable HTTP transport in the shape a server with nothing to
+/// say unprompted is allowed to take: every answer is an immediate
+/// `application/json` body, there is no event stream and no session id, and
+/// the `GET` that would open one is refused below rather than half-kept.
+///
+/// The token and the `Origin` check are [`guard`]'s, already settled before
+/// this runs — the latter being exactly what the specification asks of an HTTP
+/// transport on loopback, and the reason a page on the public web cannot reach
+/// this door.
+///
+/// Nothing here calls [`require`]. The plan and the login are the MCP server's
+/// own business and it answers a missing one as a tool error carrying the
+/// sentence that fixes it, which an assistant can relay. A 402 from this layer
+/// would reach the user as a connector that is simply broken.
+async fn mcp(State(app): State<Arc<App>>, body: axum::body::Bytes) -> Response {
+    let message: Value = match serde_json::from_slice(&body) {
+        Ok(message) => message,
+        // The answer the stdio pump gives, for the same reason: bad JSON is a
+        // JSON-RPC error, and dressing it as a 400 would tell the client its
+        // transport is broken when its message was.
+        Err(err) => {
+            return Json(json!({
+                "jsonrpc": "2.0",
+                "id": Value::Null,
+                "error": { "code": -32700, "message": format!("invalid JSON: {err}") },
+            }))
+            .into_response()
+        }
+    };
+
+    let mut slot = app.mcp.lock().await;
+
+    // Built on the first call, and built again while it is locked. The reason
+    // it is locked can go away underneath us: `craft serve` opens the page
+    // where somebody signs in or subscribes, and a server built one request
+    // earlier would otherwise answer "not logged in" for the rest of the run.
+    // Once it is serving numbers this costs one comparison.
+    if slot.as_ref().map_or(true, |s| s.lock_reason().is_some()) {
+        match crate::mcp::build(app.demo, app.property.as_deref()).await {
+            Ok(server) => *slot = Some(server),
+            Err(err) => return Fail::from(err).into_response(),
+        }
+    }
+    let server = slot.as_mut().expect("just built or already there");
+
+    // A batch is a 2025-03-26 spelling that 2025-06-18 withdrew. Answering one
+    // is a loop, and it saves a client on the older revision from getting
+    // silence back from a server that speaks its revision everywhere else.
+    let reply = match message {
+        Value::Array(messages) => {
+            let mut replies = Vec::new();
+            for message in messages {
+                if let Some(reply) = server.dispatch(message).await {
+                    replies.push(reply);
+                }
+            }
+            (!replies.is_empty()).then_some(Value::Array(replies))
+        }
+        message => server.dispatch(message).await,
+    };
+
+    match reply {
+        Some(reply) => Json(reply).into_response(),
+        // Nothing to say, which is the right answer to a notification. The
+        // specification spells it 202 with an empty body, and a `{}` here
+        // would be a JSON-RPC message with no `id` for the client to match.
+        None => StatusCode::ACCEPTED.into_response(),
+    }
+}
+
+/// `GET /v1/mcp` — the event stream this server does not have.
+///
+/// The transport lets a client open an SSE channel for messages the server
+/// starts on its own. Nothing here ever does: every tool is one question and
+/// one answer, with no subscriptions, no progress and no sampling. Saying so
+/// is better than holding a socket open against traffic that is never coming,
+/// and a client that reads this falls back to POST, which is all it needed.
+async fn mcp_no_stream() -> Response {
+    (
+        StatusCode::METHOD_NOT_ALLOWED,
+        [(header::ALLOW, "POST")],
+        Json(json!({ "error": {
+            "code": "no_stream",
+            "message": "this server never speaks first, so there is no stream to open \u{2014} \
+                        POST a JSON-RPC message instead.",
+        }})),
+    )
+        .into_response()
+}
+
 // ------------------------------------------------------------- the small ---
 
 /// A client, or the one refusal that is not Google's fault: nobody is signed
@@ -1437,6 +1561,7 @@ mod tests {
             property: None,
             login: Mutex::new(Login::Idle),
             last: AtomicU64::new(0),
+            mcp: tokio::sync::Mutex::new(None),
         };
         assert!(allowed(&app, "http://127.0.0.1:52413"));
         assert!(allowed(&app, "http://localhost:52413"));

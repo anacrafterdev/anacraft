@@ -1,9 +1,13 @@
 # `craft mcp` — the MCP server
 
-Stdio only: the client spawns `craft mcp` as a child process and talks
-newline-delimited JSON-RPC over its pipes. No port, no listener, nothing to
-firewall. Stdout belongs to the protocol, so everything human-facing goes to
-stderr — never pipe stdout anywhere while the server is running.
+Stdio by default: the client spawns `craft mcp` as a child process and talks
+newline-delimited JSON-RPC over its pipes. Stdout belongs to the protocol, so
+everything human-facing goes to stderr — never pipe stdout anywhere while the
+server is running.
+
+A client that **cannot spawn a child process, or cannot reach the binary and
+the credentials**, gets the same server over HTTP instead — see
+[Over HTTP](#over-http) below.
 
 Speaks MCP revisions `2025-11-25`, `2025-06-18`, `2025-03-26` and `2024-11-05`,
 echoing back whichever the client asks for. The tool surface is the same in all
@@ -48,6 +52,56 @@ serve synthetic data with no account and no subscription, which is the fastest
 way to prove the client-side wiring before blaming credentials. The demo says so
 at the handshake and stamps `synthetic: true` on every answer, so an assistant
 reading it knows not to quote the numbers as real.
+
+## Over HTTP
+
+`POST /v1/mcp` on `craft serve` is the same server, reached over a socket
+instead of a pipe. It exists for the clients that cannot spawn `craft mcp`:
+
+- a **strictly confined snap** — the `home` AppArmor interface excludes
+  top-level hidden directories, so `~/.local/bin/craft`, `~/.anacraft/` and
+  `~/.config/anacraft/` are all unreadable from inside it;
+- a **Mac App Store** build, walled into `~/Library/Containers/<id>/Data` with
+  no entitlement that would grant the rest of the home directory;
+- a **container** with no home directory worth the name.
+
+All of them can open a loopback socket, and none of them needs the credentials
+to do it. The process stays outside the sandbox, reading `~/.anacraft/` as
+usual; the client is handed a URL and a bearer token.
+
+```
+craft serve --port 7777 --token "$(openssl rand -hex 20)" --idle 0 --no-open
+```
+
+Then point the client at `http://127.0.0.1:7777/v1/mcp`:
+
+```
+claude mcp add --transport http anacraft http://127.0.0.1:7777/v1/mcp \
+  --header "Authorization: Bearer <token>"
+```
+
+Pass `--port` and `--token` explicitly. Without them the OS picks a port and
+the token is minted fresh each run, so the URL a client was configured with
+stops working the next time the server starts. `--idle 0` keeps it up; the
+default stops after 60 idle minutes.
+
+What the transport does and does not do:
+
+- **Answers are immediate JSON.** No event stream and no session id: nothing
+  here ever speaks first, so `GET /v1/mcp` refuses with `405` rather than
+  holding a socket open for traffic that is never coming.
+- **A notification gets `202` and an empty body**, as the transport spells it.
+- **A JSON-RPC batch is answered**, though `2025-06-18` withdrew them, so a
+  client on an older revision is not met with silence.
+- **The bearer token and the `Origin` check are the server's own** — the same
+  guard every other route is behind, which is what the transport asks of an
+  HTTP server on loopback. A page on the public web cannot reach it.
+- **Locking works the same way.** A missing plan or login is a tool error
+  carrying the reason, not an HTTP refusal — and because the server is rebuilt
+  while it is locked, signing in through the `craft serve` page unlocks it
+  without a restart.
+- **Bad JSON comes back as `-32700` with HTTP 200**, because the message was
+  malformed, not the transport.
 
 ## Before it will serve
 

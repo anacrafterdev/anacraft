@@ -32,7 +32,7 @@
           "name": "What is an MCP server for Google Analytics?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "The Model Context Protocol is a standard way for an AI assistant to call tools. An MCP server for Google Analytics exposes the reporting API as tools the assistant can call, so it can read a property's real numbers instead of being pasted a screenshot. craft mcp is one: a single command that speaks the protocol on stdin and stdout, which the client spawns as a child process."
+            "text": "The Model Context Protocol is a standard way for an AI assistant to call tools. An MCP server for Google Analytics exposes the reporting API as tools the assistant can call, so it can read a property's real numbers instead of being pasted a screenshot. craft mcp is one: a single command that speaks the protocol on stdin and stdout, which the client spawns as a child process. A client that cannot spawn one \u2014 a confined snap, a Mac App Store build, a container \u2014 reaches the same tools over HTTP instead, at craft serve's /v1/mcp."
           }
         },
         {
@@ -402,6 +402,21 @@ shell and does not inherit the <code>PATH</code> where <code>craft</code> works.
   }
 }</pre>
 
+<h3>When the client cannot spawn it</h3>
+<p>A sandboxed client may not be able to run <code>craft</code> at all. A strictly confined
+<b>snap</b> cannot read a hidden directory at the top of your home, which is both where the binary
+usually sits and where <code>~/.anacraft/</code> keeps the credentials; a <b>Mac App Store</b> build
+is walled into its container; a <b>container</b> may have no home directory worth the name. All of
+them can open a loopback socket. So leave the process outside the sandbox and give the client a URL
+instead of a command:</p>
+<pre class="code"><span class="k">$</span> craft serve --port 7777 --token <span class="k">$(openssl rand -hex 20)</span> --idle 0 --no-open</pre>
+<p>The server prints the URL and the token. Point the client at
+<code>http://127.0.0.1:7777/v1/mcp</code> with that token as a bearer header — for
+<b>Claude Code</b>, <code>claude mcp add --transport http anacraft
+http://127.0.0.1:7777/v1/mcp --header "Authorization: Bearer &lt;token&gt;"</code>. Your Google
+credentials stay in <code>~/.anacraft/</code> and never enter the sandbox; the client only ever
+holds a token to a port on your own machine. It is the same twelve tools, answering the same way.</p>
+
 <h2><span class="n">02</span>The twelve tools</h2>
 <table class="tbl">
   <tr><th>Tool</th><th>Answers</th></tr>
@@ -464,7 +479,7 @@ Lovable</a> adds GA4 to your app, then reads the numbers back from Claude or any
 
 <h2><span class="n">09</span>Questions</h2>
 <h3>What is an MCP server for Google Analytics?</h3>
-<p>The Model Context Protocol is a standard way for an AI assistant to call tools. An MCP server for Google Analytics exposes the reporting API as tools the assistant can call, so it can read a property's real numbers instead of being pasted a screenshot. craft mcp is one: a single command that speaks the protocol on stdin and stdout, which the client spawns as a child process.</p>
+<p>The Model Context Protocol is a standard way for an AI assistant to call tools. An MCP server for Google Analytics exposes the reporting API as tools the assistant can call, so it can read a property's real numbers instead of being pasted a screenshot. craft mcp is one: a single command that speaks the protocol on stdin and stdout, which the client spawns as a child process. A client that cannot spawn one — a confined snap, a Mac App Store build, a container — reaches the same tools over HTTP instead, at craft serve's /v1/mcp.</p>
 <h3>How do I connect Claude to Google Analytics?</h3>
 <p>Run craft login to sign in with Google, craft use to pick a property, then craft mcp --install to write the server into Claude Desktop's config, and restart it. For Claude Code the command is claude mcp add anacraft -- craft mcp. Any other MCP client takes the same command and argument.</p>
 <h3>Can the assistant change anything in my Analytics account?</h3>

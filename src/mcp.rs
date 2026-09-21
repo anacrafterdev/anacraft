@@ -1,10 +1,17 @@
 //! `craft mcp` — the dashboard's numbers, over the Model Context Protocol.
 //!
-//! Stdio only. An MCP client spawns the server as a child process and talks
-//! newline-delimited JSON-RPC over its pipes, so there is no port to open and
-//! no listener to secure. The one hard rule that follows: **stdout belongs to
-//! the protocol**. Everything human-facing goes to stderr, which is why the
-//! error printing in `main.rs` uses `eprintln!`.
+//! Stdio, mostly: an MCP client spawns the server as a child process and
+//! talks newline-delimited JSON-RPC over its pipes. The one hard rule that
+//! follows: **stdout belongs to the protocol**. Everything human-facing goes
+//! to stderr, which is why the error printing in `main.rs` uses `eprintln!`.
+//!
+//! The same [`Server`] also answers `POST /v1/mcp` on `craft serve`, for the
+//! clients that cannot spawn it — a strictly-confined snap, a Mac App Store
+//! build, anything in a container that cannot read the home directory the
+//! credentials live in. There the process stays outside the sandbox and the
+//! client is handed a loopback URL and a bearer token instead of a command.
+//! [`build`] is what the two transports have in common; everything below it
+//! is written once and serves both.
 //!
 //! All but one tool is a read. `configure_site` creates the GA4 property and
 //! web stream for a domain the account does not measure yet — the same work as
@@ -86,6 +93,23 @@ pub async fn serve(demo: bool, property: Option<&str>) -> Result<()> {
     use crate::render::paint;
     use crate::theme::ore;
 
+    let mut server = build(demo, property).await?;
+    if let Some(reason) = server.lock_reason() {
+        // stderr is the client's log, and the protocol owns stdout.
+        eprintln!("\n  {} {reason}\n", paint("⛏", ore::redstone()));
+    }
+    server.run().await
+}
+
+/// The server, built and ready to answer, with nothing said about how the
+/// messages reach it.
+///
+/// Two transports share this. `serve` above pumps stdin and stdout; the
+/// `/v1/mcp` route in [`crate::serve`] hands over one HTTP body at a time.
+/// Everything that has to happen before the first message either way — the
+/// subscription check, the credentials, the badge — happens here, once, so the
+/// two cannot drift into answering differently.
+pub(crate) async fn build(demo: bool, property: Option<&str>) -> Result<Server> {
     let cfg = Config::load()?;
 
     // Same check the dashboard runs on the way in: ask Supabase where the
@@ -122,22 +146,16 @@ pub async fn serve(demo: bool, property: Option<&str>) -> Result<()> {
         // sentence that gets the user unstuck.
         match unlock(tier) {
             Ok(ga) => Source::Api(Box::new(ga)),
-            Err(reason) => {
-                // stderr is the client's log, and the protocol owns stdout.
-                eprintln!("\n  {} {reason}\n", paint("⛏", ore::redstone()));
-                Source::Locked(reason)
-            }
+            Err(reason) => Source::Locked(reason),
         }
     };
 
-    Server {
+    Ok(Server {
         cfg,
         source,
         property: property.map(str::to_string),
         cache: HashMap::new(),
-    }
-    .run()
-    .await
+    })
 }
 
 /// Everything the live tools need, or the one sentence explaining what is
@@ -172,7 +190,7 @@ enum Source {
     Locked(String),
 }
 
-struct Server {
+pub(crate) struct Server {
     cfg: Config,
     source: Source,
     /// `--property` from the command line, used when a tool call names none.
@@ -181,6 +199,19 @@ struct Server {
 }
 
 impl Server {
+    /// The sentence explaining why no tool will answer, when that is the
+    /// situation. `None` means the tools are live.
+    ///
+    /// A caller that can retry — the HTTP transport, where a sign-in may
+    /// happen after the server was built — uses this to decide whether
+    /// building again is worth it.
+    pub(crate) fn lock_reason(&self) -> Option<&str> {
+        match &self.source {
+            Source::Locked(reason) => Some(reason),
+            _ => None,
+        }
+    }
+
     async fn run(&mut self) -> Result<()> {
         let mut lines = BufReader::new(tokio::io::stdin()).lines();
         let mut out = tokio::io::stdout();
@@ -213,7 +244,7 @@ impl Server {
     /// One message in, at most one message out. `None` means "say nothing",
     /// which is the correct answer to a notification and to anything that
     /// isn't a request at all.
-    async fn dispatch(&mut self, message: Value) -> Option<Value> {
+    pub(crate) async fn dispatch(&mut self, message: Value) -> Option<Value> {
         let method = message.get("method")?.as_str()?.to_string();
         let id = message.get("id").cloned();
         let params = message.get("params").cloned().unwrap_or_else(|| json!({}));

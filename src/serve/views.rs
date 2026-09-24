@@ -852,6 +852,9 @@ struct PropertiesView {
     /// apart from `properties` because it has no trash and is not one of
     /// theirs: an account with nothing on it is still told so.
     demo: Option<Row>,
+    /// A hosted visitor on no plan yet: they can look at the demo, and the
+    /// way to a property of their own goes through the paywall.
+    unpaid: bool,
 }
 
 /// The demo as a row on the list.
@@ -884,6 +887,17 @@ async fn properties(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>)
     // a list this login can no longer read.
     let (email, tier) = match stand(&app, &ctx).await {
         Ok(Stand::In { email, tier }) => (email, tier),
+        // The demo is free to look at, so a hosted visitor who has not paid
+        // still gets the list — with the demo on it and nothing of theirs,
+        // since reading their account is what the plan buys.
+        Ok(Stand::Unpaid { email, tier }) if ctx.hosted() => {
+            return Ok(page(PropertiesView {
+                shell: shell.signed(email.as_deref(), tier),
+                properties: vec![],
+                demo: Some(demo_row()),
+                unpaid: true,
+            }));
+        }
         Ok(_) => return Ok(Redirect::to("/").into_response()),
         Err(message) => return Err(oops(message)),
     };
@@ -893,6 +907,7 @@ async fn properties(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>)
             shell,
             properties: vec![demo_row()],
             demo: None,
+            unpaid: false,
         }));
     }
 
@@ -906,6 +921,7 @@ async fn properties(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>)
             .map(|p| Row::new(p.id, p.name, p.account))
             .collect(),
         demo: ctx.hosted().then(demo_row),
+        unpaid: false,
     }))
 }
 
@@ -930,7 +946,12 @@ struct Site {
     timezone: Option<String>,
 }
 
-async fn new_property() -> View {
+async fn new_property(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>) -> View {
+    // A hosted visitor looking at the demo is asked to pay here, where they
+    // reach for a property of their own, rather than at the door.
+    if ctx.hosted() && matches!(stand(&app, &ctx).await, Ok(Stand::Unpaid { .. })) {
+        return Ok(Redirect::to("/unlock").into_response());
+    }
     Ok(page(NewView {
         shell: Shell::new("pick", "/properties/new"),
         heading: "A new property".into(),
@@ -1413,6 +1434,10 @@ async fn hosted_wire(app: &App, ctx: &Ctx, id: &str, name: Option<&str>) -> View
     };
     let (email, tier) = match stand(app, ctx).await {
         Ok(Stand::In { email, tier }) => (email, tier),
+        // The demo's connector is as free as the demo; anything else is a
+        // real account's numbers, and those are on the plan.
+        Ok(Stand::Unpaid { email, tier }) if is_demo(ctx, id) => (email, tier),
+        Ok(Stand::Unpaid { .. }) => return Ok(Redirect::to("/unlock").into_response()),
         Ok(_) => return Ok(Redirect::to("/").into_response()),
         Err(message) => return Err(oops(message)),
     };
@@ -1691,7 +1716,13 @@ async fn landing_hosted(State(app): State<Arc<App>>, headers: HeaderMap) -> View
             back: "/".into(),
         })
     })?;
-    Ok(Redirect::to(where_to(&stand)).into_response())
+    // Unpaid is the list, not the paywall: the demo is on it and free to
+    // look at, and "Create a new property" is where the paywall comes up.
+    let to = match stand {
+        Stand::Unpaid { .. } => "/properties",
+        stand => where_to(&stand),
+    };
+    Ok(Redirect::to(to).into_response())
 }
 
 const HOSTED_NOTE: &str = "Your Google sign-in is held for this session only — signing out, \
@@ -1921,6 +1952,7 @@ mod tests {
                 "Acme & Co".into(),
             )],
             demo: None,
+            unpaid: false,
         }
         .render()
         .expect("the property list renders");
@@ -1936,6 +1968,7 @@ mod tests {
             shell: shell(),
             properties: vec![],
             demo: Some(demo_row()),
+            unpaid: false,
         }
         .render()
         .expect("the property list renders");
@@ -1947,6 +1980,24 @@ mod tests {
         // Somebody whose account is empty is still told so: the demo is not
         // one of theirs.
         assert!(rendered.contains("no GA4 properties on this account yet"));
+    }
+
+    #[test]
+    fn an_unpaid_visitor_sees_the_demo_and_pays_to_add_their_own() {
+        let rendered = PropertiesView {
+            shell: shell(),
+            properties: vec![],
+            demo: Some(demo_row()),
+            unpaid: true,
+        }
+        .render()
+        .expect("the property list renders");
+
+        assert!(rendered.contains("href=\"/connect/demo?n="));
+        assert!(rendered.contains("href=\"/unlock\""));
+        assert!(!rendered.contains("href=\"/properties/new\""));
+        // Their account was never read, so the list must not claim it is empty.
+        assert!(!rendered.contains("no GA4 properties on this account yet"));
     }
 
     #[test]

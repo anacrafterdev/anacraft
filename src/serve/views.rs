@@ -1934,7 +1934,7 @@ mod tests {
         assert_eq!(rendered.matches("<link").count(), 1);
         assert!(rendered.contains("href=\"/app.css\""));
         assert_eq!(rendered.matches("href=\"http").count(), 1);
-        assert!(rendered.contains("href=\"https://anacraft.dev/serve.html\""));
+        assert!(rendered.contains("href=\"https://anacraft.dev/serve.html?utm_source=craft-serve"));
         assert!(!STYLE.contains("@import"));
         assert!(!STYLE.contains("url(http"));
     }

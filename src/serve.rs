@@ -2540,7 +2540,7 @@ mod tests {
         // clicks, never something the browser fetches on load. (The other
         // `https://` strings in the file are a placeholder and an error
         // message, which ask nothing of the network.)
-        assert!(API_PAGE.contains("href=\"https://anacraft.dev/serve.html\""));
+        assert!(API_PAGE.contains("href=\"https://anacraft.dev/serve.html?utm_source=craft-serve"));
         assert!(!API_PAGE.contains("src=\"http"));
     }
 

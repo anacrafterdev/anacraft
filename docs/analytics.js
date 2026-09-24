@@ -18,6 +18,10 @@
 (function () {
   var ID = 'G-DYPCVZVMSE';
 
+  // `make serve` previews this site on localhost; that is not a visitor.
+  var host = location.hostname;
+  if (host !== 'anacraft.dev' && !/\.anacraft\.dev$/.test(host)) return;
+
   window.dataLayer = window.dataLayer || [];
   function gtag() { dataLayer.push(arguments); }
   window.gtag = gtag;

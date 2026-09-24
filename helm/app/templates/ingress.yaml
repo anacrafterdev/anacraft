@@ -1,0 +1,59 @@
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: anacraft-app-backend-config
+  namespace: {{ .Values.namespace }}
+spec:
+  timeoutSec: 300
+  connectionDraining:
+    drainingTimeoutSec: 30
+  healthCheck:
+    requestPath: /v1/health
+    port: 8080
+    type: HTTP
+    checkIntervalSec: 15
+    timeoutSec: 5
+---
+# The session cookie is not Secure (craft serve expects plain-http loopback),
+# so plain http is redirected rather than served.
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: anacraft-app-frontend-config
+  namespace: {{ .Values.namespace }}
+spec:
+  redirectToHttps:
+    enabled: true
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: {{ .Values.managedCertificateName }}
+  namespace: {{ .Values.namespace }}
+spec:
+  domains:
+    - {{ .Values.host }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: anacraft-app-ingress
+  namespace: {{ .Values.namespace }}
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: "{{ .Values.staticIpName }}"
+    networking.gke.io/managed-certificates: "{{ .Values.managedCertificateName }}"
+    networking.gke.io/v1beta1.FrontendConfig: "anacraft-app-frontend-config"
+    kubernetes.io/ingress.class: "gce"
+spec:
+  ingressClassName: gce
+  rules:
+    - host: {{ .Values.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: anacraft-app
+                port:
+                  number: 80

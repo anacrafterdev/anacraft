@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: anacraft-app
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: anacraft-app
+    app.kubernetes.io/name: anacraft-app
+    app.kubernetes.io/part-of: anacraft
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # See ~/source/api: hold a new pod until the GCLB has health-checked it.
+  minReadySeconds: 20
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: anacraft-app
+  template:
+    metadata:
+      labels:
+        app: anacraft-app
+        app.kubernetes.io/name: anacraft-app
+        app.kubernetes.io/part-of: anacraft
+    spec:
+      containers:
+        - name: anacraft-app
+          image: {{ .Values.image }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PUBLIC_ORIGIN
+              value: "https://{{ .Values.host }}"
+            - name: CRAFT_DEMO
+              value: {{ .Values.demo | quote }}
+            - name: CRAFT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: anacraft-app-secrets
+                  key: CRAFT_TOKEN
+          # /v1/health is open and touches nothing downstream.
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+      nodeSelector:
+        workload: api
+      tolerations:
+        - key: "workload"
+          operator: "Equal"
+          value: "api"
+          effect: "NoSchedule"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: anacraft-app
+  namespace: {{ .Values.namespace }}
+  annotations:
+    cloud.google.com/backend-config: '{"default": "anacraft-app-backend-config"}'
+    cloud.google.com/neg: '{"ingress": true}'
+spec:
+  type: ClusterIP
+  selector:
+    app: anacraft-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080

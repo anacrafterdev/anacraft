@@ -17,3 +17,6 @@ __pycache__/
 
 # Claude Code, personal to this checkout — permission grants and local overrides
 .claude/settings.local.json
+
+# Synced down from Secret Manager by deploy/sync-secrets.sh
+helm/app/values.secrets.*.yaml

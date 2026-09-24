@@ -155,6 +155,7 @@ pub(crate) async fn build(demo: bool, property: Option<&str>) -> Result<Server> 
         source,
         property: property.map(str::to_string),
         cache: HashMap::new(),
+        hosted: false,
     })
 }
 
@@ -178,6 +179,7 @@ pub(crate) fn build_for(
         source,
         property: property.map(str::to_string),
         cache: HashMap::new(),
+        hosted: true,
     }
 }
 
@@ -219,6 +221,9 @@ pub(crate) struct Server {
     /// `--property` from the command line, used when a tool call names none.
     property: Option<String>,
     cache: HashMap<String, (Instant, Value)>,
+    /// A hosted user's server: no config of theirs to fall back on, and no
+    /// terminal to send them to.
+    hosted: bool,
 }
 
 impl Server {
@@ -472,6 +477,17 @@ impl Server {
             .and_then(Value::as_str)
             .map(str::to_string)
             .or_else(|| self.property.clone());
+        // A hosted server with nothing chosen asks rather than guesses: the
+        // config's fallback is its first property, which on an account with
+        // several is a confident answer about the wrong site. And the
+        // question is the assistant's, which can answer it — not a terminal
+        // command for a person who may not have one.
+        if self.hosted && asked.is_none() {
+            anyhow::bail!(
+                "this connector names no property and the call named none — call \
+                 list_properties, then pass `property` with the id of the site asked about"
+            );
+        }
         self.cfg.resolve_property(asked.as_deref())
     }
 }
@@ -1721,6 +1737,7 @@ mod tests {
             source: Source::Demo,
             property: None,
             cache: HashMap::new(),
+            hosted: false,
         }
     }
 
@@ -2296,6 +2313,7 @@ mod tests {
             ),
             property: None,
             cache: HashMap::new(),
+            hosted: false,
         }
     }
 

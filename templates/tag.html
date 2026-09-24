@@ -58,7 +58,13 @@
     </form>
     {%- endif %}
     <a class="lnk" href="/properties">pick a different property</a>
+    {#- The property this tag is for, not whichever one was active: the
+        person wiring an assistant up from here means this site. -#}
+    {%- if property_id.is_empty() %}
     <a class="lnk" href="/connect">wire up an AI tool</a>
+    {%- else %}
+    <a class="lnk" href="/connect/{{ property_id }}?n={{ name_encoded }}">wire up an AI tool</a>
+    {%- endif %}
   </div>
 </div>
 {% endblock %}

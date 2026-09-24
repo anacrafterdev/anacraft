@@ -25,11 +25,8 @@
   }
   .nav-links a { transition: color .15s; }
   .nav-links a:hover { color: var(--white); }
-  /* The way into the app: the one link in the row that is an action rather
-     than a page, so it wears the accent and stays when the rest fold away. */
-  .nav-links a.nav-cta { color: var(--jade); border: 1px solid var(--jade);
-                         padding: 5px 12px; }
-  .nav-links a.nav-cta:hover { color: var(--white); border-color: var(--white); }
+  /* The way into the app looks like every other link in the row; it is
+     only the one that stays when the rest fold away on a narrow screen. */
   @media (max-width: 720px) {
     .nav-links a:not(.mode-toggle):not(.nav-cta) { display: none; }
   }

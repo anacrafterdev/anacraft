@@ -1143,6 +1143,8 @@ struct TagView {
     next_line: &'static str,
     can_default: bool,
     property_id: String,
+    /// The property's name, percent-encoded, for the connector link.
+    name_encoded: String,
 }
 
 #[derive(Deserialize)]
@@ -1233,6 +1235,7 @@ async fn tag(
         // A default is a line in a config file somebody's dashboard reads;
         // a hosted visitor has no such file.
         can_default: !ctx.hosted() && !property.is_empty() && which.saved.is_none(),
+        name_encoded: license::encode(&name),
         property_id: property,
     }))
 }

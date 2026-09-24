@@ -763,14 +763,29 @@ async fn build(
     let ga = Ga::with(web, Store::Memory(Arc::new(Mutex::new(Some(tokens)))))?;
     let tier = license::lookup(&grant.account).await.ok().flatten();
     let mut cfg = Config::default();
-    if !property.is_empty() {
-        cfg.upsert(property, None);
+    let mut property = property.to_string();
+    if property.is_empty() {
+        // A link that names no property — an older one, or a client that
+        // kept the token and dropped the rest. The account says what there
+        // is to read: one property is unambiguous; several are the
+        // assistant's to choose between, with `list_properties` and the
+        // `property` argument every tool takes.
+        if let Ok(found) = ga.properties().await {
+            if let [only] = found.as_slice() {
+                property = only.id.clone();
+            }
+            for p in found {
+                cfg.upsert(&p.id, Some(p.name));
+            }
+        }
+    } else {
+        cfg.upsert(&property, None);
     }
     Ok(crate::mcp::build_for(
         cfg,
         ga,
         tier,
-        Some(property).filter(|p| !p.is_empty()),
+        Some(property.as_str()).filter(|p| !p.is_empty()),
     ))
 }
 

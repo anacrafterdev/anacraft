@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>anacraft × Lovable — analytics for AI-built apps</title>
   <meta name="description"
-    content="Add Google Analytics to your Lovable app, then query the data from Claude, ChatGPT, or Cursor via MCP. One command to install, one to configure.">
+    content="Add Google Analytics to your Lovable app with nothing to install: sign in at app.anacraft.dev, copy the tag, paste it into Lovable. Then query the data from Claude, ChatGPT, or Cursor via MCP.">
   <meta name="keywords"
     content="Lovable, Lovable MCP, Google Analytics, GA4, analytics for Lovable, Lovable analytics, MCP analytics, AI-built apps, Lovable dashboard, Lovable Google Analytics">
   <link rel="canonical" href="https://anacraft.dev/lovable.html">
@@ -385,6 +385,15 @@
     .btn:hover {
       background: rgba(45, 213, 183, .08);
       background: color-mix(in srgb, var(--jade) 8%, transparent);
+    }
+
+    .btn.fill {
+      background: var(--jade);
+      color: var(--on-accent);
+    }
+
+    .btn.fill:hover {
+      background: color-mix(in srgb, var(--jade) 86%, var(--white));
     }
 
     /* ── sections ──────────────────────────────────────── */
@@ -811,18 +820,8 @@
           conversation.
         </p>
         <div class="cta">
-          <button class="install" onclick="cp(this)">
-            <span class="p">$</span>
-            <span class="c">curl -fsSL https://anacraft.dev/install.sh | bash</span>
-            <span class="copy" aria-label="Copy install command"><svg viewBox="0 0 16 16" aria-hidden="true">
-                <g class="sheet">
-                  <rect x="5.9" y="5.9" width="8.2" height="8.2" />
-                  <path d="M10.4 3.4a1.5 1.5 0 0 0-1.5-1.5H3.4a1.5 1.5 0 0 0-1.5 1.5v5.5a1.5 1.5 0 0 0 1.5 1.5" />
-                </g>
-                <path class="tick" d="M3 8.6l3.2 3.2L13 4.8" />
-              </svg></span>
-          </button>
-          <a href="#setup" class="btn">Get your tag ↓</a>
+          <a href="https://app.anacraft.dev" class="btn fill">Get your tag — nothing to install →</a>
+          <a href="#setup" class="btn">How it works ↓</a>
         </div>
       </div>
     </div>
@@ -899,26 +898,32 @@
   <section id="setup">
     <div class="wrap">
       <div class="sec-label">Setup</div>
-      <h2>One command. Your tag in the clipboard.</h2>
+      <h2>Nothing to install. Your tag in the clipboard.</h2>
       <p class="sec-sub">
-        anacraft is a CLI, but you do not have to live in it.
-        <code>craft serve</code> opens a page on your own machine: sign in with
-        Google, pick or create the GA4 property for your app, and copy the
-        block that goes into Lovable. Nothing to read, four things to click —
-        and if you would rather drive it from a script than a page, every
-        endpoint behind it is
-        <a href="/serve.html">written down</a>.
+        Open <a href="https://app.anacraft.dev">app.anacraft.dev</a>, sign in
+        with Google, pick or create the GA4 property for your app, and copy the
+        block that goes into Lovable. Nothing to read, four things to click,
+        nothing on your machine. Rather run it yourself? The same page is
+        <code>craft serve</code> on your own machine, and every endpoint behind
+        it is <a href="/serve.html">written down</a>.
       </p>
 
       <div class="steps">
         <div class="step">
           <div class="step-n">01</div>
           <div>
-            <h3>Install anacraft</h3>
-            <p>One command downloads the binary. macOS, Linux, Windows.</p>
-            <div class="code"><span class="w">curl -fsSL https://anacraft.dev/install.sh | bash</span></div>
+            <h3>Open app.anacraft.dev and sign in</h3>
+            <p>
+              Sign in with Google. It asks for two Analytics permissions — one
+              to read your numbers, one to create the property for your app —
+              so leave both ticked.
+            </p>
+            <p style="margin-top:16px;">
+              <a href="https://app.anacraft.dev" class="btn fill">Open app.anacraft.dev →</a>
+            </p>
             <p style="margin-top:12px;">
-              A single binary with no dependencies — uninstall by deleting it.
+              Your Google sign-in is held for that session only: signing out,
+              or an hour, forgets it.
             </p>
           </div>
         </div>
@@ -926,32 +931,25 @@
         <div class="step">
           <div class="step-n">02</div>
           <div>
-            <h3>Run <code>craft serve</code> and get your tag</h3>
+            <h3>Pick your app's property, or make one</h3>
             <p>
-              It opens a page in your browser and waits there. Sign in with
-              Google, pick the property for this app — or make one, which is
-              the usual answer for a Lovable app — and it hands you the
-              measurement ID with the tag already written around it.
+              Making one is the usual answer for a Lovable app: give it the
+              app's URL and anacraft creates the property and its web stream,
+              then hands you the measurement ID with the tag already written
+              around it. A site that already has a property is reused, not
+              duplicated.
             </p>
-            <div class="code"><span class="w">craft serve</span>
-
-              <span class="c"># or look before you sign in to anything:</span>
-              <span class="w">craft serve --demo</span></div>
 
             <img class="shot" src="serve.png" width="692" height="836" loading="lazy"
-              alt="The page craft serve opens: a measurement ID in gold, the tag written out below it, and a button that copies it.">
+              alt="The page app.anacraft.dev shows: a measurement ID in gold, the tag written out below it, and a button that copies it.">
 
             <p style="margin-top:20px;">
-              The page listens on <code>127.0.0.1</code> and nowhere else, and
-              the credentials stay with the CLI on your machine. Everything it
-              does, a script can do too — the page is the first caller of
-              <a href="/serve.html" style="color:var(--jade);text-decoration:underline;">the API
-                reference</a>, and every endpoint behind it is written down. It is
-              part of
+              It is part of
               <a href="/pricing.html" style="color:var(--jade);text-decoration:underline;">Anacrafter
                 Elite</a> — $9.99 a month, the same plan step 04 needs — and
               the page takes you through subscribing without leaving the flow.
-              <code>craft serve --demo</code> walks the whole thing first,
+              Prefer your own machine? <code>craft serve</code> runs the same
+              page locally, and <code>craft serve --demo</code> walks it first,
               creating nothing.
             </p>
           </div>
@@ -999,17 +997,23 @@
           <div>
             <h3>Wire it into your assistant</h3>
             <p>
-              One command per client. anacraft runs as a child process — no
-              port, no server, nothing to keep running.
+              Still nothing to install. On app.anacraft.dev, press
+              <b>mcp</b> on your app's row and copy the link. It is yours and
+              that property's, and it stays the same next week.
             </p>
-            <div class="code"><span class="c"># Claude Desktop</span>
-              <span class="w">craft mcp --install</span>
+            <div class="code"><span class="c"># Claude — Settings → Connectors → Add custom connector</span>
+              <span class="w">https://app.anacraft.dev/v1/mcp?token=…&amp;property=…</span>
+
+              <span class="c"># ChatGPT — Settings → Connectors → Create, the same link</span>
 
               <span class="c"># Claude Code</span>
-              <span class="w">claude mcp add anacraft craft mcp</span></div>
+              <span class="w">claude mcp add --transport http anacraft '&lt;the link&gt;'</span></div>
             <p style="margin-top:12px;">
-              Restart the client and the tools are there. Cursor, Windsurf,
-              VS Code and the raw JSON are on the
+              Treat the link like a password: it reads that property's
+              numbers with the access you granted. One press on the same page
+              turns every link off. Prefer to keep it all on your own machine?
+              <code>craft mcp --install</code> does the same from the terminal
+              — Cursor, Windsurf, VS Code and the raw JSON are on the
               <a href="/mcp.html" style="color:var(--jade);text-decoration:underline;">MCP page</a>.
             </p>
           </div>

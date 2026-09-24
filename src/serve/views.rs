@@ -847,6 +847,26 @@ impl Row {
 struct PropertiesView {
     shell: Shell,
     properties: Vec<Row>,
+    /// The synthetic property, listed under a hosted visitor's own so the
+    /// demo is one click away rather than a `--demo` server of its own. Kept
+    /// apart from `properties` because it has no trash and is not one of
+    /// theirs: an account with nothing on it is still told so.
+    demo: Option<Row>,
+}
+
+/// The demo as a row on the list.
+fn demo_row() -> Row {
+    Row::new(
+        crate::mcp::demo::PROPERTY.into(),
+        crate::mcp::demo::NAME.into(),
+        "Anacraft demo".into(),
+    )
+}
+
+/// Whether a hosted route is being asked about the demo row rather than a
+/// property in somebody's Analytics account.
+fn is_demo(ctx: &Ctx, property: &str) -> bool {
+    ctx.hosted() && property == crate::mcp::demo::PROPERTY
 }
 
 async fn properties(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>) -> View {
@@ -871,11 +891,8 @@ async fn properties(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>)
     if app.demo {
         return Ok(page(PropertiesView {
             shell,
-            properties: vec![Row::new(
-                "demo".into(),
-                "Contoso Labs (demo)".into(),
-                "Anacraft demo".into(),
-            )],
+            properties: vec![demo_row()],
+            demo: None,
         }));
     }
 
@@ -888,6 +905,7 @@ async fn properties(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>)
             .into_iter()
             .map(|p| Row::new(p.id, p.name, p.account))
             .collect(),
+        demo: ctx.hosted().then(demo_row),
     }))
 }
 
@@ -1014,7 +1032,7 @@ async fn streams(
         })
     };
 
-    if app.demo {
+    if app.demo || is_demo(&ctx, &property) {
         return Ok(
             Redirect::to("/tag/G-DEMO1A2B3C4D?p=demo&n=Contoso%20Labs%20%28demo%29")
                 .into_response(),
@@ -1186,6 +1204,13 @@ async fn trash_do(
         return Err(oops(
             "this server is running with --demo, which changes nothing in any Analytics \
              account, so deleting a property is not something it can do."
+                .into(),
+        ));
+    }
+    if is_demo(&ctx, &property) {
+        return Err(oops(
+            "the demo is synthetic and in nobody's Analytics account, so there is \
+             nothing to throw away."
                 .into(),
         ));
     }
@@ -1413,6 +1438,10 @@ async fn hosted_wire(app: &App, ctx: &Ctx, id: &str, name: Option<&str>) -> View
     Ok(page(ConnectView {
         shell: Shell::new("out", format!("/connect/{id}")).signed(email.as_deref(), tier),
         reads: match name.filter(|n| !n.is_empty()) {
+            _ if is_demo(ctx, id) => format!(
+                "Reads {} — synthetic numbers, on the same tools as the real thing.",
+                crate::mcp::demo::NAME
+            ),
             Some(name) => format!("Reads {name} — property {id}."),
             None => format!("Reads property {id}."),
         },
@@ -1891,6 +1920,7 @@ mod tests {
                 "<img src=x onerror=alert(1)>".into(),
                 "Acme & Co".into(),
             )],
+            demo: None,
         }
         .render()
         .expect("the property list renders");
@@ -1898,6 +1928,25 @@ mod tests {
         assert!(!rendered.contains("<img src=x"));
         assert!(rendered.contains("&lt;img src=x"));
         assert!(rendered.contains("Acme &amp; Co"));
+    }
+
+    #[test]
+    fn the_demo_row_wires_a_connector_and_has_nothing_to_throw_away() {
+        let rendered = PropertiesView {
+            shell: shell(),
+            properties: vec![],
+            demo: Some(demo_row()),
+        }
+        .render()
+        .expect("the property list renders");
+
+        assert!(rendered.contains("Contoso Labs (demo)"));
+        assert!(rendered.contains("href=\"/properties/demo/streams\""));
+        assert!(rendered.contains("href=\"/connect/demo?n="));
+        assert!(!rendered.contains("/properties/demo/trash"));
+        // Somebody whose account is empty is still told so: the demo is not
+        // one of theirs.
+        assert!(rendered.contains("no GA4 properties on this account yet"));
     }
 
     #[test]

@@ -741,6 +741,22 @@ pub(super) async fn mcp(
         });
         match fresh {
             Some(server) => server,
+            // The demo row's link: sealed by this server like any other, so
+            // it is still one we handed out, but it reads nobody's account —
+            // no grant to look up, no plan to check.
+            None if property == crate::mcp::demo::PROPERTY
+                && matches!(holder, super::grants::Holder::Account { .. }) =>
+            {
+                let server = Arc::new(tokio::sync::Mutex::new(crate::mcp::build_demo()));
+                built.insert(
+                    key,
+                    Built {
+                        at: Instant::now(),
+                        server: server.clone(),
+                    },
+                );
+                server
+            }
             None => {
                 let grant = match grants.open(&holder).await {
                     Ok(Some(grant)) => grant,

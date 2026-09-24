@@ -183,6 +183,18 @@ pub(crate) fn build_for(
     }
 }
 
+/// The demo, for a hosted visitor who picked it off their property list:
+/// synthetic numbers, no gate, and nothing read from the machine it runs on.
+pub(crate) fn build_demo() -> Server {
+    Server {
+        cfg: Config::default(),
+        source: Source::Demo,
+        property: Some(demo::PROPERTY.to_string()),
+        cache: HashMap::new(),
+        hosted: true,
+    }
+}
+
 /// Everything the live tools need, or the one sentence explaining what is
 /// missing. The `Err` is a message for a human and for the assistant relaying
 /// it, never a reason to stop serving — see `serve`.
@@ -1279,8 +1291,8 @@ pub(crate) fn iso_date(raw: &str) -> String {
 pub(crate) mod demo {
     use super::*;
 
-    const PROPERTY: &str = "demo";
-    const NAME: &str = "Contoso Labs (demo)";
+    pub(crate) const PROPERTY: &str = "demo";
+    pub(crate) const NAME: &str = "Contoso Labs (demo)";
 
     /// Same order as `theme::OVERVIEW`: users, sessions, views, key events,
     /// bounce rate, average session duration.

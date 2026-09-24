@@ -29,6 +29,18 @@
       title="Move this property to the Analytics trash">trash</a>
   </div>
   {%- endfor %}
+  {%- if let Some(demo) = demo %}
+  <div class="row">
+    {#- The demo has no trash: it is in nobody's Analytics account. -#}
+    <a class="choose" href="/properties/{{ demo.id }}/streams">
+      <span class="nm">{{ demo.name }}</span>
+      <span class="id">{{ demo.id }}</span>
+      <span class="ac">{{ demo.account }}</span>
+    </a>
+    <a class="bin mcp" href="/connect/{{ demo.id }}?n={{ demo.encoded }}"
+      title="Copy the MCP connector for the demo">mcp</a>
+  </div>
+  {%- endif %}
   {%- if properties.is_empty() %}
   <div class="empty">no GA4 properties on this account yet — make the first one above</div>
   {%- endif %}

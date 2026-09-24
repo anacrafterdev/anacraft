@@ -139,6 +139,11 @@ body {
    is "nacraft" and nothing has to be typed twice. Archivo is not here —
    the page is self-contained and fetches no font — so the heaviest system
    sans stands in, at the same size and tracking. */
+a.brand {
+  text-decoration: none;
+  width: fit-content;
+}
+
 .brand {
   display: flex;
   align-items: baseline;

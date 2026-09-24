@@ -23,7 +23,9 @@
 
 <body>
   <div class="wrap">
-    <div class="brand">
+    {#- Home: `/`, which knows where somebody stands and sends them there —
+        their properties once signed in, the sign-in when not. -#}
+    <a class="brand" href="/" aria-label="anacraft — home">
       <svg class="pick" role="img" aria-label="A" width="14" height="14" viewBox="1 1 14 14"
         shape-rendering="crispEdges" fill="currentColor">
         <rect x="6" y="1" width="4" height="1" />
@@ -49,7 +51,7 @@
         <rect x="1" y="14" width="4" height="1" />
         <rect x="11" y="14" width="4" height="1" />
       </svg>nacraft
-    </div>
+    </a>
 
     <h1>Get your GA4 tag.</h1>
     <p class="lede">

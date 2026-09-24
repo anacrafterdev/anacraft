@@ -5450,6 +5450,45 @@ mod tests {
         assert_eq!(before, vitals_text(), "the costume came back different");
     }
 
+    /// Lives here rather than in `mcp`'s tests because `VOCAB` does: `BORING`
+    /// is one global, and a second mutex in another module would not take
+    /// turns with this one.
+    #[test]
+    fn what_an_assistant_reads_does_not_depend_on_the_vocabulary() {
+        // The `b` key is the dashboard's costume, not a setting. Nothing in
+        // `craft mcp` or `craft serve` touches it — but they share a binary
+        // with the code that does, and a label that started going through
+        // `Metric::label()` would quietly change the shape of every answer an
+        // assistant gets. This is the assertion that would notice.
+        let totals = [12481.0, 18203.0, 41776.0, 312.0, 0.41, 96.5];
+        let prior = [11002.0, 16890.0, 38110.0, 270.0, 0.44, 91.2];
+        // Rising, so an achievement is computed too rather than the list
+        // coming back empty for a reason that has nothing to do with the
+        // vocabulary.
+        let daily: Vec<(String, f64)> = (1..=14)
+            .map(|day| (format!("202609{day:02}"), 800.0 + day as f64 * 20.0))
+            .collect();
+
+        let vocab = Vocab::lock();
+        let plain_spoken = crate::mcp::status_payload(&totals, &prior, &daily, false);
+        vocab.boring();
+        let boring = crate::mcp::status_payload(&totals, &prior, &daily, false);
+        assert_eq!(plain_spoken, boring);
+
+        // And it is data, not an empty shell that happens to match.
+        assert_eq!(boring["has_data"], serde_json::json!(true));
+        assert_eq!(
+            boring["metrics"][0]["metric"],
+            serde_json::json!("totalUsers")
+        );
+        assert_eq!(boring["metrics"][0]["value"], serde_json::json!(12481.0));
+        assert_eq!(boring["daily_users"].as_array().map(Vec::len), Some(14));
+        assert!(!boring["achievements"]
+            .as_array()
+            .expect("a list")
+            .is_empty());
+    }
+
     #[test]
     fn boring_mode_leaves_no_minecraft_word_on_screen() {
         // A new craft string that forgets its plain twin fails here.

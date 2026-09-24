@@ -672,14 +672,15 @@ const TOOLS: &[Tool] = &[
     Tool {
         name: "audit_site",
         title: "Audit the measurement",
-        description: "How the property is measuring, rather than what it measured. Fifteen \
+        description: "How the property is measuring, rather than what it measured. Sixteen \
                       checks: whether anything is marked as a key event and whether those \
                       events ever fire, whether outcomes are arriving unmarked, whether the \
                       stream is measuring what it was told to and recording what it \
                       measures, whether purchases carry their revenue, whether page views \
                       are counted twice, whether the site or a payment page is crediting \
                       itself with conversions, whether an event stopped firing between one \
-                      window and the one before. Each finding is graded and carries what it \
+                      window and the one before, whether the tag is firing on a development \
+                      machine. Each finding is graded and carries what it \
                       means, and some carry a `fix` naming the one thing that would repair \
                       them — `craft audit --fix` is what applies those, and this tool never \
                       does. Run this before trusting the numbers from any other tool, and \
@@ -1900,7 +1901,7 @@ mod tests {
     /// Kept as a number rather than read from `audit::CHECKS`, so adding a
     /// check has to be a deliberate edit here too: this is the figure an
     /// assistant quotes when it says how hard the property was looked at.
-    const CHECKS_AVAILABLE: usize = 15;
+    const CHECKS_AVAILABLE: usize = 16;
 
     #[tokio::test]
     async fn the_audit_tool_answers_with_graded_findings() {

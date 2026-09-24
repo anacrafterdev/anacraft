@@ -2197,7 +2197,7 @@
     </p>
     <div class="rows">
       <div class="row"><span class="n">01</span><h3>It configures your analytics</h3><p><code style="font-family:var(--mono)">craft configure yoursite.com</code> creates the Google Analytics property, adds the web stream and prints the tag with its real measurement id in it — the three console steps between a new domain and its first number. Run it twice and it hands the tag back rather than quietly creating a second property. Part of the <a href="/pricing.html">Anacrafter</a> plan, $2.99/mo — the ask arrives on the page the Google sign-in already ends on, and the terminal picks the payment up from there.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">02</span><h3>It audits your analytics</h3><p><code style="font-family:var(--mono)">craft audit</code> checks how the property is <i>measuring</i> rather than what it measured — fifteen checks over four weeks, each finding graded and carrying what it means, and <code style="font-family:var(--mono)">--fix</code> applies the ones GA4 can repair itself. <a href="/audit.html">Nothing marked as a key event</a>, an outcome arriving unmarked, measurement switched on and recording nothing, <code style="font-family:var(--mono)">purchase</code> arriving without its value, page views counted twice. Part of the <a href="/pricing.html">Anacrafter Pro</a> plan, $5.99/mo — <code style="font-family:var(--mono)">craft audit --demo</code> is ungated.</p><span class="arw">→</span></div>
+      <div class="row"><span class="n">02</span><h3>It audits your analytics</h3><p><code style="font-family:var(--mono)">craft audit</code> checks how the property is <i>measuring</i> rather than what it measured — sixteen checks over four weeks, each finding graded and carrying what it means, and <code style="font-family:var(--mono)">--fix</code> applies the ones GA4 can repair itself. <a href="/audit.html">Nothing marked as a key event</a>, an outcome arriving unmarked, measurement switched on and recording nothing, <code style="font-family:var(--mono)">purchase</code> arriving without its value, page views counted twice. Part of the <a href="/pricing.html">Anacrafter Pro</a> plan, $5.99/mo — <code style="font-family:var(--mono)">craft audit --demo</code> is ungated.</p><span class="arw">→</span></div>
       <div class="row"><span class="n">03</span><h3>Seven toggleable panels</h3><p>Events, Right Now, Top Chunks, Daily Villagers, Realms, Vitals and Top Realms — keys <code style="font-family:var(--mono)">1</code>–<code style="font-family:var(--mono)">7</code>, or their letter aliases.</p><span class="arw">→</span></div>
       <div class="row"><span class="n">04</span><h3>Realtime event feed</h3><p>Players online polled every few seconds, with spawn and wander-off events that fade as they age out of the window.</p><span class="arw">→</span></div>
       <div class="row"><span class="n">05</span><h3>Achievement toasts</h3><p>Diamond Streak, Creeper Repelled, Deep Vein — unlocks pop in when a metric crosses a milestone, then get out of the way.</p><span class="arw">→</span></div>
@@ -2382,7 +2382,7 @@
       Every other command answers <i>what happened</i>.
       <code style="font-family:var(--mono);color:var(--fg)">craft audit</code>
       answers the one before it — <b>is this property measuring the site at all,
-      and is what it measured worth reading</b>. Fifteen checks over four weeks,
+      and is what it measured worth reading</b>. Sixteen checks over four weeks,
       each finding graded and carrying what it means and what fixes it — and
       <code style="font-family:var(--mono)">--fix</code> applies the handful
       Google Analytics can repair from its own side. It reads
@@ -2394,7 +2394,7 @@
     </p>
     <div class="two">
       <div>
-        <pre class="code"><span class="d"># fifteen checks over the last 28 days</span>
+        <pre class="code"><span class="d"># sixteen checks over the last 28 days</span>
 <span class="c">$</span> <span class="w">craft audit</span>
 
 <span class="d"># ...and apply the ones GA4 can fix itself</span>

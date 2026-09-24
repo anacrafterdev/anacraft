@@ -174,13 +174,14 @@ enum Command {
     ///
     /// The other commands answer "what happened". This one answers the
     /// question before it: is this property measuring the site at all, and is
-    /// what it measured worth trusting. Fifteen checks over four weeks —
+    /// what it measured worth trusting. Sixteen checks over four weeks —
     /// whether anything is marked as a key event and whether those events ever
     /// fire, whether outcomes are arriving unmarked, whether the stream is
     /// measuring what it was told to and recording what it measures, whether
     /// purchases carry their revenue, whether page views are being counted
     /// twice, whether the site or a payment page is referring itself, whether
-    /// an event stopped firing between releases.
+    /// an event stopped firing between releases, whether the tag is firing on
+    /// a development machine.
     ///
     /// Read-only unless `--fix` is passed, and then only for the settings it
     /// printed first. Exits 2 when it finds something it did not fix, so a

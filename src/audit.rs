@@ -97,6 +97,7 @@ const CHECKS: &[&str] = &[
     "event_names",
     "source_not_set",
     "direct_share",
+    "local_traffic",
 ];
 
 /// The checks that are statements about data, and so have nothing to say about
@@ -115,6 +116,7 @@ const NEEDS_DATA: &[&str] = &[
     "event_names",
     "source_not_set",
     "direct_share",
+    "local_traffic",
 ];
 
 /// The stream's automatic measurement, as a table: the snake_case field an
@@ -385,10 +387,10 @@ impl Audit {
 
 /// Read the property and grade what comes back.
 async fn examine(ga: &Ga, property: &str, title: &str, days: u32) -> Result<Audit> {
-    // Four reports, one round trip. Nothing here depends on anything else
+    // Five reports, one round trip. Nothing here depends on anything else
     // here, and an audit that took four sequential round trips would be four
     // times as slow for no extra truth.
-    let (totals, events, before, sources) = tokio::try_join!(
+    let (totals, events, before, sources, hosts) = tokio::try_join!(
         ga.report(
             property,
             ReportRequest::new(TOTALS).range(DateRange::last_days(days))
@@ -411,6 +413,13 @@ async fn examine(ga: &Ga, property: &str, title: &str, days: u32) -> Result<Audi
             property,
             ReportRequest::new(&["sessions"])
                 .by(&["sessionSource"])
+                .top("sessions", 200)
+                .range(DateRange::last_days(days))
+        ),
+        ga.report(
+            property,
+            ReportRequest::new(&["sessions"])
+                .by(&["hostName"])
                 .top("sessions", 200)
                 .range(DateRange::last_days(days))
         ),
@@ -996,6 +1005,64 @@ async fn examine(ga: &Ga, property: &str, title: &str, days: u32) -> Result<Audi
         }
     }
 
+    // --- local_traffic ----------------------------------------------------
+    if !dark {
+        let recorded = local_hosts(&hosts);
+        let referred = local_hosts(&sources);
+        if !recorded.is_empty() || !referred.is_empty() {
+            // The tag firing locally is the worse of the two and the one said
+            // when both are true; its evidence is its own hosts, not a mix.
+            let shown = if recorded.is_empty() {
+                &referred
+            } else {
+                &recorded
+            };
+            let total: f64 = hosts.rows.iter().map(|row| row.metric(0)).sum();
+            let local: f64 = shown.iter().map(|(_, n)| n).sum();
+            let names: Vec<&str> = shown.iter().map(|(host, _)| host.as_str()).collect();
+            let (headline, detail) = if recorded.is_empty() {
+                (
+                    "a machine on a local network sends visitors",
+                    "sessions are arriving with localhost or a private address as their \
+                     source: somebody clicked through to the site from a page served on \
+                     their own machine — a dev server, an admin tool, a local build that \
+                     links to production. The visits are real and the source is not a \
+                     channel, and every port it ran on is a referrer of its own. Tag those \
+                     links with UTM parameters, or list the host under Admin → Data Streams \
+                     → Configure tag settings → List unwanted referrals.",
+                )
+            } else {
+                (
+                    "the tag fires on a development machine",
+                    "hits are being recorded with localhost or a private address as the \
+                     page's hostname, which is the site running on somebody's own machine \
+                     with the production measurement id in it. Every preview, reload and \
+                     test click lands in the same numbers as real visitors. Load the tag \
+                     only when `location.hostname` is the production domain, or define \
+                     the developers as internal traffic under Admin → Data Streams → \
+                     Configure tag settings → Define internal traffic and switch on the \
+                     filter under Admin → Data filters.",
+                )
+            };
+            let share = if total > 0.0 {
+                format!(" · {:.0}% of sessions", local / total * 100.0)
+            } else {
+                String::new()
+            };
+            findings.push(Finding {
+                check: "local_traffic",
+                grade: Grade::Warning,
+                headline: headline.into(),
+                detail: detail.into(),
+                evidence: Some(format!(
+                    "{} · {} sessions{share}",
+                    listing(&names),
+                    render::commas(local)
+                )),
+            });
+        }
+    }
+
     // A check can be skipped for two reasons at once — a dark property whose
     // Admin API is also unreadable skips `key_events_firing` twice — and
     // counting it twice would report fewer checks run than were skipped.
@@ -1113,6 +1180,52 @@ fn host_of(raw: &str) -> Option<String> {
 /// `notstripe.com`.
 fn under(host: &str, domain: &str) -> bool {
     host == domain || host.ends_with(&format!(".{domain}"))
+}
+
+/// Hosts in a report that are somebody's own machine rather than a site, with
+/// their session counts, collapsed so every port of `localhost` is one row.
+///
+/// Works on `hostName` (where the page was) and on `sessionSource` (where the
+/// visitor came from) alike — both are hosts or words, and a word is not local.
+fn local_hosts(report: &crate::ga::Report) -> Vec<(String, f64)> {
+    let mut hosts: BTreeMap<String, f64> = BTreeMap::new();
+    for row in report.rows.iter().filter(|row| row.metric(0) > 0.0) {
+        if let Some(host) = local_host(row.dimension(0)) {
+            *hosts.entry(host).or_default() += row.metric(0);
+        }
+    }
+    let mut hosts: Vec<(String, f64)> = hosts.into_iter().collect();
+    hosts.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    hosts
+}
+
+/// The host in `raw`, if it names this machine or a private network: loopback,
+/// `localhost` and anything under it, `.local` mDNS names, and the RFC 1918
+/// ranges. Scheme, port and path are dropped, so `127.0.0.1:51814` and
+/// `http://localhost:3000/` come back as `127.0.0.1` and `localhost`.
+fn local_host(raw: &str) -> Option<String> {
+    let rest = raw
+        .trim()
+        .split_once("://")
+        .map_or(raw.trim(), |(_, rest)| rest);
+    let authority = rest.split('/').next()?.to_ascii_lowercase();
+    // `[::1]:3000` — the port comes after the bracket, not after the first colon.
+    let host = match authority.strip_prefix('[') {
+        Some(v6) => v6.split(']').next()?.to_string(),
+        None if authority.matches(':').count() > 1 => authority,
+        None => authority.split(':').next()?.to_string(),
+    };
+
+    let local = host == "localhost"
+        || host.ends_with(".localhost")
+        || host.ends_with(".local")
+        || host == "::1"
+        || host == "0.0.0.0"
+        || match host.parse::<std::net::Ipv4Addr>() {
+            Ok(ip) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
+            Err(_) => false,
+        };
+    local.then_some(host)
 }
 
 /// Event names that differ only in punctuation or case, grouped.
@@ -1353,7 +1466,7 @@ pub(crate) fn inspect_demo(days: u32) -> Value {
 ///
 /// Unlike `watch`, this renders on a clean pass too. A watch posting "nothing
 /// happened" every hour trains people to ignore the channel; an audit is a
-/// thing somebody asked for, and "fifteen checks, nothing found" is the answer
+/// thing somebody asked for, and "sixteen checks, nothing found" is the answer
 /// they asked for.
 fn as_slack(audit: &Audit) -> Value {
     let heading = if audit.clean() {
@@ -2060,6 +2173,40 @@ mod tests {
         assert_eq!(host_of("google"), None);
         assert_eq!(host_of("(direct)"), None);
         assert_eq!(host_of(""), None);
+    }
+
+    #[test]
+    fn every_port_of_a_local_host_is_the_same_host() {
+        assert_eq!(local_host("127.0.0.1:51814").as_deref(), Some("127.0.0.1"));
+        assert_eq!(
+            local_host("http://localhost:3000/").as_deref(),
+            Some("localhost")
+        );
+        assert_eq!(local_host("localhost").as_deref(), Some("localhost"));
+        assert_eq!(local_host("[::1]:8080").as_deref(), Some("::1"));
+        assert_eq!(local_host("192.168.1.20").as_deref(), Some("192.168.1.20"));
+        assert_eq!(local_host("10.0.0.5:8000").as_deref(), Some("10.0.0.5"));
+        assert_eq!(
+            local_host("app.localhost").as_deref(),
+            Some("app.localhost")
+        );
+        assert_eq!(
+            local_host("macbook.local").as_deref(),
+            Some("macbook.local")
+        );
+    }
+
+    #[test]
+    fn a_public_host_or_a_channel_word_is_not_local() {
+        assert_eq!(local_host("anacraft.dev"), None);
+        assert_eq!(local_host("t.co"), None);
+        assert_eq!(local_host("8.8.8.8"), None);
+        // 172.32 is past the end of the 172.16/12 private range.
+        assert_eq!(local_host("172.32.0.1"), None);
+        assert_eq!(local_host("(direct)"), None);
+        assert_eq!(local_host("google"), None);
+        // A domain that merely starts with the word.
+        assert_eq!(local_host("localhost.example.com"), None);
     }
 
     #[test]

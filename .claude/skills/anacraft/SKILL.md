@@ -120,13 +120,13 @@ is a cron line:
 ## 5. Audit
 
 `craft audit` checks how the property is measuring rather than what it
-measured. Fifteen checks over 28 days, each finding graded and carrying what it
+measured. Sixteen checks over 28 days, each finding graded and carrying what it
 means, and `--fix` applies the handful GA4 can repair from its own side. This is the command to reach for when somebody says a number looks
 wrong, and before trusting any other command's output on a property you have
 not seen before.
 
 ```sh
-craft audit                  # fifteen checks over the last 28 days
+craft audit                  # sixteen checks over the last 28 days
 craft audit --fix            # ...and apply the ones GA4 can fix itself
 craft audit --days 90        # a longer window
 craft audit --format json    # the findings as one object, for a script
@@ -145,7 +145,8 @@ key event configured and never fired, `purchase` arriving without its `value`,
 enhanced measurement switched off at the master switch so the stream's
 automatic events are configured and collected by nothing. **Warning** means the
 numbers are real but something is distorting them — page views counted twice,
-the site or a payment page referring itself, an event that stopped firing since
+the site or a payment page referring itself, the tag firing on a development
+machine, an event that stopped firing since
 the previous window, an outcome like `sign_up` arriving unmarked, measurement
 that is switched on and has recorded nothing for a month, one event under two
 names, sessions GA4 could not attribute. **Note** is context worth having

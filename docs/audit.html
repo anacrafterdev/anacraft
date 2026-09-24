@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GA4 audit in one command — anacraft</title>
-<meta name="description" content="craft audit runs fifteen checks on how a Google Analytics 4 property is measuring: key events never marked or never firing, outcomes arriving unmarked, measurement switched on and recording nothing, purchases without revenue, page views counted twice. Graded findings in the terminal, and --fix applies the ones GA4 can repair itself.">
+<meta name="description" content="craft audit runs sixteen checks on how a Google Analytics 4 property is measuring: key events never marked or never firing, outcomes arriving unmarked, measurement switched on and recording nothing, purchases without revenue, page views counted twice. Graded findings in the terminal, and --fix applies the ones GA4 can repair itself.">
 <link rel="canonical" href="https://anacraft.dev/audit.html">
 <meta name="robots" content="index, follow">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://anacraft.dev/audit.html">
 <meta property="og:title" content="GA4 audit in one command — anacraft">
-<meta property="og:description" content="craft audit runs fifteen checks on how a Google Analytics 4 property is measuring: key events never marked or never firing, outcomes arriving unmarked, measurement switched on and recording nothing, purchases without revenue, page views counted twice. Graded findings in the terminal, and --fix applies the ones GA4 can repair itself.">
+<meta property="og:description" content="craft audit runs sixteen checks on how a Google Analytics 4 property is measuring: key events never marked or never firing, outcomes arriving unmarked, measurement switched on and recording nothing, purchases without revenue, page views counted twice. Graded findings in the terminal, and --fix applies the ones GA4 can repair itself.">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -32,7 +32,7 @@
           "name": "What does a GA4 audit check?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Whether the property is collecting at all, whether anything in it is marked as a key event, whether those key events ever fire, whether outcomes are arriving unmarked, whether the stream is measuring what it was told to and recording what it measures, whether purchases carry their revenue, whether page views are being counted twice, whether the site or a payment page is credited with its own conversions, whether an event stopped firing, whether one event is arriving under two names, and how much traffic cannot be attributed to any source. craft audit runs fifteen such checks over four weeks and grades each finding."
+            "text": "Whether the property is collecting at all, whether anything in it is marked as a key event, whether those key events ever fire, whether outcomes are arriving unmarked, whether the stream is measuring what it was told to and recording what it measures, whether purchases carry their revenue, whether page views are being counted twice, whether the site or a payment page is credited with its own conversions, whether an event stopped firing, whether the tag is firing on a development machine, whether one event is arriving under two names, and how much traffic cannot be attributed to any source. craft audit runs sixteen such checks over four weeks and grades each finding."
           }
         },
         {
@@ -373,7 +373,7 @@
   <div class="h">What it does</div>
   <p>Every other command answers <i>what happened</i>. <code>craft audit</code> answers the question
   before it: <b>is this property measuring the site at all, and is what it measured worth reading</b>.</p>
-  <p>Fifteen checks over four weeks. Each finding is graded and carries what it means and what fixes
+  <p>Sixteen checks over four weeks. Each finding is graded and carries what it means and what fixes
   it. One command, no console, nothing to configure.</p>
 </div>
 
@@ -390,7 +390,7 @@ reporting API says how often <code>purchase</code> fired. The admin API says whe
 declared <code>purchase</code> a key event. Only the pair of answers is worth anything, and a site can
 pass one and fail the other for a year without noticing.</p>
 
-<h2><span class="n">02</span>The fifteen checks</h2>
+<h2><span class="n">02</span>The sixteen checks</h2>
 <p>Five of them mean a number somewhere is <b>wrong</b>, not merely unflattering:</p>
 <table class="tbl">
   <tr><th>Check</th><th>Finds</th></tr>
@@ -401,7 +401,7 @@ pass one and fail the other for a year without noticing.</p>
   <tr><td>revenue_tagged</td><td><b>Purchases without their money.</b> <code>purchase</code> is firing and the property has no revenue, which is the event arriving without <code>value</code> and <code>currency</code></td></tr>
   <tr><td>measurement_off</td><td><b>Enhanced measurement switched off at the master switch.</b> The stream's automatic events still show as on underneath it, and nothing collects them</td></tr>
 </table>
-<p>Five mean the numbers are real but something is <b>distorting</b> them:</p>
+<p>Six mean the numbers are real but something is <b>distorting</b> them:</p>
 <table class="tbl">
   <tr><th>Check</th><th>Finds</th></tr>
   <tr><td>double_counting</td><td><b>Page views counted twice.</b> A bounce rate near nothing with views per session doubled — the shape a gtag snippet left beside a GTM tag makes</td></tr>
@@ -409,6 +409,7 @@ pass one and fail the other for a year without noticing.</p>
   <tr><td>payment_handoff</td><td><b>A payment or sign-in page credited with conversions.</b> The return trip starts a new session referred by the gateway, and whatever actually brought the visitor loses the conversion to it</td></tr>
   <tr><td>event_silence</td><td><b>An event that stopped firing</b> between this window and the one before — a tag removed, renamed, or moved behind something that no longer runs</td></tr>
   <tr><td>key_events_unmarked</td><td><b>An outcome arriving unmarked.</b> <code>sign_up</code> firing a thousand times with nothing telling GA4 it is the point, so no conversion report counts it and Ads cannot import it</td></tr>
+  <tr><td>local_traffic</td><td><b>The tag firing on a development machine.</b> Hits recorded with <code>localhost</code> or a private address as the page's hostname, so every preview and test click is counted as a visitor — or visitors arriving from a page served on somebody's own machine, one referrer per port</td></tr>
   <tr><td>measurement_silent</td><td><b>Measurement on and recording nothing.</b> The stream is configured to collect site search, video or downloads and has not seen one in a month. The only check with no threshold to tune — the expectation is Google's, not ours</td></tr>
 </table>
 <p>And five are context worth having before reading anything else:</p>
@@ -422,7 +423,7 @@ pass one and fail the other for a year without noticing.</p>
 </table>
 
 <h2><span class="n">03</span>Run it</h2>
-<pre class="code"><span class="d"># fifteen checks over the last 28 days</span>
+<pre class="code"><span class="d"># sixteen checks over the last 28 days</span>
 <span class="k">$</span> craft audit
 
 <span class="d"># a longer window</span>
@@ -453,7 +454,7 @@ so it finds the tagging bugs that reach the data — a tag firing twice, a tag t
 sending the wrong name — and not a trigger misconfigured in a way that produces plausible numbers.</p>
 <p>And every check has a <b>floor</b> under it. A property with eighty sessions has no meaningful bounce
 rate and no meaningful direct share, so those checks report as <i>not run</i> rather than firing on
-noise. The line under every report says how many of the fifteen actually ran, because “no findings”
+noise. The line under every report says how many of the sixteen actually ran, because “no findings”
 means nothing without the number of ways it looked.</p>
 
 <h2><span class="n">06</span>Scripting it</h2>
@@ -469,11 +470,11 @@ Slack is one cron line:</p>
              | curl -sX POST -H <span class="k">'Content-Type: application/json'</span> -d @- <span class="k">"$SLACK_WEBHOOK"</span></pre>
 <p><code>--format json</code> prints one object carrying every finding with a stable slug, its grade,
 its evidence and its explanation — plus how many checks ran out of how many exist. Unlike a watch, a
-clean audit still prints: it is something somebody asked for, and “fifteen checks, nothing found” is the
+clean audit still prints: it is something somebody asked for, and “sixteen checks, nothing found” is the
 answer they asked for.</p>
 
 <h2><span class="n">07</span>Ask an assistant to run it</h2>
-<p>The same fifteen checks are an MCP tool. With
+<p>The same sixteen checks are an MCP tool. With
 <a href="/mcp.html">the Google Analytics MCP server</a> wired up, <code>audit_site</code> hands the
 graded findings to Claude — which is the difference between an assistant that reports a number and one
 that can tell you the number is not to be trusted.</p>
@@ -491,7 +492,7 @@ below it.</p>
 
 <h2><span class="n">09</span>Questions</h2>
 <h3>What does a GA4 audit check?</h3>
-<p>Whether the property is collecting at all, whether anything in it is marked as a key event, whether those key events ever fire, whether outcomes are arriving unmarked, whether the stream is measuring what it was told to and recording what it measures, whether purchases carry their revenue, whether page views are being counted twice, whether the site or a payment page is credited with its own conversions, whether an event stopped firing, whether one event is arriving under two names, and how much traffic cannot be attributed to any source. craft audit runs fifteen such checks over four weeks and grades each finding.</p>
+<p>Whether the property is collecting at all, whether anything in it is marked as a key event, whether those key events ever fire, whether outcomes are arriving unmarked, whether the stream is measuring what it was told to and recording what it measures, whether purchases carry their revenue, whether page views are being counted twice, whether the site or a payment page is credited with its own conversions, whether an event stopped firing, whether the tag is firing on a development machine, whether one event is arriving under two names, and how much traffic cannot be attributed to any source. craft audit runs sixteen such checks over four weeks and grades each finding.</p>
 <h3>Why does my GA4 show zero conversions?</h3>
 <p>Usually because nothing on the property is marked as a key event, or because the key event is configured under a name nothing is sending. GA4 matches event names exactly, so Purchase and purchase are two unrelated events and only one of them counts. Both cases report as zero conversions, and neither is visible from inside the reports.</p>
 <h3>Why is my GA4 revenue zero when purchases are firing?</h3>

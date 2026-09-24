@@ -181,7 +181,7 @@ before it — is this property measuring the site at all, and is what it measure
 worth trusting.
 
 ```sh
-craft audit                  # fifteen checks over the last 28 days
+craft audit                  # sixteen checks over the last 28 days
 craft audit --fix            # ...and apply the ones GA4 can fix itself
 craft audit --days 90        # a longer window
 craft audit --format json    # the findings as one object, for a script
@@ -267,7 +267,7 @@ one cron line:
 ```
 
 Unlike `craft watch`, a clean pass still prints: an audit is something somebody
-asked for, and "fifteen checks, nothing found" is the answer they asked for. The
+asked for, and "sixteen checks, nothing found" is the answer they asked for. The
 line under every report says how many checks ran, because "no findings" means
 nothing without the number of ways it looked — and a check that could not run,
 because the Admin API was unreadable or the property was too quiet to judge, is
@@ -461,7 +461,7 @@ works. `which craft` gives the value to paste.
 | Tool | Answers |
 |------|---------|
 | `site_status` | Headline metrics against the period before, the daily user series, and the achievements that fired |
-| `audit_site` | Whether the property is measuring correctly: fifteen graded checks over 28 days, each carrying what it means |
+| `audit_site` | Whether the property is measuring correctly: sixteen graded checks over 28 days, each carrying what it means |
 | `live_visitors` | Who is on the site right now, by country |
 | `list_pages` | Most-visited pages |
 | `list_events` | Events by count, with the per-day total against the previous period |

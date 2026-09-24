@@ -7,11 +7,22 @@
   <span class="fig">{{ price }}</span>
   <span class="per">per month · cancel any time</span>
 </div>
-<form method="post" action="/unlock/checkout">
+{#- Stripe opens in a new tab straight from the button, and this tab turns
+    into the wait: the script moves it once the form has gone, carrying the
+    same token so it is waiting on the checkout that actually opened. With no
+    script the checkout still opens, and "check again" is the way on. -#}
+<form method="post" action="/unlock/checkout" target="_blank" id="pay">
+  <input type="hidden" name="t" value="{{ token }}">
   <button class="primary" type="submit">{{ action }}</button>
 </form>
+<script>
+  document.getElementById("pay").addEventListener("submit", function () {
+    setTimeout(function () { location.href = "/unlock/checkout?t={{ token }}"; }, 0);
+  });
+</script>
 <p class="fine">
-  Stripe opens in a new tab; this page waits for it and carries on by itself.
+  Stripe opens in a new tab; this page waits for it and takes you to the
+  dashboard by itself.
   Already subscribed? <a class="lnk" href="/">check again</a>
 </p>
 <div class="acts">

@@ -64,7 +64,10 @@ pub(super) fn router(app: Arc<App>) -> Router<Arc<App>> {
         .route("/signin/waiting", get(signin_waiting))
         .route("/signout", post(signout))
         .route("/unlock", get(unlock))
-        .route("/unlock/checkout", post(unlock_checkout))
+        .route(
+            "/unlock/checkout",
+            get(unlock_waiting).post(unlock_checkout),
+        )
         .route("/properties", get(properties).post(create))
         .route("/properties/new", get(new_property))
         .route("/properties/:id/trash", get(trash_ask).post(trash_do))
@@ -89,7 +92,10 @@ pub(super) fn hosted_router(app: Arc<App>) -> Router<Arc<App>> {
     let sessioned = Router::new()
         .route("/signout", post(signout))
         .route("/unlock", get(unlock))
-        .route("/unlock/checkout", post(unlock_checkout))
+        .route(
+            "/unlock/checkout",
+            get(unlock_waiting).post(unlock_checkout),
+        )
         .route("/properties", get(properties).post(create))
         .route("/properties/new", get(new_property))
         .route("/properties/:id/trash", get(trash_ask).post(trash_do))
@@ -630,6 +636,10 @@ async fn signout(State(app): State<Arc<App>>, headers: HeaderMap) -> View {
 #[template(path = "unlock.html")]
 struct UnlockView {
     shell: Shell,
+    /// Minted here and claimed only when the button is pressed: the form
+    /// sends it to Stripe's tab and this tab waits on it, so both halves have
+    /// to know it before either request is made.
+    token: String,
     heading: &'static str,
     body: &'static str,
     price: String,
@@ -666,6 +676,7 @@ async fn unlock(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>) -> 
     let subscribed = tier.is_some();
     Ok(page(UnlockView {
         shell: shell.signed(email.as_deref(), tier),
+        token: license::mint_token(),
         heading: if subscribed {
             "This needs the Elite plan"
         } else {
@@ -695,8 +706,14 @@ async fn unlock(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>) -> 
 /// A checkout URL already tied to the signed-in account, so the payment lands
 /// on the row every `craft` command reads afterwards. The same two steps
 /// `craft subscribe` takes, and the same two [`super::checkout`] takes.
-async fn unlock_checkout(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>) -> View {
-    let shell = Shell::new("pay", "/unlock");
+///
+/// The form posts into a new tab, so this answers with Stripe itself rather
+/// than a page of ours: the tab that pressed the button is the one that waits.
+async fn unlock_checkout(
+    State(app): State<Arc<App>>,
+    Extension(ctx): Extension<Ctx>,
+    Form(minted): Form<Minted>,
+) -> View {
     let oops = |message: String| {
         Oops::from(Fault {
             shell: Shell::new("err", "/unlock"),
@@ -716,14 +733,68 @@ async fn unlock_checkout(State(app): State<Arc<App>>, Extension(ctx): Extension<
         .map_err(|err| oops(why(err)))?
         .ok_or_else(|| oops("nothing is signed in yet.".into()))?;
 
-    let token = license::mint_token();
+    // The paywall's token when it sent one, so the tab waiting on it is
+    // waiting on the checkout that is actually open.
+    let token = minted.token().unwrap_or_else(license::mint_token);
     // Best-effort, exactly as in the CLI: a claim that fails leaves the
     // checkout claimable by the email on it.
     let _ = license::claim(&token, &account).await;
 
+    Ok(Redirect::to(&license::checkout_url(
+        crate::subscribe_url(PLAN),
+        &token,
+        account.email.as_deref(),
+    ))
+    .into_response())
+}
+
+#[derive(Deserialize)]
+struct Minted {
+    t: Option<String>,
+}
+
+impl Minted {
+    /// The token, if it is the shape [`license::mint_token`] makes: it goes
+    /// into a Stripe URL and back out into a page, and nothing else belongs
+    /// in either.
+    fn token(self) -> Option<String> {
+        self.t.filter(|t| {
+            !t.is_empty() && t.len() <= 64 && t.chars().all(|c| c.is_ascii_alphanumeric())
+        })
+    }
+}
+
+/// The wait for Stripe, in the tab that pressed the button while the checkout
+/// opens in another. A GET, because the meta refresh that asks whether the
+/// plan has landed is one; the token rides in the query so the link back to
+/// the checkout is the same one on every refresh, and the moment the account
+/// is paid up `/` sends it on to the dashboard.
+async fn unlock_waiting(
+    State(app): State<Arc<App>>,
+    Extension(ctx): Extension<Ctx>,
+    Query(minted): Query<Minted>,
+) -> View {
+    // Nothing minted — the address typed or bookmarked — is the paywall's
+    // business, and it has a button that mints one.
+    let Some(token) = minted.token() else {
+        return Ok(Redirect::to("/unlock").into_response());
+    };
+    let email = match stand(&app, &ctx).await {
+        Ok(Stand::Unpaid { email, .. }) => email,
+        // Paid, which is what this page is waiting for, or somewhere else
+        // entirely: `/` knows where either of them goes.
+        Ok(_) => return Ok(Redirect::to("/").into_response()),
+        Err(message) => {
+            return Err(Oops::from(Fault {
+                shell: Shell::new("err", "/unlock"),
+                message,
+                back: "/unlock".into(),
+            }))
+        }
+    };
     Ok(page(CheckoutView {
-        shell,
-        url: license::checkout_url(crate::subscribe_url(PLAN), &token, account.email.as_deref()),
+        shell: Shell::new("pay", "/unlock"),
+        url: license::checkout_url(crate::subscribe_url(PLAN), &token, email.as_deref()),
     }))
 }
 

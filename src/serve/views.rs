@@ -779,6 +779,16 @@ async fn unlock_waiting(
     let Some(token) = minted.token() else {
         return Ok(Redirect::to("/unlock").into_response());
     };
+    // Asked with the token and past the cache, which is the one thing this
+    // page knows that `/` does not. A lookup that fails here is left to the
+    // ordinary one below to report.
+    if !app.demo && ctx.has_tokens().unwrap_or(false) {
+        if let Ok(Some(tier)) = ctx.tier_after(&token).await {
+            if tier.meets(PLAN) {
+                return Ok(Redirect::to("/").into_response());
+            }
+        }
+    }
     let email = match stand(&app, &ctx).await {
         Ok(Stand::Unpaid { email, .. }) => email,
         // Paid, which is what this page is waiting for, or somewhere else

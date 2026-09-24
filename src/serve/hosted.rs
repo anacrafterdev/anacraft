@@ -363,6 +363,23 @@ impl Ctx {
         }
     }
 
+    /// The plan, asked again right now and carrying the checkout's token —
+    /// for the page waiting on that checkout. Not [`Ctx::tier`]'s cache: a
+    /// session already on a smaller plan would have that plan believed for
+    /// `PAID_FOR` and wait out the whole of it after paying for the upgrade.
+    /// And the token finds the payment even when the claim that ties it to
+    /// this account never landed, or Stripe was given another address.
+    pub async fn tier_after(&self, token: &str) -> Result<Option<Tier>> {
+        match self {
+            Ctx::Local => Ok(license::sync(&Config::load()?).await),
+            Ctx::Session(s) => {
+                let tier = license::fetch(Some(&s.account), Some(token)).await?.tier();
+                *s.tier.lock().expect("tier lock poisoned") = Some((Instant::now(), tier));
+                Ok(tier)
+            }
+        }
+    }
+
     pub fn ga(&self) -> Result<Ga> {
         match self {
             Ctx::Local => Ga::new(),

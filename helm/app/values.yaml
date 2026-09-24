@@ -1,6 +1,7 @@
 namespace: prod
-# One replica: craft serve keeps its session in memory and on the pod's disk,
-# so a second replica would be a second, disagreeing server.
+# One replica: each visitor's session lives in this pod's memory, so a second
+# replica would not know who a request is from. More needs the sessions moved
+# out of process first (see src/serve/hosted.rs).
 replicaCount: 1
 image: gcr.io/smartloop-gcp-us-east/anacraft-app:latest
 
@@ -8,7 +9,6 @@ host: "app.anacraft.dev"
 staticIpName: "anacraft-app-ip"
 managedCertificateName: "anacraft-managed-cert-app"
 
-# Synthetic data, no Google account. The release binary's Google sign-in
-# redirects to a loopback port on the pod, which a visitor's browser cannot
-# reach, so real sign-in does not work behind the load balancer yet.
-demo: true
+# Real sign-in, each visitor with their own Google account. true serves the
+# synthetic demo to everybody instead, with no sign-in.
+demo: false

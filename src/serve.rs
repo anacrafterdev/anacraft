@@ -25,7 +25,7 @@
 //! header because a `<form>` cannot send a header, and they call the same
 //! functions the handlers below do.
 
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -40,7 +40,11 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+mod grants;
+mod hosted;
 mod views;
+
+use hosted::Ctx;
 
 use crate::auth::{Auth, Cta, Landing, Tokens};
 use crate::config::Config;
@@ -311,8 +315,16 @@ pub struct Connector {
 
 impl Connector {
     fn new(port: u16, token: String) -> Connector {
-        let url = format!("http://127.0.0.1:{port}/v1/mcp");
-        let link = format!("{url}?token={}", license::encode(&token));
+        Connector::at(format!("http://127.0.0.1:{port}/v1/mcp"), token, None)
+    }
+
+    /// The same three strings for any endpoint — a hosted server's, where the
+    /// token is the user's and the property rides in the link.
+    fn at(url: String, token: String, property: Option<&str>) -> Connector {
+        let mut link = format!("{url}?token={}", license::encode(&token));
+        if let Some(property) = property.filter(|p| !p.is_empty()) {
+            link.push_str(&format!("&property={}", license::encode(property)));
+        }
         Connector {
             // One line, no continuation. It is long, and it is going through
             // a clipboard into a shell or a config file — neither of which is
@@ -407,6 +419,12 @@ pub struct Options {
     pub demo: bool,
     /// `--property`, as the default for reads that name none.
     pub property: Option<String>,
+    /// Where to listen. Loopback unless the server is hosted.
+    pub host: IpAddr,
+    /// `--public-url`: the https address this server is reached at, which
+    /// makes it a hosted server — many visitors, a session each, nothing on
+    /// disk. See [`hosted`].
+    pub public_url: Option<String>,
 }
 
 /// What a sign-in started through the API is doing right now.
@@ -444,6 +462,9 @@ struct App {
     /// Paired with the property it was built for, because the token names
     /// one and two connectors on this server may name two different ones.
     mcp: tokio::sync::Mutex<Option<(String, crate::mcp::Server)>>,
+    /// Present when this is a hosted server, and then the only place a
+    /// visitor's sign-in is kept.
+    hosted: Option<hosted::Hosted>,
 }
 
 impl App {
@@ -477,6 +498,16 @@ impl App {
 }
 
 pub async fn run(opts: Options) -> Result<()> {
+    if let Some(public) = opts.public_url.clone() {
+        return run_hosted(opts, public).await;
+    }
+    if !opts.host.is_loopback() {
+        anyhow::bail!(
+            "--host {} would put this machine's token-guarded server on the network. \
+             A server other people reach is a hosted one: add --public-url https://…",
+            opts.host
+        );
+    }
     let mut endpoint = Endpoint::load();
 
     let wanted = wanted_port(opts.port, endpoint.port);
@@ -541,6 +572,7 @@ pub async fn run(opts: Options) -> Result<()> {
         login: Mutex::new(Login::Idle),
         last: AtomicU64::new(now()),
         mcp: tokio::sync::Mutex::new(None),
+        hosted: None,
     });
 
     // Two routers, because one route has to be reachable without the token:
@@ -603,6 +635,125 @@ pub async fn run(opts: Options) -> Result<()> {
         .with_graceful_shutdown(idle(app.clone(), opts.idle))
         .await
         .context("the local server stopped unexpectedly")
+}
+
+/// Check `--public-url` and drop its trailing slash. https, or plain http to
+/// this machine for trying it out: a session cookie sent in the clear would
+/// be a session anybody on the path could spend.
+fn public_origin(given: &str) -> Result<String> {
+    let url = given.trim().trim_end_matches('/');
+    let local = ["http://localhost", "http://127.0.0.1"]
+        .iter()
+        .any(|base| url == *base || url.starts_with(&format!("{base}:")));
+    if !(url.starts_with("https://") || local) {
+        anyhow::bail!("--public-url must be https:// (or http://localhost for trying it out)");
+    }
+    if url.splitn(4, '/').nth(3).is_some() {
+        anyhow::bail!("--public-url is an origin — scheme and host, no path");
+    }
+    Ok(url.to_string())
+}
+
+/// The hosted server: the pages and the health check, for anybody, each
+/// visitor on a session of their own. No banner, no token, no `~/.anacraft`,
+/// and none of `/v1` but health — the API and the MCP connector answer to a
+/// token that is one machine's, and that is what they stay.
+async fn run_hosted(opts: Options, public: String) -> Result<()> {
+    let public = public_origin(&public)?;
+    if opts.token.is_some() {
+        anyhow::bail!("--token is the local server's; a hosted one signs people in instead");
+    }
+    // The config every session starts from is its own, but a property named
+    // in the environment would be read by every one of them.
+    if std::env::var_os("ANACRAFT_PROPERTY_ID").is_some() {
+        anyhow::bail!("ANACRAFT_PROPERTY_ID would apply to every visitor; unset it");
+    }
+    let web = if opts.demo {
+        None
+    } else {
+        Some(crate::auth::ClientCreds::web()?)
+    };
+    // The MCP connector: on when the grant store is configured, and then a
+    // sign-in asks Google for a refresh token to keep, sealed.
+    let grants = if opts.demo {
+        None
+    } else {
+        grants::Grants::from_env()?
+    };
+    let connector = grants.is_some();
+
+    let listener = tokio::net::TcpListener::bind((opts.host, opts.port))
+        .await
+        .with_context(|| format!("could not listen on {}:{}", opts.host, opts.port))?;
+    let port = listener.local_addr()?.port();
+
+    let app = Arc::new(App {
+        // Never handed to anybody, and nothing hosted checks it: the routes
+        // that take a token are not mounted.
+        token: license::mint_token(),
+        keys: Keys::Named(license::mint_token()),
+        origin: public.clone(),
+        port,
+        demo: opts.demo,
+        property: None,
+        login: Mutex::new(Login::Idle),
+        last: AtomicU64::new(now()),
+        mcp: tokio::sync::Mutex::new(None),
+        hosted: Some(hosted::Hosted::new(public.clone(), web, grants)),
+    });
+
+    let sweeper = app.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            if let Some(hosted) = &sweeper.hosted {
+                hosted.sweep();
+            }
+        }
+    });
+
+    let router = views::hosted_router(app.clone())
+        .route("/v1/health", get(health))
+        .route(
+            "/v1/mcp",
+            axum::routing::post(hosted::mcp).get(mcp_no_stream),
+        )
+        .fallback(local_only)
+        .layer(middleware::from_fn_with_state(app.clone(), hosted::outer))
+        .with_state(app.clone());
+
+    println!(
+        "\n  {} anacraft hosted on {} (listening on {}:{port}){}",
+        crate::theme::glyph::PICKAXE,
+        public,
+        opts.host,
+        if opts.demo {
+            " — demo"
+        } else if connector {
+            " — with the MCP connector"
+        } else {
+            " — no MCP connector (no grant store configured)"
+        }
+    );
+    axum::serve(listener, router)
+        .with_graceful_shutdown(async {
+            let _ = tokio::signal::ctrl_c().await;
+        })
+        .await
+        .context("the hosted server stopped unexpectedly")
+}
+
+/// Anything a hosted server does not serve: the API above all, which lives
+/// on the machine that holds its token.
+async fn local_only() -> Response {
+    Fail::new(
+        StatusCode::NOT_FOUND,
+        "local_only",
+        "nothing here. The API and the MCP connector run on your own machine: \
+         install craft and run `craft serve` — https://anacraft.dev/serve.html"
+            .into(),
+    )
+    .into_response()
 }
 
 fn banner(origin: &str, wire: &Connector, idle: u64, demo: bool) {
@@ -1030,6 +1181,10 @@ async fn guard(State(app): State<Arc<App>>, request: Request, next: Next) -> Res
 struct Asked(String);
 
 fn allowed(app: &App, origin: &str) -> bool {
+    // A hosted server has one public origin, spelled one way.
+    if app.hosted.is_some() {
+        return origin == app.origin;
+    }
     // localhost and 127.0.0.1 are the same machine and different origins, so
     // both spellings of our own address are answered and nothing else is.
     origin == app.origin || origin == app.origin.replace("127.0.0.1", "localhost")
@@ -1203,11 +1358,11 @@ async fn api_page() -> Html<&'static str> {
     Html(API_PAGE)
 }
 
-async fn health() -> Json<Value> {
+async fn health(State(app): State<Arc<App>>) -> Json<Value> {
     Json(json!({
         "ok": true,
         "version": env!("CARGO_PKG_VERSION"),
-        "mode": "local",
+        "mode": if app.hosted.is_some() { "hosted" } else { "local" },
     }))
 }
 
@@ -1968,7 +2123,12 @@ async fn mcp(
         }
     }
     let (_, server) = slot.as_mut().expect("just built or already there");
+    answer(server, message).await
+}
 
+/// One JSON-RPC message, or a batch of them, answered by `server` — the half
+/// of `/v1/mcp` the local and the hosted server share.
+async fn answer(server: &mut crate::mcp::Server, message: Value) -> Response {
     // A batch is a 2025-03-26 spelling that 2025-06-18 withdrew. Answering one
     // is a loop, and it saves a client on the older revision from getting
     // silence back from a server that speaks its revision everywhere else.
@@ -2019,22 +2179,31 @@ async fn mcp_no_stream() -> Response {
 /// A client, or the one refusal that is not Google's fault: nobody is signed
 /// in yet.
 async fn client() -> std::result::Result<Ga, Fail> {
-    if Tokens::load().map_err(Fail::from)?.is_none() {
+    client_in(&Ctx::Local).await
+}
+
+/// The same, for whoever the request is from: this machine, or one hosted
+/// visitor.
+async fn client_in(ctx: &Ctx) -> std::result::Result<Ga, Fail> {
+    if !ctx.has_tokens().map_err(Fail::from)? {
         return Err(Fail::cold());
     }
     // The plan is checked here rather than at each call site, because here is
     // where a real Analytics account is about to be reached, and every route
     // that reaches one comes through this function.
-    require("the API").await?;
-    Ga::new().map_err(Fail::from)
+    require_in(ctx, "the API").await?;
+    ctx.ga().map_err(Fail::from)
 }
 
 /// The plan this machine is on, against the plan a call needs. The refusal
 /// text is [`crate::license::gate`]'s, so a caller reads the same sentence the
 /// terminal prints.
 async fn require(what: &str) -> std::result::Result<(), Fail> {
-    let cfg = Config::load().map_err(Fail::from)?;
-    let have = license::sync(&cfg).await;
+    require_in(&Ctx::Local, what).await
+}
+
+async fn require_in(ctx: &Ctx, what: &str) -> std::result::Result<(), Fail> {
+    let have = ctx.tier().await.map_err(Fail::from)?;
     license::gate(have, PLAN, what).map_err(|message| Fail::unpaid(PLAN, message))
 }
 
@@ -2075,6 +2244,7 @@ mod tests {
             login: Mutex::new(Login::Idle),
             last: AtomicU64::new(0),
             mcp: tokio::sync::Mutex::new(None),
+            hosted: None,
         };
         assert!(allowed(&app, "http://127.0.0.1:52413"));
         assert!(allowed(&app, "http://localhost:52413"));
@@ -2260,6 +2430,7 @@ mod tests {
             login: Mutex::new(Login::Idle),
             last: AtomicU64::new(0),
             mcp: tokio::sync::Mutex::new(None),
+            hosted: None,
         };
         assert_eq!(app.token_for("demo"), "banner");
         assert_eq!(app.token_for("397412345"), "banner");

@@ -158,6 +158,29 @@ pub(crate) async fn build(demo: bool, property: Option<&str>) -> Result<Server> 
     })
 }
 
+/// A server for one hosted user: their GA client, their plan, the property
+/// their connector names — and nothing read from, or written to, the machine
+/// it runs on. No badge either: that is published from a machine the user
+/// owns.
+pub(crate) fn build_for(
+    cfg: Config,
+    ga: Ga,
+    tier: Option<crate::license::Tier>,
+    property: Option<&str>,
+) -> Server {
+    let source = match crate::license::gate(tier, crate::license::Tier::Elite, "the MCP connector")
+    {
+        Ok(()) => Source::Api(Box::new(ga)),
+        Err(reason) => Source::Locked(reason),
+    };
+    Server {
+        cfg,
+        source,
+        property: property.map(str::to_string),
+        cache: HashMap::new(),
+    }
+}
+
 /// Everything the live tools need, or the one sentence explaining what is
 /// missing. The `Err` is a message for a human and for the assistant relaying
 /// it, never a reason to stop serving — see `serve`.

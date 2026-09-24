@@ -600,6 +600,16 @@ fn parse(body: &str) -> Result<Status> {
     serde_json::from_value(row).context("reading the subscription row")
 }
 
+/// The plan one account is on, asked of the service and nobody's cache.
+///
+/// A hosted `craft serve` has no machine to keep a [`Record`] on and no
+/// config to write a flag into — every visitor is somebody else — so it asks
+/// every time, about the account that signed in and nobody else.
+pub async fn lookup(account: &Account) -> Result<Option<Tier>> {
+    project().context("this build has no subscription service configured")?;
+    Ok(fetch(Some(account), None).await?.tier())
+}
+
 /// The launch-time check, run on the way into the dashboard, `craft watch`
 /// and the MCP server.
 ///

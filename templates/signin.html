@@ -2,11 +2,18 @@
 {% block title %}anacraft — sign in with Google{% endblock %}
 {% block pane %}
 <h2>Sign in with Google</h2>
+{%- if shell.hosted %}
+<p>
+  Google asks for two Analytics permissions: one to read your numbers, one to
+  create the property for your site. Leave both ticked.
+</p>
+{%- else %}
 <p>
   The same consent screen <code>craft login</code> shows, because it is the
   same client and the same two Analytics scopes. The credentials are kept by
   the CLI, on this machine.
 </p>
+{%- endif %}
 <form method="post" action="/signin">
   <button class="go" type="submit">
     <svg viewBox="0 0 18 18" aria-hidden="true">

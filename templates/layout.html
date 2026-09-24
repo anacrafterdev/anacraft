@@ -54,8 +54,12 @@
     <h1>Get your GA4 tag.</h1>
     <p class="lede">
       Sign in with Google, pick or create the property for your site, and copy
-      the tag. This page is served by <code>craft serve</code> on your own
+      the tag.
+      {%- if shell.hosted %} Nothing to install: paste the tag into Lovable, v0
+      or Bolt and publish.
+      {%- else %} This page is served by <code>craft serve</code> on your own
       machine — nothing here leaves it but the calls to Google.
+      {%- endif %}
     </p>
 
     <div class="card" data-state="{{ shell.state }}">
@@ -72,8 +76,13 @@
     </div>
 
     <footer>
+      {%- if shell.hosted %}
+      <span><a href="https://anacraft.dev">anacraft.dev</a> ·
+        <a href="https://anacraft.dev/privacy.html">privacy</a></span>
+      {%- else %}
       <span>the endpoints behind this page: <a href="/docs">the API reference</a> ·
         <a href="https://anacraft.dev/serve.html">the guide</a></span>
+      {%- endif %}
       {#- Picking a palette writes the line `craft theme` writes, so the
           terminal and this page are never wearing different clothes. A form
           rather than a script: the chips are submit buttons, and the server

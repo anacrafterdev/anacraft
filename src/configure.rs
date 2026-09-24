@@ -341,7 +341,7 @@ async fn consent_to_write(ga: &Ga, host: &str, consent: &Consent) -> Result<()> 
         // A client's subprocess is not a place to open a browser. The write is
         // allowed on the grant already stored, or not at all — and the refusal
         // names the terminal command that refreshes it.
-        Consent::HeldOnly => match Tokens::load()? {
+        Consent::HeldOnly => match ga.auth().tokens()? {
             Some(tokens) if tokens.granted(SCOPE_EDIT) => Ok(()),
             Some(_) => bail!(
                 "stored credentials don't include the write scope — run `craft login` once \
@@ -957,7 +957,7 @@ fn local_timezone() -> Option<String> {
 
 /// Shaped like `Area/City`, which is all that can be checked without shipping
 /// the tz database. Google rejects anything it does not recognise, and says so.
-fn is_iana(tz: &str) -> bool {
+pub(crate) fn is_iana(tz: &str) -> bool {
     let mut parts = tz.split('/');
     let (Some(area), Some(city)) = (parts.next(), parts.next()) else {
         return false;

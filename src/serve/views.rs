@@ -26,16 +26,16 @@ use std::sync::Arc;
 
 use askama::Template;
 use axum::extract::{Form, FromRequest, Path, Query, Request, State};
-use axum::http::{header, HeaderValue, StatusCode};
+use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
-use axum::Router;
+use axum::{Extension, Router};
 use serde::Deserialize;
 
-use super::{allowed, bare, client, now, require, App, Login, PLAN};
-use crate::auth::{Auth, Cta, Landing, Tokens};
-use crate::config::Config;
+use super::hosted::{self, Ctx, CHROME};
+use super::{allowed, bare, client_in, now, require_in, App, Login, PLAN};
+use crate::auth::{Auth, Cta, Landing};
 use crate::license::{self, Tier};
 
 /// The stylesheet every view links, carried in the binary like the views are.
@@ -83,6 +83,34 @@ pub(super) fn router(app: Arc<App>) -> Router<Arc<App>> {
         .merge(guarded)
 }
 
+/// The same views on a hosted server: sign-in is Google's web flow, the rest
+/// wants a session, and nothing here is the local server's token handshake.
+pub(super) fn hosted_router(app: Arc<App>) -> Router<Arc<App>> {
+    let sessioned = Router::new()
+        .route("/signout", post(signout))
+        .route("/unlock", get(unlock))
+        .route("/unlock/checkout", post(unlock_checkout))
+        .route("/properties", get(properties).post(create))
+        .route("/properties/new", get(new_property))
+        .route("/properties/:id/trash", get(trash_ask).post(trash_do))
+        .route("/properties/:id/streams", get(streams).post(add_stream))
+        .route("/property", post(use_property))
+        .route("/tag/:measurement_id", get(tag))
+        .route("/connect", get(connect_hosted_active))
+        .route("/connect/:id", get(connect_hosted))
+        .route("/connect/off", post(connector_off))
+        .layer(middleware::from_fn_with_state(app, hosted::sessioned));
+
+    Router::new()
+        .route("/", get(landing_hosted))
+        .route("/app.css", get(stylesheet))
+        .route("/signin", get(signin_hosted).post(hosted::start))
+        .route("/signin/consent", get(hosted::start_consent))
+        .route("/oauth/callback", get(oauth_callback))
+        .route("/themes", post(use_theme_hosted))
+        .merge(sessioned)
+}
+
 // --------------------------------------------------------------- the shell ---
 
 pub(super) struct Chip {
@@ -99,6 +127,9 @@ pub(super) struct Shell {
     state: &'static str,
     path: String,
     themes: Vec<Chip>,
+    /// On a hosted server, where "this machine" and "the terminal" mean
+    /// nothing to the person reading.
+    hosted: bool,
 }
 
 impl Shell {
@@ -112,8 +143,16 @@ impl Shell {
     /// saved default into that one selection before anything renders, and a
     /// chip clicked on this page moves it again — so this is the one reading
     /// that is right in all four cases.
+    ///
+    /// On a hosted server the palette is the visitor's own, from the request
+    /// rather than the process — see [`hosted::Chrome`].
     fn new(state: &'static str, path: impl Into<String>) -> Shell {
-        let current = crate::theme::palette().name.to_string();
+        let chrome = CHROME.try_with(|chrome| chrome.clone()).ok();
+        let hosted = chrome.as_ref().is_some_and(|c| c.hosted);
+        let current = match chrome {
+            Some(chrome) => chrome.pal.unwrap_or_else(|| DEFAULT_PAL.to_string()),
+            None => crate::theme::palette().name.to_string(),
+        };
         Shell {
             pal: if current == DEFAULT_PAL {
                 String::new()
@@ -130,6 +169,7 @@ impl Shell {
                     current: p.name == current,
                 })
                 .collect(),
+            hosted,
         }
     }
 
@@ -221,7 +261,7 @@ fn page<T: Template>(view: T) -> Response {
 
 /// The same [`super::Fail`] conversion, in the voice a page uses: the whole
 /// message, because `ga.rs` already wrote it for somebody to read.
-fn why(err: anyhow::Error) -> String {
+pub(super) fn why(err: anyhow::Error) -> String {
     err.chain()
         .map(|cause| cause.to_string())
         .collect::<Vec<_>>()
@@ -236,7 +276,7 @@ fn why(err: anyhow::Error) -> String {
 /// A missing cookie is not an error here — it is somebody who opened
 /// `127.0.0.1:52413/properties` from their history, a day and a port later.
 /// They go to `/`, which knows how to ask for the token.
-async fn keyed(State(app): State<Arc<App>>, request: Request, next: Next) -> Response {
+async fn keyed(State(app): State<Arc<App>>, mut request: Request, next: Next) -> Response {
     app.last.store(now(), Ordering::Relaxed);
 
     if let Some(origin) = request
@@ -256,6 +296,7 @@ async fn keyed(State(app): State<Arc<App>>, request: Request, next: Next) -> Res
     if !holds(&app, &request) {
         return Redirect::to("/").into_response();
     }
+    request.extensions_mut().insert(Ctx::Local);
     next.run(request).await
 }
 
@@ -322,7 +363,7 @@ async fn landing(State(app): State<Arc<App>>, request: Request) -> View {
         }));
     }
 
-    let stand = stand(&app).await.map_err(|message| {
+    let stand = stand(&app, &Ctx::Local).await.map_err(|message| {
         Oops::from(Fault {
             shell: Shell::new("err", "/"),
             message,
@@ -379,7 +420,9 @@ async fn hand_over(State(app): State<Arc<App>>, request: Request) -> Response {
     }
     // A stand this cannot read is not a refusal: `/` will render the same
     // failure with the words around it.
-    let next = stand(&app).await.map_or("/", |stand| where_to(&stand));
+    let next = stand(&app, &Ctx::Local)
+        .await
+        .map_or("/", |stand| where_to(&stand));
     let mut response =
         ([(header::CONTENT_TYPE, "text/plain; charset=utf-8")], next).into_response();
     response
@@ -407,14 +450,14 @@ enum Stand {
     },
 }
 
-async fn stand(app: &App) -> std::result::Result<Stand, String> {
+async fn stand(app: &App, ctx: &Ctx) -> std::result::Result<Stand, String> {
     if app.demo {
         return Ok(Stand::In {
             email: None,
             tier: Some(Tier::Elite),
         });
     }
-    let signed_in = Tokens::load().map_err(why)?.is_some();
+    let signed_in = ctx.has_tokens().map_err(why)?;
     if !signed_in {
         let login = app.login.lock().expect("the login lock is never poisoned");
         return Ok(match &*login {
@@ -426,11 +469,11 @@ async fn stand(app: &App) -> std::result::Result<Stand, String> {
         });
     }
 
-    let account = Auth::account().map_err(why)?;
+    let account = ctx.account().map_err(why)?;
     let email = account.and_then(|a| a.email);
     // Asked rather than cached: a page about to offer a checkout should not
     // offer one to somebody who paid on another laptop ten seconds ago.
-    let tier = license::sync(&Config::load().map_err(why)?).await;
+    let tier = ctx.tier().await.map_err(why)?;
     Ok(if tier.is_some_and(|have| have.meets(PLAN)) {
         Stand::In { email, tier }
     } else {
@@ -459,8 +502,8 @@ struct WaitingView {
     giveup_label: &'static str,
 }
 
-async fn signin(State(app): State<Arc<App>>) -> View {
-    let failure = match stand(&app).await {
+async fn signin(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>) -> View {
+    let failure = match stand(&app, &ctx).await {
         Ok(Stand::Out { failure }) => failure,
         // Signed in already, or mid-flight: `/` is the route that knows.
         Ok(_) => return Ok(Redirect::to("/").into_response()),
@@ -487,7 +530,7 @@ async fn signin(State(app): State<Arc<App>>) -> View {
 /// things — so it runs on a thread with a runtime of its own, exactly as
 /// [`super::session_start`] does, and this redirects to the page that waits.
 async fn signin_start(State(app): State<Arc<App>>) -> Response {
-    if app.demo || Tokens::load().ok().flatten().is_some() {
+    if app.demo || Ctx::Local.has_tokens().unwrap_or(false) {
         return Redirect::to("/").into_response();
     }
     {
@@ -522,9 +565,9 @@ async fn signin_start(State(app): State<Arc<App>>) -> Response {
                             // The same courtesy `craft login` does: register
                             // the account so a subscription bought anywhere
                             // finds it here.
-                            if let Some(account) = Auth::account()? {
+                            if let Some(account) = Ctx::Local.account()? {
                                 let _ = license::link(&account).await;
-                                let _ = license::sync(&Config::load()?).await;
+                                let _ = Ctx::Local.tier().await;
                             }
                             Ok::<(), anyhow::Error>(())
                         })
@@ -542,10 +585,10 @@ async fn signin_start(State(app): State<Arc<App>>) -> Response {
     Redirect::to("/signin/waiting").into_response()
 }
 
-async fn signin_waiting(State(app): State<Arc<App>>) -> View {
+async fn signin_waiting(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>) -> View {
     // Still waiting is the only reason to render this; anything else is `/`'s
     // business, and the meta refresh will carry them there on its own.
-    if !matches!(stand(&app).await, Ok(Stand::Pending)) {
+    if !matches!(stand(&app, &ctx).await, Ok(Stand::Pending)) {
         return Ok(Redirect::to("/").into_response());
     }
     Ok(page(WaitingView {
@@ -560,7 +603,12 @@ async fn signin_waiting(State(app): State<Arc<App>>) -> View {
 
 /// Revoke the credentials and forget them, then start over at `/` — which
 /// will send them to the sign-in, because that is now where they stand.
-async fn signout(State(app): State<Arc<App>>) -> View {
+async fn signout(State(app): State<Arc<App>>, headers: HeaderMap) -> View {
+    // A hosted visitor's sign-in is a session, and signing out forgets it —
+    // nothing on this machine was ever theirs to revoke or delete.
+    if app.hosted.is_some() {
+        return Ok(hosted::close(&app, &headers));
+    }
     let oops = |err: anyhow::Error| {
         Oops::from(Fault {
             shell: Shell::new("err", "/"),
@@ -596,9 +644,9 @@ struct CheckoutView {
     url: String,
 }
 
-async fn unlock(State(app): State<Arc<App>>) -> View {
+async fn unlock(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>) -> View {
     let shell = Shell::new("pay", "/unlock");
-    let (email, tier) = match stand(&app).await {
+    let (email, tier) = match stand(&app, &ctx).await {
         Ok(Stand::Unpaid { email, tier }) => (email, tier),
         // Paid up, or not signed in at all: `/` knows which, and a paywall is
         // the wrong thing to show either of them.
@@ -647,7 +695,7 @@ async fn unlock(State(app): State<Arc<App>>) -> View {
 /// A checkout URL already tied to the signed-in account, so the payment lands
 /// on the row every `craft` command reads afterwards. The same two steps
 /// `craft subscribe` takes, and the same two [`super::checkout`] takes.
-async fn unlock_checkout(State(app): State<Arc<App>>) -> View {
+async fn unlock_checkout(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>) -> View {
     let shell = Shell::new("pay", "/unlock");
     let oops = |message: String| {
         Oops::from(Fault {
@@ -663,7 +711,8 @@ async fn unlock_checkout(State(app): State<Arc<App>>) -> View {
                 .into(),
         ));
     }
-    let account = Auth::account()
+    let account = ctx
+        .account()
         .map_err(|err| oops(why(err)))?
         .ok_or_else(|| oops("nothing is signed in yet.".into()))?;
 
@@ -719,7 +768,7 @@ struct PropertiesView {
     properties: Vec<Row>,
 }
 
-async fn properties(State(app): State<Arc<App>>) -> View {
+async fn properties(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>) -> View {
     let shell = Shell::new("pick", "/properties");
     let oops = |message: String| {
         Oops::from(Fault {
@@ -732,7 +781,7 @@ async fn properties(State(app): State<Arc<App>>) -> View {
     // Asked here rather than assumed: somebody who signed out in another tab,
     // or whose plan lapsed while this one sat open, belongs at `/` and not on
     // a list this login can no longer read.
-    let (email, tier) = match stand(&app).await {
+    let (email, tier) = match stand(&app, &ctx).await {
         Ok(Stand::In { email, tier }) => (email, tier),
         Ok(_) => return Ok(Redirect::to("/").into_response()),
         Err(message) => return Err(oops(message)),
@@ -749,7 +798,7 @@ async fn properties(State(app): State<Arc<App>>) -> View {
         }));
     }
 
-    let ga = client().await.map_err(|fail| oops(fail.message))?;
+    let ga = client_in(&ctx).await.map_err(|fail| oops(fail.message))?;
     let found = ga.properties().await.map_err(|err| oops(why(err)))?;
 
     Ok(page(PropertiesView {
@@ -775,6 +824,11 @@ struct NewView {
 #[derive(Deserialize)]
 struct Site {
     url: String,
+    /// The browser's zone, which the form fills in. Only a hosted server
+    /// uses it: a local one is on the same machine as the browser, and the
+    /// machine's own zone is what `craft configure` has always used.
+    #[serde(default)]
+    timezone: Option<String>,
 }
 
 async fn new_property() -> View {
@@ -796,7 +850,11 @@ async fn new_property() -> View {
 /// measures this host, finish a property that never got a stream, or create
 /// both — so this is the same behaviour `craft configure` has and the same
 /// [`super::register`] answers in JSON.
-async fn create(State(app): State<Arc<App>>, Form(body): Form<Site>) -> View {
+async fn create(
+    State(app): State<Arc<App>>,
+    Extension(ctx): Extension<Ctx>,
+    Form(body): Form<Site>,
+) -> View {
     let oops = |message: String| {
         Oops::from(Fault {
             shell: Shell::new("err", "/properties/new"),
@@ -813,17 +871,21 @@ async fn create(State(app): State<Arc<App>>, Form(body): Form<Site>) -> View {
         ))
         .into_response());
     }
-    require("registering a tag")
+    require_in(&ctx, "registering a tag")
         .await
         .map_err(|fail| oops(fail.message))?;
 
-    let ga = client().await.map_err(|fail| oops(fail.message))?;
+    let ga = client_in(&ctx).await.map_err(|fail| oops(fail.message))?;
     let setup = crate::configure::setup(
         &ga,
         &host,
         crate::configure::Options {
             account: None,
-            timezone: None,
+            // A hosted server's own zone is its container's — UTC — and
+            // nobody's reporting day.
+            timezone: body
+                .timezone
+                .filter(|tz| ctx.hosted() && crate::configure::is_iana(tz)),
             currency: "USD".to_string(),
         },
         crate::configure::Consent::HeldOnly,
@@ -857,7 +919,11 @@ struct StreamsView {
 
 /// One stream is not a choice, and none is a form. Only the middle case is a
 /// page, which is why this route redirects more often than it renders.
-async fn streams(State(app): State<Arc<App>>, Path(id): Path<String>) -> View {
+async fn streams(
+    State(app): State<Arc<App>>,
+    Extension(ctx): Extension<Ctx>,
+    Path(id): Path<String>,
+) -> View {
     let property = bare(&id);
     let oops = |message: String| {
         Oops::from(Fault {
@@ -874,12 +940,12 @@ async fn streams(State(app): State<Arc<App>>, Path(id): Path<String>) -> View {
         );
     }
 
-    let ga = client().await.map_err(|fail| oops(fail.message))?;
+    let ga = client_in(&ctx).await.map_err(|fail| oops(fail.message))?;
     let found = ga
         .web_streams(&property)
         .await
         .map_err(|err| oops(why(err)))?;
-    let cfg = Config::load().unwrap_or_default();
+    let cfg = ctx.config().unwrap_or_default();
     let named = cfg.find(&property).map(|p| p.display()).unwrap_or_default();
 
     if found.len() == 1 {
@@ -925,6 +991,7 @@ async fn streams(State(app): State<Arc<App>>, Path(id): Path<String>) -> View {
 
 async fn add_stream(
     State(app): State<Arc<App>>,
+    Extension(ctx): Extension<Ctx>,
     Path(id): Path<String>,
     Form(body): Form<Site>,
 ) -> View {
@@ -946,11 +1013,11 @@ async fn add_stream(
         ))
         .into_response());
     }
-    require("adding a web stream")
+    require_in(&ctx, "adding a web stream")
         .await
         .map_err(|fail| oops(fail.message))?;
 
-    let ga = client().await.map_err(|fail| oops(fail.message))?;
+    let ga = client_in(&ctx).await.map_err(|fail| oops(fail.message))?;
     let stream = ga
         .create_web_stream(&property, &host, &format!("https://{host}"))
         .await
@@ -980,12 +1047,16 @@ struct Named {
     n: Option<String>,
 }
 
-async fn trash_ask(Path(id): Path<String>, Query(named): Query<Named>) -> View {
+async fn trash_ask(
+    Extension(ctx): Extension<Ctx>,
+    Path(id): Path<String>,
+    Query(named): Query<Named>,
+) -> View {
     let property = bare(&id);
     let name = named
         .n
         .or_else(|| {
-            Config::load()
+            ctx.config()
                 .ok()
                 .and_then(|cfg| cfg.find(&property).map(|p| p.display()))
         })
@@ -1013,6 +1084,7 @@ struct Confirm {
 /// is: a page to say it on, and the id said again in the form.
 async fn trash_do(
     State(app): State<Arc<App>>,
+    Extension(ctx): Extension<Ctx>,
     Path(id): Path<String>,
     Form(body): Form<Confirm>,
 ) -> View {
@@ -1037,7 +1109,7 @@ async fn trash_do(
         ));
     }
 
-    let ga = client().await.map_err(|fail| oops(fail.message))?;
+    let ga = client_in(&ctx).await.map_err(|fail| oops(fail.message))?;
     ga.delete_property(&property)
         .await
         .map_err(|err| oops(why(err)))?;
@@ -1046,9 +1118,9 @@ async fn trash_do(
     // forgetting is local and reversible and a failed API call is not a
     // reason to have already pointed the dashboard away from a property that
     // is still sitting there collecting.
-    let mut cfg = Config::load().map_err(|err| oops(why(err)))?;
+    let mut cfg = ctx.config().map_err(|err| oops(why(err)))?;
     if cfg.remove(&property) {
-        cfg.save().map_err(|err| oops(why(err)))?;
+        ctx.save(cfg).map_err(|err| oops(why(err)))?;
     }
     Ok(Redirect::to("/properties").into_response())
 }
@@ -1090,7 +1162,11 @@ struct Which {
     saved: Option<String>,
 }
 
-async fn tag(Path(measurement_id): Path<String>, Query(which): Query<Which>) -> View {
+async fn tag(
+    Extension(ctx): Extension<Ctx>,
+    Path(measurement_id): Path<String>,
+    Query(which): Query<Which>,
+) -> View {
     let id = measurement_id.trim().to_uppercase();
     if !id.starts_with("G-") || id.len() < 4 {
         return Err(Oops::from(Fault {
@@ -1154,7 +1230,9 @@ async fn tag(Path(measurement_id): Path<String>, Query(which): Query<Which>) -> 
         } else {
             "Read it from the terminal whenever you like:"
         },
-        can_default: !property.is_empty() && which.saved.is_none(),
+        // A default is a line in a config file somebody's dashboard reads;
+        // a hosted visitor has no such file.
+        can_default: !ctx.hosted() && !property.is_empty() && which.saved.is_none(),
         property_id: property,
     }))
 }
@@ -1180,13 +1258,106 @@ struct ConnectView {
 }
 
 /// The active property's connector, for the link that does not name one.
-async fn connect(State(app): State<Arc<App>>) -> View {
+async fn connect(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>) -> View {
     let id = app
         .property
         .clone()
-        .or_else(|| Config::load().ok().and_then(|cfg| cfg.active))
+        .or_else(|| ctx.config().ok().and_then(|cfg| cfg.active))
         .unwrap_or_default();
-    wire_up(&app, &id, None).await
+    wire_up(&app, &ctx, &id, None).await
+}
+
+/// `/connect` on a hosted server: the property picked last, else the list.
+async fn connect_hosted_active(
+    State(app): State<Arc<App>>,
+    Extension(ctx): Extension<Ctx>,
+) -> View {
+    let id = ctx
+        .config()
+        .ok()
+        .and_then(|cfg| cfg.active)
+        .unwrap_or_default();
+    if id.is_empty() {
+        return Ok(Redirect::to("/properties").into_response());
+    }
+    hosted_wire(&app, &ctx, &id, None).await
+}
+
+async fn connect_hosted(
+    State(app): State<Arc<App>>,
+    Extension(ctx): Extension<Ctx>,
+    Path(id): Path<String>,
+    Query(named): Query<Named>,
+) -> View {
+    hosted_wire(&app, &ctx, &bare(&id), named.n.as_deref()).await
+}
+
+/// The connector a hosted user pastes into Claude or ChatGPT: their link,
+/// naming this property, answered by this server with their stored grant.
+async fn hosted_wire(app: &App, ctx: &Ctx, id: &str, name: Option<&str>) -> View {
+    let oops = |message: String| {
+        Oops::from(Fault {
+            shell: Shell::new("err", "/connect"),
+            message,
+            back: "/properties".into(),
+        })
+    };
+    let (email, tier) = match stand(app, ctx).await {
+        Ok(Stand::In { email, tier }) => (email, tier),
+        Ok(_) => return Ok(Redirect::to("/").into_response()),
+        Err(message) => return Err(oops(message)),
+    };
+    let account = ctx
+        .account()
+        .map_err(|err| oops(why(err)))?
+        .ok_or_else(|| oops("nothing is signed in.".into()))?;
+    let hosted = app.hosted.as_ref().expect("a hosted route");
+    let Some(wire) = hosted.connector(&account, id) else {
+        return Err(oops(
+            "this server has no MCP connector switched on — install craft and run \
+             `craft mcp --install` to wire an assistant from your own machine."
+                .into(),
+        ));
+    };
+
+    // Remembered for this session, so `/connect` comes back to it.
+    if let Ok(mut cfg) = ctx.config() {
+        cfg.upsert(id, name.map(str::to_string));
+        let _ = ctx.save(cfg);
+    }
+
+    Ok(page(ConnectView {
+        shell: Shell::new("out", format!("/connect/{id}")).signed(email.as_deref(), tier),
+        reads: match name.filter(|n| !n.is_empty()) {
+            Some(name) => format!("Reads {name} — property {id}."),
+            None => format!("Reads property {id}."),
+        },
+        url: wire.url,
+        token: wire.token,
+        link: wire.link,
+        command: wire.command,
+        note: "hosted",
+    }))
+}
+
+/// `POST /connect/off`: every connector link this user has stops answering,
+/// and their stored grant is deleted.
+async fn connector_off(State(app): State<Arc<App>>, Extension(ctx): Extension<Ctx>) -> View {
+    let oops = |message: String| {
+        Oops::from(Fault {
+            shell: Shell::new("err", "/properties"),
+            message,
+            back: "/properties".into(),
+        })
+    };
+    let account = ctx
+        .account()
+        .map_err(|err| oops(why(err)))?
+        .ok_or_else(|| oops("nothing is signed in.".into()))?;
+    hosted::connector_off(&app, &account)
+        .await
+        .map_err(|err| oops(why(err)))?;
+    Ok(Redirect::to("/properties").into_response())
 }
 
 /// One property's connector.
@@ -1196,11 +1367,12 @@ async fn connect(State(app): State<Arc<App>>) -> View {
 /// several sites the assistant should be reading.
 async fn connect_to(
     State(app): State<Arc<App>>,
+    Extension(ctx): Extension<Ctx>,
     Path(id): Path<String>,
     Query(named): Query<Named>,
 ) -> View {
     let id = bare(&id);
-    wire_up(&app, &id, named.n.as_deref()).await
+    wire_up(&app, &ctx, &id, named.n.as_deref()).await
 }
 
 /// The three strings, on a page, with a button beside each.
@@ -1209,7 +1381,7 @@ async fn connect_to(
 /// sits in a terminal somebody has since used for something else, and cannot
 /// be clicked — and the person wiring up a sandboxed client is doing it in a
 /// window next to this one.
-async fn wire_up(app: &App, id: &str, name: Option<&str>) -> View {
+async fn wire_up(app: &App, ctx: &Ctx, id: &str, name: Option<&str>) -> View {
     let oops = |message: String| {
         Oops::from(Fault {
             shell: Shell::new("err", "/connect"),
@@ -1221,7 +1393,7 @@ async fn wire_up(app: &App, id: &str, name: Option<&str>) -> View {
     // The same look `/properties` takes, for the same reason: `/v1/mcp`
     // answers only on the plan, and handing a connector to somebody who
     // cannot use it has sent them off to debug a 402.
-    let (email, tier) = match stand(app).await {
+    let (email, tier) = match stand(app, ctx).await {
         Ok(Stand::In { email, tier }) => (email, tier),
         Ok(_) => return Ok(Redirect::to("/").into_response()),
         Err(message) => return Err(oops(message)),
@@ -1232,10 +1404,10 @@ async fn wire_up(app: &App, id: &str, name: Option<&str>) -> View {
     // machine knows about. Nothing else moves: the active property is a
     // separate choice, made by a button that says so.
     if !app.demo && !id.is_empty() {
-        if let Ok(mut cfg) = Config::load() {
+        if let Ok(mut cfg) = ctx.config() {
             if cfg.find(id).is_none() {
                 cfg.upsert(id, name.map(str::to_string));
-                cfg.save().map_err(|err| oops(why(err)))?;
+                ctx.save(cfg).map_err(|err| oops(why(err)))?;
             }
         }
     }
@@ -1243,7 +1415,7 @@ async fn wire_up(app: &App, id: &str, name: Option<&str>) -> View {
     let wire = super::Connector::new(app.port, app.token_for(id));
     Ok(page(ConnectView {
         shell: Shell::new("out", format!("/connect/{id}")).signed(email.as_deref(), tier),
-        reads: reads(app, id, name),
+        reads: reads(app, ctx, id, name),
         url: wire.url,
         token: wire.token,
         link: wire.link,
@@ -1265,7 +1437,7 @@ fn note(app: &App) -> &'static str {
 
 /// The one sentence that says what an assistant wired up here would be
 /// reading, so nobody hands an agent the numbers for the wrong site.
-fn reads(app: &App, id: &str, name: Option<&str>) -> String {
+fn reads(app: &App, ctx: &Ctx, id: &str, name: Option<&str>) -> String {
     if app.demo {
         return "Synthetic data, on the same tools as the real thing.".into();
     }
@@ -1276,7 +1448,7 @@ fn reads(app: &App, id: &str, name: Option<&str>) -> String {
         .filter(|name| !name.is_empty())
         .map(str::to_string)
         .or_else(|| {
-            Config::load()
+            ctx.config()
                 .ok()
                 .and_then(|cfg| cfg.find(id).map(|p| p.display()))
         });
@@ -1311,7 +1483,11 @@ struct Chosen {
 /// `craft use`, over a form. It checks the property is one this login can see
 /// before writing it down, for the same reason the command does: a default
 /// nothing can read is a dashboard that opens on an error.
-async fn use_property(State(app): State<Arc<App>>, Form(body): Form<Chosen>) -> View {
+async fn use_property(
+    State(app): State<Arc<App>>,
+    Extension(ctx): Extension<Ctx>,
+    Form(body): Form<Chosen>,
+) -> View {
     let back = back_to(body.back.as_deref());
     let oops = |message: String| {
         Oops::from(Fault {
@@ -1325,7 +1501,7 @@ async fn use_property(State(app): State<Arc<App>>, Form(body): Form<Chosen>) -> 
     }
 
     let wanted = bare(&body.id);
-    let ga = client().await.map_err(|fail| oops(fail.message))?;
+    let ga = client_in(&ctx).await.map_err(|fail| oops(fail.message))?;
     let found = ga
         .properties()
         .await
@@ -1334,9 +1510,9 @@ async fn use_property(State(app): State<Arc<App>>, Form(body): Form<Chosen>) -> 
         .find(|p| p.id == wanted)
         .ok_or_else(|| oops(format!("no property {wanted} on this account")))?;
 
-    let mut cfg = Config::load().map_err(|err| oops(why(err)))?;
+    let mut cfg = ctx.config().map_err(|err| oops(why(err)))?;
     cfg.upsert(&found.id, Some(found.name));
-    cfg.save().map_err(|err| oops(why(err)))?;
+    ctx.save(cfg).map_err(|err| oops(why(err)))?;
     Ok(Redirect::to(&back).into_response())
 }
 
@@ -1364,12 +1540,76 @@ async fn use_theme(State(app): State<Arc<App>>, Form(body): Form<Palette>) -> Vi
     // is something on this machine. The run still wears it; it just does not
     // outlive the run.
     if !app.demo {
-        if let Ok(mut cfg) = Config::load() {
+        if let Ok(mut cfg) = crate::config::Config::load() {
             cfg.theme = Some(body.name);
             let _ = cfg.save();
         }
     }
     Ok(Redirect::to(&back).into_response())
+}
+
+/// A palette chip on a hosted server: the visitor's choice, in a cookie of
+/// their own, and never the process-wide palette every other visitor wears.
+async fn use_theme_hosted(Form(body): Form<Palette>) -> Response {
+    let back = back_to(body.back.as_deref());
+    if !hosted::known_palette(&body.name) {
+        return (StatusCode::BAD_REQUEST, "no such palette").into_response();
+    }
+    let mut response = Redirect::to(&back).into_response();
+    response
+        .headers_mut()
+        .insert(header::SET_COOKIE, hosted::palette_cookie(&body.name));
+    response
+}
+
+// ------------------------------------------------------------- hosted way in ---
+
+/// `/` on a hosted server: straight to wherever a signed-in visitor stands,
+/// or to the sign-in. Never the local server's "open the URL the terminal
+/// printed" — there is no terminal.
+async fn landing_hosted(State(app): State<Arc<App>>, headers: HeaderMap) -> View {
+    let Some(ctx) = hosted::signed_in(&app, &headers) else {
+        return Ok(Redirect::to("/signin").into_response());
+    };
+    let stand = stand(&app, &ctx).await.map_err(|message| {
+        Oops::from(Fault {
+            shell: Shell::new("err", "/"),
+            message,
+            back: "/".into(),
+        })
+    })?;
+    Ok(Redirect::to(where_to(&stand)).into_response())
+}
+
+const HOSTED_NOTE: &str = "Your Google sign-in is held for this session only — signing out, \
+                           or an hour, forgets it.";
+
+async fn signin_hosted(State(app): State<Arc<App>>, headers: HeaderMap) -> View {
+    if hosted::signed_in(&app, &headers).is_some() {
+        return Ok(Redirect::to("/").into_response());
+    }
+    Ok(page(SignInView {
+        shell: Shell::new("out", "/signin"),
+        note: HOSTED_NOTE.into(),
+    }))
+}
+
+async fn oauth_callback(
+    State(app): State<Arc<App>>,
+    headers: HeaderMap,
+    Query(back): Query<hosted::Callback>,
+) -> Response {
+    match hosted::callback(&app, &headers, back).await {
+        Ok(response) => response,
+        Err(refused) => {
+            let mut response = page(SignInView {
+                shell: Shell::new("err", "/signin"),
+                note: format!("last attempt: {}", refused.say()),
+            });
+            *response.status_mut() = StatusCode::BAD_REQUEST;
+            response
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1504,6 +1744,12 @@ mod tests {
             "/tag/:x",
             "/signin/waiting",
             "/session/key",
+            // Where Google sends a hosted sign-in back to, which no page
+            // links and every sign-in lands on.
+            "/oauth/callback",
+            // Where a sign-in is sent back round when the connector needs a
+            // refresh token and Google did not send one.
+            "/signin/consent",
         ];
         let linked: Vec<String> = TEMPLATES
             .iter()

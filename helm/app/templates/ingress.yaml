@@ -14,8 +14,8 @@ spec:
     checkIntervalSec: 15
     timeoutSec: 5
 ---
-# The session cookie is not Secure (craft serve expects plain-http loopback),
-# so plain http is redirected rather than served.
+# The session cookie is Secure and would never be sent over plain http, so
+# plain http is redirected rather than served a sign-in that cannot stick.
 apiVersion: networking.gke.io/v1beta1
 kind: FrontendConfig
 metadata:

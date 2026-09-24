@@ -42,8 +42,13 @@
 <p class="fine">{{ hint }}</p>
 
 <div class="next">
+  {%- if shell.hosted %}
+  <p>Publish, then ask Claude or ChatGPT how it is doing — <b>wire up an AI
+    tool</b> below hands you the link to paste into it.</p>
+  {%- else %}
   <p>{{ next_line }}</p>
   <div class="cmd"><span class="p">$</span><span>craft dash</span></div>
+  {%- endif %}
   <div class="acts">
     {%- if can_default %}
     <form method="post" action="/property">

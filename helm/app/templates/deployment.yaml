@@ -29,16 +29,16 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
+          # Everything in the synced secret — the Web OAuth client and, when
+          # the connector is on, the grant store's two keys.
+          envFrom:
+            - secretRef:
+                name: anacraft-app-secrets
           env:
             - name: PUBLIC_ORIGIN
               value: "https://{{ .Values.host }}"
             - name: CRAFT_DEMO
               value: {{ .Values.demo | quote }}
-            - name: CRAFT_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: anacraft-app-secrets
-                  key: CRAFT_TOKEN
           # /v1/health is open and touches nothing downstream.
           readinessProbe:
             httpGet:

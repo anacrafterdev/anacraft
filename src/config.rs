@@ -126,7 +126,7 @@ impl Property {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Config {
     /// Id of the property the dashboard opens on.
     #[serde(skip_serializing_if = "Option::is_none")]

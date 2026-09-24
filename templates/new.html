@@ -7,6 +7,12 @@
   <label for="url">Your site's URL</label>
   <input id="url" name="url" type="url" inputmode="url" autofocus required
     placeholder="https://myapp.lovable.app" value="{{ url }}">
+  {#- The reporting day is the site owner's, and the browser knows which zone
+      that is. A server a thousand miles away does not. -#}
+  <input type="hidden" name="timezone" id="tz">
+  <script>
+    try { document.getElementById('tz').value = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
+  </script>
   <div class="acts">
     <button class="primary" type="submit" style="margin-top:0">{{ submit }}</button>
     <a class="lnk" href="/properties">back to the list</a>

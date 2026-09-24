@@ -314,6 +314,16 @@ impl Ga {
         Ok(Ga { http, auth })
     }
 
+    /// A client on credentials the caller holds — one hosted session's —
+    /// rather than this machine's.
+    pub fn with(creds: crate::auth::ClientCreds, store: crate::auth::Store) -> Result<Ga> {
+        let http = reqwest::Client::builder()
+            .user_agent(concat!("anacraft/", env!("CARGO_PKG_VERSION")))
+            .build()?;
+        let auth = Auth::with(http.clone(), creds, store);
+        Ok(Ga { http, auth })
+    }
+
     /// The credential store behind this client, so a command that needs a
     /// wider scope than reporting can ask for one before it starts.
     pub fn auth(&self) -> &Auth {

@@ -42,6 +42,9 @@ toml = "0.8"
 # a binary tuned for size, and none of them is used. Escaping is not a
 # feature — it is what the templates are for.
 askama = { version = "0.12", default-features = false }
+# Seals a hosted user's Google refresh token before it goes to Supabase, so
+# the table holds nothing usable without the key in Secret Manager.
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc", "getrandom"] }
 
 [profile.release]
 opt-level = "z"

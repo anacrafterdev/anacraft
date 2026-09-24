@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
+use std::sync::{Arc, Mutex};
 
 /// Analytics read and edit, plus the two non-sensitive OpenID scopes.
 ///
@@ -31,6 +32,9 @@ use std::net::{Ipv4Addr, TcpListener, TcpStream};
 /// consent screen when somebody is already following the setup guide.
 const SCOPE: &str = "openid email https://www.googleapis.com/auth/analytics.readonly \
      https://www.googleapis.com/auth/analytics.edit";
+
+/// The read scope every report needs.
+pub const SCOPE_READ: &str = "https://www.googleapis.com/auth/analytics.readonly";
 
 /// The write scope, included in [`SCOPE`] so login covers it from the start.
 ///
@@ -95,9 +99,37 @@ impl ClientCreds {
             ),
         }
     }
+
+    /// The *Web application* client behind a hosted `craft serve`, from the
+    /// environment and nowhere else.
+    ///
+    /// Never the compiled-in Desktop client as a fallback: Google only
+    /// redirects a Desktop client to loopback, so a hosted sign-in on it
+    /// could never come back, and a token is only refreshed by the client
+    /// that issued it.
+    pub fn web() -> Result<ClientCreds> {
+        match (
+            std::env::var("ANACRAFT_WEB_OAUTH_CLIENT_ID"),
+            std::env::var("ANACRAFT_WEB_OAUTH_CLIENT_SECRET"),
+        ) {
+            (Ok(id), Ok(secret)) if !id.trim().is_empty() && !secret.trim().is_empty() => {
+                Ok(ClientCreds {
+                    client_id: id,
+                    client_secret: secret,
+                })
+            }
+            _ => bail!(
+                "a hosted `craft serve` needs a Google *Web application* OAuth client:\n  \
+                 export ANACRAFT_WEB_OAUTH_CLIENT_ID=... ANACRAFT_WEB_OAUTH_CLIENT_SECRET=...\n  \
+                 (its redirect URI is <public url>/oauth/callback)"
+            ),
+        }
+    }
 }
 
-#[derive(Serialize, Deserialize)]
+/// No `Debug`, on purpose, and it must never gain one: a hosted server holds
+/// other people's tokens, and a `{:?}` in a log line is how they would leak.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Tokens {
     pub access_token: String,
     pub refresh_token: String,
@@ -203,9 +235,51 @@ fn account_from_id_token(id_token: &str) -> Option<Account> {
         .filter(|a| !a.sub.is_empty())
 }
 
+/// Where an [`Auth`] keeps its tokens.
+///
+/// `Disk` is the CLI's `~/.anacraft/token.json`, as it has always been.
+/// `Memory` is one hosted session's, shared with the session that owns it, so
+/// a refresh made on its behalf lands where the next request will look — and
+/// nowhere a second visitor could read it.
+#[derive(Clone)]
+pub enum Store {
+    Disk,
+    Memory(Arc<Mutex<Option<Tokens>>>),
+}
+
+impl Store {
+    pub fn load(&self) -> Result<Option<Tokens>> {
+        match self {
+            Store::Disk => Tokens::load(),
+            Store::Memory(held) => Ok(held.lock().expect("token lock poisoned").clone()),
+        }
+    }
+
+    pub fn save(&self, tokens: &Tokens) -> Result<()> {
+        match self {
+            Store::Disk => tokens.save(),
+            Store::Memory(held) => {
+                *held.lock().expect("token lock poisoned") = Some(tokens.clone());
+                Ok(())
+            }
+        }
+    }
+
+    pub fn clear(&self) -> Result<()> {
+        match self {
+            Store::Disk => Tokens::clear(),
+            Store::Memory(held) => {
+                *held.lock().expect("token lock poisoned") = None;
+                Ok(())
+            }
+        }
+    }
+}
+
 pub struct Auth {
     http: reqwest::Client,
     creds: ClientCreds,
+    store: Store,
 }
 
 /// Which kind of trip through the consent screen this is.
@@ -226,16 +300,36 @@ impl Auth {
         Ok(Auth {
             http,
             creds: ClientCreds::load()?,
+            store: Store::Disk,
         })
+    }
+
+    /// An `Auth` on a client and a store the caller chose — a hosted
+    /// session's, rather than this machine's.
+    pub fn with(http: reqwest::Client, creds: ClientCreds, store: Store) -> Auth {
+        Auth { http, creds, store }
+    }
+
+    /// The tokens behind this `Auth`, wherever they are kept.
+    pub fn tokens(&self) -> Result<Option<Tokens>> {
+        self.store.load()
     }
 
     /// A valid bearer token, refreshing transparently when needed.
     pub async fn access_token(&self) -> Result<String> {
-        let mut tokens = Tokens::load()?.context("not logged in — run `craft login`")?;
+        let mut tokens = self
+            .store
+            .load()?
+            .context("not logged in — run `craft login`")?;
 
         if tokens.is_stale() {
-            tokens = self.refresh(&tokens.refresh_token).await?;
-            tokens.save()?;
+            // A hosted session signs in for online access and holds no
+            // refresh token, so a stale one is the end of it.
+            if tokens.refresh_token.is_empty() {
+                bail!("session expired — sign in again");
+            }
+            tokens = self.refresh(&tokens).await?;
+            self.store.save(&tokens)?;
         }
         Ok(tokens.access_token)
     }
@@ -245,7 +339,8 @@ impl Auth {
         Ok(Tokens::load()?.and_then(|t| t.account))
     }
 
-    async fn refresh(&self, refresh_token: &str) -> Result<Tokens> {
+    async fn refresh(&self, old: &Tokens) -> Result<Tokens> {
+        let refresh_token = old.refresh_token.as_str();
         let res = self
             .http
             .post(TOKEN_URL)
@@ -262,8 +357,15 @@ impl Auth {
         if !res.status().is_success() {
             let body = res.text().await.unwrap_or_default();
             // A revoked or expired refresh token is unrecoverable; make the
-            // fix obvious instead of surfacing raw JSON.
-            bail!("session expired — run `craft login` again\n  ({body})");
+            // fix obvious instead of surfacing raw JSON — and name the fix
+            // for where the grant lives: this machine, or a hosted server.
+            match self.store {
+                Store::Disk => bail!("session expired — run `craft login` again\n  ({body})"),
+                Store::Memory(_) => bail!(
+                    "the Google access behind this connector has expired or was revoked — \
+                     sign in again at app.anacraft.dev\n  ({body})"
+                ),
+            }
         }
 
         let body: TokenResponse = res.json().await?;
@@ -283,13 +385,11 @@ impl Auth {
                 .id_token
                 .as_deref()
                 .and_then(account_from_id_token)
-                .or_else(|| Tokens::load().ok().flatten().and_then(|t| t.account)),
+                .or_else(|| old.account.clone()),
             // A refresh response repeats the granted scopes, but not on every
             // path; keeping the stored set when it doesn't is what stops a
             // refresh from silently "losing" a permission the user granted.
-            scope: body
-                .scope
-                .or_else(|| Tokens::load().ok().flatten().and_then(|t| t.scope)),
+            scope: body.scope.or_else(|| old.scope.clone()),
         })
     }
 
@@ -337,7 +437,7 @@ impl Auth {
     /// is handed back still waiting, and [`Consented::show`] is what answers
     /// it — with [`GRANTED`] for every caller that knew all along.
     pub async fn ensure_scope(&self, scope: &str, why: &str) -> Result<Consented> {
-        let stored = Tokens::load()?;
+        let stored = self.store.load()?;
         if stored.as_ref().is_some_and(|t| t.granted(scope)) {
             return Ok(Consented::AlreadyHeld);
         }
@@ -398,35 +498,16 @@ impl Auth {
 
         let (code, tab) = wait_for_code(&listener, &state)?;
 
-        let res = self
-            .http
-            .post(TOKEN_URL)
-            .form(&[
-                ("client_id", self.creds.client_id.as_str()),
-                ("client_secret", self.creds.client_secret.as_str()),
-                ("code", code.as_str()),
-                ("code_verifier", verifier.as_str()),
-                ("grant_type", "authorization_code"),
-                ("redirect_uri", redirect_uri.as_str()),
-            ])
-            .send()
-            .await?;
-
-        if !res.status().is_success() {
-            let body = res.text().await.unwrap_or_default();
-            bail!("Google rejected the login: {body}");
-        }
-
-        let body: TokenResponse = res.json().await?;
-        let granted = body.scope.clone().unwrap_or_else(|| scope.to_string());
+        let fresh = self.exchange(&code, &verifier, &redirect_uri).await?;
+        let granted = fresh.scope.clone().unwrap_or_else(|| scope.to_string());
 
         // `prompt=consent` means Google issues a refresh token every time,
         // including on the incremental grant. Falling back to the stored one
         // is belt and braces: re-consenting must never leave the install
         // unable to refresh.
-        let stored = Tokens::load().ok().flatten();
-        let refresh_token = body
-            .refresh_token
+        let stored = self.store.load().ok().flatten();
+        let refresh_token = Some(fresh.refresh_token)
+            .filter(|t| !t.is_empty())
             .or_else(|| stored.as_ref().map(|t| t.refresh_token.clone()))
             .ok_or_else(|| {
                 anyhow!(
@@ -446,25 +527,94 @@ impl Auth {
             }
         }
 
-        Tokens {
-            access_token: body.access_token,
+        self.store.save(&Tokens {
+            access_token: fresh.access_token,
             refresh_token,
-            expires_at: Utc::now() + Duration::seconds(body.expires_in),
-            account: body
-                .id_token
-                .as_deref()
-                .and_then(account_from_id_token)
-                .or_else(|| stored.and_then(|t| t.account)),
+            expires_at: fresh.expires_at,
+            account: fresh.account.or_else(|| stored.and_then(|t| t.account)),
             scope: Some(granted),
-        }
-        .save()?;
+        })?;
 
         Ok(tab)
     }
 
+    /// Trade an authorization code for tokens, saving nothing.
+    ///
+    /// The half of a sign-in both redirects share: the loopback one above,
+    /// which then keeps what it gets on disk, and a hosted server's
+    /// `/oauth/callback`, which keeps it in one session. `refresh_token` is
+    /// empty when Google issued none, which is what online access asks for.
+    pub(crate) async fn exchange(
+        &self,
+        code: &str,
+        verifier: &str,
+        redirect_uri: &str,
+    ) -> Result<Tokens> {
+        let res = self
+            .http
+            .post(TOKEN_URL)
+            .form(&[
+                ("client_id", self.creds.client_id.as_str()),
+                ("client_secret", self.creds.client_secret.as_str()),
+                ("code", code),
+                ("code_verifier", verifier),
+                ("grant_type", "authorization_code"),
+                ("redirect_uri", redirect_uri),
+            ])
+            .send()
+            .await?;
+
+        if !res.status().is_success() {
+            let body = res.text().await.unwrap_or_default();
+            bail!("Google rejected the login: {body}");
+        }
+
+        let body: TokenResponse = res.json().await?;
+        Ok(Tokens {
+            access_token: body.access_token,
+            refresh_token: body.refresh_token.unwrap_or_default(),
+            expires_at: Utc::now() + Duration::seconds(body.expires_in),
+            account: body.id_token.as_deref().and_then(account_from_id_token),
+            scope: body.scope,
+        })
+    }
+
+    /// Where a hosted sign-in sends the browser: Google's consent screen for
+    /// this client, coming back to `redirect_uri`.
+    ///
+    /// `offline` asks for a refresh token, which a server with an MCP
+    /// connector keeps (sealed) so an assistant can read next week; without
+    /// one, a session lasts as long as its access token does. `consent`
+    /// forces the consent screen, which is the only way Google re-issues a
+    /// refresh token to somebody who has approved anacraft before — so it is
+    /// asked for only when one is needed and none is stored. Otherwise
+    /// `select_account`: a returning visitor sees the account chooser and
+    /// nothing else.
+    pub fn authorize_url(
+        &self,
+        redirect_uri: &str,
+        state: &str,
+        challenge: &str,
+        offline: bool,
+        consent: bool,
+    ) -> String {
+        format!(
+            "{AUTH_URL}?client_id={}&redirect_uri={}&response_type=code&scope={}\
+             &code_challenge={}&code_challenge_method=S256&state={}\
+             &access_type={}&prompt={}&include_granted_scopes=true",
+            encode(&self.creds.client_id),
+            encode(redirect_uri),
+            encode(SCOPE),
+            encode(challenge),
+            encode(state),
+            if offline { "offline" } else { "online" },
+            if consent { "consent" } else { "select_account" },
+        )
+    }
+
     /// Best-effort revoke, then drop local tokens regardless.
     pub async fn logout(&self) -> Result<()> {
-        if let Some(tokens) = Tokens::load()? {
+        if let Some(tokens) = self.store.load()? {
             let _ = self
                 .http
                 .post(REVOKE_URL)
@@ -472,7 +622,7 @@ impl Auth {
                 .send()
                 .await;
         }
-        Tokens::clear()
+        self.store.clear()
     }
 }
 

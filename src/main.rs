@@ -288,6 +288,15 @@ enum Command {
         /// subscription, and nothing created in any Analytics account.
         #[arg(long)]
         demo: bool,
+        /// Address to listen on. Anything but loopback needs --public-url.
+        #[arg(long, default_value = "127.0.0.1")]
+        host: std::net::IpAddr,
+        /// Serve the pages to anybody at this https origin, each visitor
+        /// signing in on a session of their own — how app.anacraft.dev runs.
+        /// Needs ANACRAFT_WEB_OAUTH_CLIENT_ID and _SECRET (a Web client)
+        /// unless --demo.
+        #[arg(long, conflicts_with = "token")]
+        public_url: Option<String>,
     },
     /// Start an Anacraft subscription, or pick up the one you have.
     ///
@@ -395,6 +404,8 @@ async fn run() -> Result<()> {
             token,
             idle,
             demo,
+            host,
+            public_url,
         } => {
             serve::run(serve::Options {
                 port,
@@ -403,6 +414,8 @@ async fn run() -> Result<()> {
                 idle,
                 demo,
                 property: cli.property.clone(),
+                host,
+                public_url,
             })
             .await
         }

@@ -57,6 +57,9 @@ REGISTRY = gcr.io
 APP_IMAGE = anacraft-app
 APP_HOST = app.anacraft.dev
 APP_IP_NAME = anacraft-app-ip
+# DEMO=true deploys the hosted server with synthetic data and no sign-in —
+# what runs until the Web OAuth client exists.
+DEMO ?= false
 VERSION ?= v$(shell sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 
 switch-to-prod: ## Point kubectl at the prod cluster
@@ -67,8 +70,8 @@ switch-to-prod: ## Point kubectl at the prod cluster
 build-prod: ## Build the craft serve image from release $(VERSION) and push it
 	./deploy/build.sh $(PROD_PROJECT_ID) $(APP_IMAGE) $(REGISTRY) $(VERSION)
 
-generate-secrets-prod: switch-to-prod ## Sync the bearer token from Secret Manager
-	ENV=prod PROJECT_ID=$(PROD_PROJECT_ID) ./deploy/sync-secrets.sh
+generate-secrets-prod: switch-to-prod ## Sync the Web OAuth client from Secret Manager
+	ENV=prod DEMO=$(DEMO) PROJECT_ID=$(PROD_PROJECT_ID) ./deploy/sync-secrets.sh
 
 dns-prod: ## Reserve the static IP and point $(APP_HOST) at it in Cloudflare
 	PROJECT_ID=$(PROD_PROJECT_ID) IP_NAME=$(APP_IP_NAME) HOST=$(APP_HOST) ./deploy/dns.sh
@@ -77,6 +80,7 @@ deploy-prod: generate-secrets-prod dns-prod ## helm upgrade --install into prod
 	helm upgrade --install anacraft-app helm/app \
 		-f helm/app/values.yaml \
 		-f helm/app/values.secrets.prod.yaml \
+		--set demo=$(DEMO) \
 		--namespace prod
 
 rollout-prod: switch-to-prod build-prod ## Push a fresh image and restart the pod

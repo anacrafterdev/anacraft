@@ -4,8 +4,12 @@
 <h2>Wire an AI tool to this property</h2>
 <p>
   {{ reads }} An assistant on the other end of this line gets the same twelve
-  tools <code>craft mcp</code> serves — for a client that cannot spawn a
-  process of its own, this is how it gets them.
+  tools <code>craft mcp</code> serves —
+  {%- if note == "hosted" %} paste it into Claude or ChatGPT as a custom
+  connector, and there is nothing to install.
+  {%- else %} for a client that cannot spawn a process of its own, this is how
+  it gets them.
+  {%- endif %}
 </p>
 
 <pre id="link">{{ link }}</pre>
@@ -13,10 +17,20 @@
 <p class="fine">
   One string, token and all — for the clients whose whole configuration is a
   URL field. Treat it like a password: anything holding this link can read
-  this property's numbers from this machine.
+  this property's numbers{% if note != "hosted" %} from this machine{% endif %}.
 </p>
 
-{%- if note == "named" %}
+{%- if note == "hosted" %}
+<p class="fine">
+  It stays true: the link is worked out from your account, so it is the same
+  link next week and on every device, and it reads with the Google access you
+  granted when you signed in. Signing out does not stop it; turning it off
+  below does — for every link at once.
+</p>
+<form method="post" action="/connect/off">
+  <button class="lnk" type="submit">turn off my connector links</button>
+</form>
+{%- else if note == "named" %}
 <p class="fine">
   This server was started with <code>--token</code>, so that one token is what
   every property here answers to, and the tools read whichever property the

@@ -149,7 +149,7 @@
                  color: var(--jade); }
   /* Same voice as the footer: mono, lowercase, one rhythm. The casing is
      text-transform rather than typed in, so the markup still says "Quick start"
-     and "Configure" for a screen reader. The brand keeps its own face —
+     and "Pricing" for a screen reader. The brand keeps its own face —
      it is a logo, not a link in the row. */
   .nav-links {
     display: flex; align-items: center; gap: 16px; margin-left: auto;
@@ -294,9 +294,7 @@
     <div class="nav-links">
       <a href="/#start">Quick start</a>
       <a href="/audit.html">Audit</a>
-      <a href="/mcp.html">MCP</a>
       <a href="/alerts.html">Alerts</a>
-      <a href="/setup-ga4.html">Configure</a>
       <a href="/lovable.html">Lovable</a>
       <a href="/burn.html">Badge</a>
       <a href="/pricing.html">Pricing</a>
@@ -321,28 +319,28 @@
 </div>
 
 <h2><span class="n">01</span>Create the property and get the tag</h2>
-<p><a href="/#start">Install anacraft</a>, then run one command:</p>
+<p><a href="https://app.anacraft.dev">Sign in at app.anacraft.dev</a> with Google, choose
+<b>Create a new property</b>, and give it your site's URL. It creates the property and the web data
+stream and hands you the gtag.js snippet with your measurement id already in both of the places it
+belongs, with a copy button. Nothing to install. The dashboard is part of the
+<a href="/pricing.html">Anacrafter Elite</a> plan; the paywall appears before anything is created in
+your Analytics account, and nothing is charged if you never finish the checkout.</p>
+<p>From a terminal, the same thing is one command, on the $2.99 <a href="/pricing.html">Anacrafter</a>
+plan (<a href="/#start">install anacraft</a> first):</p>
 <pre class="code"><span class="k">$</span> craft configure <span class="k">yoursite.com</span></pre>
-<p>It creates the property and the web data stream, and prints the gtag.js snippet with your
-measurement id already in both of the places it belongs. Google asks your permission on the sign-in
-screen, the first time.</p>
-<p>This one command is part of the <a href="/pricing.html">Anacrafter</a> plan — $2.99 a month, the
-  subscription that has always been sold. The ask lands on the page the Google sign-in already ends
-  on, and the terminal picks the payment up from there and carries on: nothing is created in your
-  Analytics account before it clears, and nothing is charged if it never does. The dashboard and
-  every report that reads the property stay free.</p>
-<p>It creates nothing if the domain already has a property — it prints that one's tag instead — so
-running it twice is how you get the tag back, not how you end up with two properties splitting your
-traffic.</p>
+<p>Either way, it creates nothing if the domain already has a property — you get that one's tag
+instead — so doing it twice is how you get the tag back, not how you end up with two properties
+splitting your traffic.</p>
 <p>The console does the same thing across four screens. This guide does not walk them, because there
 is nothing to decide in them that the command does not already ask you.</p>
 <p><b>No Google Analytics account yet?</b>
 <a href="https://analytics.google.com/analytics/web/#/provision">Create one first</a> — that single
-step needs Google's terms accepted in a browser, so the command deliberately will not do it for you.
-Everything after it is <code>craft configure</code>.</p>
+step needs Google's terms accepted in a browser, so neither the dashboard nor the command will do it
+for you. Everything after it is the dashboard, or <code>craft configure</code>.</p>
 
 <h2><span class="n">02</span>Paste the tag</h2>
-<p><code>craft configure</code> prints the snippet with your measurement id in it. It goes in
+<p>The dashboard (or <code>craft configure</code>) gives you the snippet with your measurement id
+in it. It goes in
 <code>&lt;head&gt;</code>, on <b>every</b> page — and only once. A second GA4 <code>config</code> for the
 same id double-counts every view. If Google Tag Manager is already on the site, configure GA4 inside
 GTM instead of adding the snippet, and remember to <b>publish</b> the container.</p>

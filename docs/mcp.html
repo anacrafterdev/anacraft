@@ -210,7 +210,7 @@
                  color: var(--jade); }
   /* Same voice as the footer: mono, lowercase, one rhythm. The casing is
      text-transform rather than typed in, so the markup still says "Quick start"
-     and "Configure" for a screen reader. The brand keeps its own face —
+     and "Pricing" for a screen reader. The brand keeps its own face —
      it is a logo, not a link in the row. */
   .nav-links {
     display: flex; align-items: center; gap: 16px; margin-left: auto;
@@ -353,9 +353,7 @@
     <div class="nav-links">
       <a href="/#start">Quick start</a>
       <a href="/audit.html">Audit</a>
-      <a href="/mcp.html">MCP</a>
       <a href="/alerts.html">Alerts</a>
-      <a href="/setup-ga4.html">Configure</a>
       <a href="/lovable.html">Lovable</a>
       <a href="/burn.html">Badge</a>
       <a href="/pricing.html">Pricing</a>
@@ -369,19 +367,26 @@
 
 <div class="eyebrow">Guide</div>
 <h1>Google Analytics MCP server</h1>
-<div class="stamp">craft mcp · part of the <a href="/pricing.html">Anacrafter Elite</a> plan · <code>--demo</code> needs no account</div>
+<div class="stamp">a connector link from the dashboard, or craft mcp · part of the <a href="/pricing.html">Anacrafter Elite</a> plan · <code>--demo</code> needs no account</div>
 
 <div class="tldr">
   <div class="h">What it does</div>
-  <p><code>craft mcp</code> serves a Google Analytics 4 property over the
-  <a href="https://modelcontextprotocol.io">Model Context Protocol</a>, so Claude Desktop, Claude Code
-  or any MCP client answers <i>how is the site doing</i> <b>without a human reading a dashboard</b>.</p>
-  <p>Twelve tools. One command to wire in. Eleven of them only read, and one of them —
+  <p>anacraft serves a Google Analytics 4 property over the
+  <a href="https://modelcontextprotocol.io">Model Context Protocol</a>, so Claude, ChatGPT or any
+  MCP client answers <i>how is the site doing</i> <b>without a human reading a dashboard</b>.</p>
+  <p>Twelve tools. One link from the dashboard, or one command in a terminal. Eleven of them only read, and one of them —
   <a href="/audit.html"><code>audit_site</code></a> — tells the assistant whether the other eleven
   are worth quoting.</p>
 </div>
 
 <h2><span class="n">01</span>Wire it up</h2>
+<p><a href="https://app.anacraft.dev">Sign in at app.anacraft.dev</a>, and press <b>mcp</b> on the
+property's row. It hands you one link, token and all: paste it into Claude or ChatGPT as a
+<b>custom connector</b> and there is nothing to install. There is one link per property, it
+reads only that property, and it is the same link next week and on every device. Treat it like a
+password; the same page has a switch that turns every link off at once.</p>
+
+<h3>From the terminal</h3>
 <p>Claude Desktop is one command. It merges into the config and leaves any other servers alone.</p>
 <pre class="code"><span class="d"># sign in, pick a property, then install</span>
 <span class="k">$</span> craft login

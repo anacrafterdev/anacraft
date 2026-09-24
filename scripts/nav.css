@@ -15,7 +15,7 @@
                  color: var(--jade); }
   /* Same voice as the footer: mono, lowercase, one rhythm. The casing is
      text-transform rather than typed in, so the markup still says "Quick start"
-     and "Configure" for a screen reader. The brand keeps its own face —
+     and "Pricing" for a screen reader. The brand keeps its own face —
      it is a logo, not a link in the row. */
   .nav-links {
     display: flex; align-items: center; gap: 16px; margin-left: auto;

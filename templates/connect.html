@@ -12,7 +12,12 @@
   {%- endif %}
 </p>
 
-<pre id="link">{{ link }}</pre>
+<div class="copyable">
+  <pre id="link">{{ link }}</pre>
+  <button class="ico" type="button" data-copy="link" aria-label="Copy the link" title="Copy the link">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
+  </button>
+</div>
 <button class="primary" type="button" data-copy="link">Copy the link</button>
 <p class="fine">
   One string, token and all — for the clients whose whole configuration is a
@@ -54,32 +59,42 @@
 
 <div class="next">
   <p>For <b>Claude Code</b>, the same thing as a command:</p>
-  <pre id="cmd">{{ command }}</pre>
+  <div class="copyable">
+    <pre id="cmd">{{ command }}</pre>
+    <button class="ico" type="button" data-copy="cmd" aria-label="Copy the command" title="Copy the command">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
+    </button>
+  </div>
   <p>And for a client that asks for the two halves separately — the token goes
     in an <code>Authorization: Bearer</code> header, which this server takes
     as readily as it takes the query:</p>
   <pre id="url">{{ url }}</pre>
   <pre id="token">{{ token }}</pre>
   <div class="acts">
-    <button class="lnk" type="button" data-copy="cmd">copy the command</button>
     <button class="lnk" type="button" data-copy="url">copy the url</button>
     <button class="lnk" type="button" data-copy="token">copy the token</button>
   </div>
 </div>
 
-{#- The same button the tag page has, written once for three of them.
+{#- The same button the tag page has, written once for all of them.
     Reaching the clipboard is JavaScript by definition; the blocks above are
     selectable text whether or not this runs. -#}
 <script>
   (function () {
     Array.prototype.forEach.call(document.querySelectorAll('[data-copy]'), function (button) {
       var source = document.getElementById(button.getAttribute('data-copy'));
-      var label = button.textContent;
+      // An icon keeps its drawing and says so in its colour and its title;
+      // a worded button says so in words.
+      var icon = button.classList.contains('ico');
+      var label = icon ? button.title : button.textContent;
       button.addEventListener('click', function () {
         navigator.clipboard.writeText(source.textContent).then(function () {
           button.classList.add('done');
-          button.textContent = 'Copied';
-          setTimeout(function () { button.classList.remove('done'); button.textContent = label; }, 1800);
+          if (icon) { button.title = 'Copied'; } else { button.textContent = 'Copied'; }
+          setTimeout(function () {
+            button.classList.remove('done');
+            if (icon) { button.title = label; } else { button.textContent = label; }
+          }, 1800);
         }).catch(function () {
           // No clipboard permission, so select it instead and let the
           // keyboard do what the button could not.

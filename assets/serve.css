@@ -251,6 +251,30 @@ a.bin { display: inline-block; }
 .primary:hover { filter: brightness(1.07); }
 .primary.done { background: none; color: var(--jade); }
 
+/* A block with its copy button in the corner, for the strings people paste
+   whole. The block keeps room on its right so the icon never sits on text. */
+.copyable { position: relative; }
+.copyable pre { padding-right: 48px; }
+.ico {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  background: var(--ink);
+  color: var(--white);
+  opacity: .75;
+  cursor: pointer;
+  transition: opacity .12s, color .12s, border-color .12s;
+}
+.ico:hover, .ico:focus-visible { opacity: 1; border-color: var(--jade); }
+.ico.done { opacity: 1; color: var(--jade); border-color: var(--jade); }
+.ico svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; }
+
 .lnk {
   background: none;
   border: 0;
@@ -456,28 +480,18 @@ footer a { color: var(--jade-deep); }
    this page are never wearing different clothes. */
 .pals { display: flex; gap: 6px; align-items: center; margin-left: auto; }
 
-/* A palette is a background with an accent on it, and a chip that showed
-   only the accent made every light theme look like a dark square. So the
-   chip is the palette: its ground, with its accent sitting on it, which is
-   what the page will actually look like. */
+/* A chip is a solid square of the palette's accent: the grounds are five
+   near-blacks and two near-whites, and the accent is what tells them apart. */
 .pal {
-  position: relative;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   padding: 0;
-  border: 1px solid var(--line-2);
-  background: var(--swatch-ground, #000);
+  border: 0;
+  background: var(--swatch-accent, #fff);
   opacity: .7;
   transition: opacity .12s, outline-color .12s;
   outline: 1px solid transparent;
   outline-offset: 2px;
-}
-
-.pal::after {
-  content: '';
-  position: absolute;
-  inset: 4px;
-  background: var(--swatch-accent, #fff);
 }
 
 .pal:hover { opacity: 1; }

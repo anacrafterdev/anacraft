@@ -143,7 +143,8 @@ impl Hosted {
 
     /// The connector link for one account and property, if the connector is on.
     ///
-    /// The property is part of the token — `<account token>-<property>` —
+    /// The property is sealed into the token with the account — see
+    /// [`Grants::connector_link`](super::grants::Grants::connector_link) —
     /// rather than a second query parameter: a client that keeps the token
     /// and drops the rest of the URL, or asks for the token in a field of its
     /// own, still sends the whole thing.
@@ -151,7 +152,7 @@ impl Hosted {
         let grants = self.grants.as_ref()?;
         Some(super::Connector::at(
             format!("{}/v1/mcp", self.public),
-            with_property(&grants.connector_token(account), property),
+            grants.connector_link(account, property),
             None,
         ))
     }
@@ -721,10 +722,10 @@ pub(super) async fn mcp(
             .into_response()
         }
     };
-    let (token, named) = split_token(&token);
+    let holder = grants.read(&token);
     let property = wire
         .property
-        .or(named)
+        .or(holder.property().map(str::to_string))
         .map(|p| super::bare(&p))
         .unwrap_or_default();
     let key = format!("{}:{property}", hex(&digest(&token)));
@@ -741,7 +742,7 @@ pub(super) async fn mcp(
         match fresh {
             Some(server) => server,
             None => {
-                let grant = match grants.open(&token).await {
+                let grant = match grants.open(&holder).await {
                     Ok(Some(grant)) => grant,
                     Ok(None) => {
                         return refuse(
@@ -814,27 +815,6 @@ async fn build(
         tier,
         Some(property.as_str()).filter(|p| !p.is_empty()),
     ))
-}
-
-/// A connector token naming its property: the account's token, a hyphen,
-/// the property id. An empty property is the account's token alone.
-fn with_property(token: &str, property: &str) -> String {
-    match property.trim() {
-        "" => token.to_string(),
-        property => format!("{token}-{property}"),
-    }
-}
-
-/// The inverse: the account's token, and the property if the token names one.
-/// An account token is hex and a property id is digits, so the one hyphen is
-/// unambiguous — and a token from before properties rode in it has none.
-fn split_token(presented: &str) -> (String, Option<String>) {
-    match presented.split_once('-') {
-        Some((token, property)) if !property.is_empty() => {
-            (token.to_string(), Some(property.to_string()))
-        }
-        _ => (presented.trim_end_matches('-').to_string(), None),
-    }
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -969,20 +949,6 @@ mod tests {
             !value.contains("Domain"),
             "a __Host- cookie names no domain"
         );
-    }
-
-    #[test]
-    fn a_connector_token_carries_its_property_and_old_ones_still_parse() {
-        let token = "0a1b2c3d";
-        let named = with_property(token, "552157097");
-        assert_eq!(named, "0a1b2c3d-552157097");
-        assert_eq!(
-            split_token(&named),
-            (token.to_string(), Some("552157097".to_string()))
-        );
-        // A link handed out before the property moved into the token.
-        assert_eq!(split_token(token), (token.to_string(), None));
-        assert_eq!(with_property(token, ""), token);
     }
 
     #[test]

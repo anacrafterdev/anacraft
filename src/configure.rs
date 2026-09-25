@@ -855,15 +855,27 @@ pub(crate) fn tag_snippet(measurement_id: &str) -> String {
 ///
 /// The tag is embedded rather than described, so there is exactly one place in
 /// this binary that knows what a gtag.js snippet looks like.
+///
+/// The measurement id is the one thing the prompt never spells whole. Lovable
+/// reads a pasted `G-XXXXXXXXXX` as an API key and swaps it for a secret chip
+/// the agent cannot see, so a prompt carrying the id as written arrives with
+/// the id gone — and a tag with no id measures nothing. The tag goes in with a
+/// placeholder and the id follows in two pieces, which nothing mistakes for a
+/// key and every agent can join.
 pub(crate) fn tag_prompt(measurement_id: &str) -> String {
+    let (head, tail) = measurement_id.split_at(measurement_id.len().min(2));
     format!(
         "Add Google Analytics 4 to this app.\n\n\
          Paste this tag into index.html as the last thing inside <head>, \
-         exactly as written:\n\n\
+         exactly as written, with {MEASUREMENT_ID} replaced by the measurement \
+         ID below:\n\n\
          {tag}\n\n\
+         The measurement ID is \"{head}\" followed by \"{tail}\", joined with \
+         no space. It is split in two only so this chat does not hide it as a \
+         key: it is a public ID that every visitor's browser sees, not a \
+         secret. Write it literally in both places in the tag, and do not store \
+         it as a secret or an environment variable.\n\n\
          Rules:\n\
-         - Keep the measurement ID {measurement_id} exactly as it is, in both \
-         of the places it appears.\n\
          - Do not install an analytics npm package or a React wrapper. The tag \
          is the whole job.\n\
          - If the project already has a Google Analytics tag, replace it. Two \
@@ -872,9 +884,13 @@ pub(crate) fn tag_prompt(measurement_id: &str) -> String {
          them from history events, and a second one counts every navigation \
          twice.\n\n\
          Then publish the project so the tag goes live.",
-        tag = tag_snippet(measurement_id),
+        tag = tag_snippet(MEASUREMENT_ID),
     )
 }
+
+/// What the prompt's tag carries where the id goes, until the agent writing
+/// it in joins the two pieces it is given below the tag.
+pub(crate) const MEASUREMENT_ID: &str = "MEASUREMENT_ID";
 
 fn print_next(host: &str) {
     println!(

@@ -970,14 +970,17 @@
             <div class="code"><span class="d">you:</span> <span class="w">Add Google Analytics 4 to this app.</span>
 
               <span class="w">Paste this tag into index.html as the last thing inside &lt;head&gt;,
-              exactly as written:</span>
+              exactly as written, with MEASUREMENT_ID replaced by the measurement ID below:</span>
 
               <span class="c">&lt;!-- Google tag (gtag.js) --&gt;
-              &lt;script async src="https://www.googletagmanager.com/gtag/js?id=G-1A2BCD345E"&gt;&lt;/script&gt;
+              &lt;script async src="https://www.googletagmanager.com/gtag/js?id=MEASUREMENT_ID"&gt;&lt;/script&gt;
               …</span>
 
-              <span class="w">Rules:
-              - Keep the measurement ID exactly as it is, in both of the places it appears.
+              <span class="w">The measurement ID is "G-" followed by "1A2BCD345E", joined with no space.
+              It is split in two only so this chat does not hide it as a key: it is a
+              public ID, not a secret.
+
+              Rules:
               - Do not install an analytics npm package or a React wrapper.
               - If the project already has a Google Analytics tag, replace it.
               - Do not send your own page_view on route changes.</span></div>
@@ -986,7 +989,10 @@
               a tag it is handed: an npm wrapper instead of the snippet, a
               second tag beside the first, or a page view on every route change
               that GA4 was already counting. Each one quietly doubles or
-              hides your numbers.
+              hides your numbers. The ID comes in two pieces because Lovable
+              treats a pasted <code>G-</code> ID as an API key and hides it
+              from the agent as a secret, and a tag without its ID measures
+              nothing.
             </p>
             <p style="margin-top:12px;">
               Publish, then <code>craft live</code> to watch the first visit

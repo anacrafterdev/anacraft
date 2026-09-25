@@ -2003,10 +2003,14 @@ mod tests {
     #[test]
     fn the_tag_is_one_block_shown_two_ways() {
         let prompt = crate::configure::tag_prompt("G-1A2BCD345E");
-        let snippet = crate::configure::tag_snippet("G-1A2BCD345E");
+        let snippet = crate::configure::tag_snippet(crate::configure::MEASUREMENT_ID);
         // The prompt is the tag plus instructions, never a retyping of it, so
-        // the two tabs cannot show two different measurement ids.
+        // the two tabs cannot show two different tags.
         assert!(prompt.contains(&snippet));
+        // Lovable hides a pasted `G-…` id as a secret the agent never sees, so
+        // the prompt spells it in two pieces and never whole.
+        assert!(!prompt.contains("G-1A2BCD345E"));
+        assert!(prompt.contains("\"G-\" followed by \"1A2BCD345E\""));
     }
 
     #[test]

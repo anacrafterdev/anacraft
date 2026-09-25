@@ -2509,11 +2509,14 @@ mod tests {
         let tag = payload["tag"].as_str().unwrap();
         let prompt = payload["prompt"].as_str().unwrap();
 
-        // Both places the id belongs, in the block, and the block inside the
-        // prompt — the prompt is the tag plus instructions, never a retyping
-        // of it.
+        // Both places the id belongs, in the block. The prompt carries the
+        // same block with a placeholder and the id in two pieces, because a
+        // whole `G-…` pasted into Lovable is hidden from its agent as a secret.
         assert_eq!(tag.matches("G-1A2BCD345E").count(), 2);
-        assert!(prompt.contains(tag));
+        assert!(prompt.contains(&crate::configure::tag_snippet(
+            crate::configure::MEASUREMENT_ID
+        )));
+        assert!(!prompt.contains("G-1A2BCD345E"));
     }
 
     #[test]

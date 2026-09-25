@@ -77,9 +77,6 @@ pub(super) fn router(app: Arc<App>) -> Router<Arc<App>> {
         .route("/tag/:measurement_id", get(tag))
         .route("/connect", get(connect))
         .route("/connect/:id", get(connect_to))
-        .route("/dash/:id", get(dash_page))
-        .route("/dash/:id/frame", get(dash_frame))
-        .route("/dash/:id/key", post(dash_key))
         .layer(middleware::from_fn_with_state(app, keyed));
 
     Router::new()
@@ -108,9 +105,6 @@ pub(super) fn hosted_router(app: Arc<App>) -> Router<Arc<App>> {
         .route("/connect", get(connect_hosted_active))
         .route("/connect/:id", get(connect_hosted))
         .route("/connect/off", post(connector_off))
-        .route("/dash/:id", get(dash_page))
-        .route("/dash/:id/frame", get(dash_frame))
-        .route("/dash/:id/key", post(dash_key))
         .layer(middleware::from_fn_with_state(app, hosted::sessioned));
 
     Router::new()
@@ -159,8 +153,12 @@ impl Shell {
     /// On a hosted server the palette is the visitor's own, from the request
     /// rather than the process — see [`hosted::Chrome`].
     fn new(state: &'static str, path: impl Into<String>) -> Shell {
-        let hosted = CHROME.try_with(|chrome| chrome.hosted).unwrap_or(false);
-        let current = viewer_palette();
+        let chrome = CHROME.try_with(|chrome| chrome.clone()).ok();
+        let hosted = chrome.as_ref().is_some_and(|c| c.hosted);
+        let current = match chrome {
+            Some(chrome) => chrome.pal.unwrap_or_else(|| DEFAULT_PAL.to_string()),
+            None => crate::theme::palette().name.to_string(),
+        };
         Shell {
             pal: if current == DEFAULT_PAL {
                 String::new()
@@ -190,15 +188,6 @@ impl Shell {
             _ => String::new(),
         };
         self
-    }
-}
-
-/// The palette this request is wearing: the hosted visitor's own, or on a
-/// local server the process-wide selection — see [`Shell::new`].
-fn viewer_palette() -> String {
-    match CHROME.try_with(|chrome| chrome.clone()).ok() {
-        Some(chrome) => chrome.pal.unwrap_or_else(|| DEFAULT_PAL.to_string()),
-        None => crate::theme::palette().name.to_string(),
     }
 }
 
@@ -1767,163 +1756,6 @@ async fn oauth_callback(
     }
 }
 
-// --------------------------------------------------------- the dashboard ---
-
-/// How long a board nobody has asked a frame of is kept running. A tab left
-/// open in the background still polls; one that was closed stops, and its
-/// board — and the report requests it would go on making — goes with it.
-const BOARD_IDLE: std::time::Duration = std::time::Duration::from_secs(600);
-
-#[derive(Template)]
-#[template(path = "dash.html")]
-struct DashView {
-    shell: Shell,
-    property: String,
-    name: String,
-}
-
-/// `GET /dash/:id`: the terminal dashboard, in the browser.
-///
-/// The page is a frame and a poll. What is in the frame is drawn on the server
-/// by the terminal's own code — see [`crate::ui::Board`] — so the browser shows
-/// the dashboard `craft dash` shows, reflowed to the window the way a terminal
-/// of that size would reflow it.
-async fn dash_page(Path(id): Path<String>, Query(named): Query<Named>) -> View {
-    let property = bare(&id);
-    let name = named
-        .n
-        .filter(|n| !n.is_empty())
-        .unwrap_or_else(|| property.clone());
-    Ok(page(DashView {
-        shell: Shell::new("pick", format!("/dash/{property}")),
-        property,
-        name,
-    }))
-}
-
-#[derive(Deserialize)]
-struct Cells {
-    cols: u16,
-    rows: u16,
-    #[serde(default)]
-    n: Option<String>,
-}
-
-/// Whose boards these are: this machine's, or one hosted account's. A board
-/// holds a signed-in client, so two visitors never share one.
-fn viewer(ctx: &Ctx) -> String {
-    match ctx {
-        Ctx::Local => "local".to_string(),
-        Ctx::Session(session) => session.account.sub.clone(),
-    }
-}
-
-/// `GET /dash/:id/frame`: the next frame, as HTML.
-///
-/// The first call opens the board — fetching the first report the way
-/// `craft dash` does before it takes the screen — and every later call
-/// advances it by however long has passed and draws it at the size asked for.
-async fn dash_frame(
-    State(app): State<Arc<App>>,
-    Extension(ctx): Extension<Ctx>,
-    Path(id): Path<String>,
-    Query(cells): Query<Cells>,
-) -> Response {
-    let property = bare(&id);
-    let key = format!("{}\u{0}{property}", viewer(&ctx));
-    let palette = viewer_palette();
-    let boring = crate::theme::boring();
-
-    let drawn = |board: &mut crate::ui::Board| {
-        board.tick();
-        board.frame(cells.cols, cells.rows, &palette, boring)
-    };
-    let answer = |drawn: anyhow::Result<String>| match drawn {
-        Ok(html) => Html(html).into_response(),
-        Err(err) => refused(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
-    };
-
-    {
-        let mut boards = app.boards.lock().unwrap_or_else(|p| p.into_inner());
-        boards.retain(|_, board| board.seen.elapsed() < BOARD_IDLE);
-        if let Some(board) = boards.get_mut(&key) {
-            return answer(drawn(board));
-        }
-    }
-
-    let cfg = ctx.config().unwrap_or_default();
-    let saved = cfg.find(&property);
-    let settings = crate::ui::Settings {
-        days: saved.and_then(|p| p.days).unwrap_or(7),
-        refresh: saved.and_then(|p| p.refresh).unwrap_or(30),
-        live_refresh: saved
-            .and_then(|p| p.live_refresh)
-            .unwrap_or(crate::ui::LIVE_EVERY),
-    };
-
-    let board = if app.demo || is_demo(&ctx, &property) {
-        crate::ui::Board::demo(settings)
-    } else {
-        let ga = match client_in(&ctx).await {
-            Ok(ga) => ga,
-            Err(fail) => return refused(StatusCode::PAYMENT_REQUIRED, fail.message),
-        };
-        let title = saved
-            .map(|p| p.display())
-            .or(cells.n.clone().filter(|n| !n.is_empty()))
-            .unwrap_or_else(|| property.clone());
-        let tier = ctx.tier().await.ok().flatten();
-        match crate::ui::Board::open(Arc::new(ga), &property, title, settings, tier).await {
-            Ok(board) => board,
-            Err(err) => return refused(StatusCode::BAD_GATEWAY, why(err)),
-        }
-    };
-
-    let mut boards = app.boards.lock().unwrap_or_else(|p| p.into_inner());
-    // Two first frames can race here; the one already in keeps its history.
-    let board = boards.entry(key).or_insert(board);
-    answer(drawn(board))
-}
-
-#[derive(Deserialize)]
-struct Pressed {
-    k: String,
-}
-
-/// `POST /dash/:id/key`: a key pressed on the page, applied to its board.
-async fn dash_key(
-    State(app): State<Arc<App>>,
-    Extension(ctx): Extension<Ctx>,
-    Path(id): Path<String>,
-    Form(pressed): Form<Pressed>,
-) -> StatusCode {
-    let key = format!("{}\u{0}{}", viewer(&ctx), bare(&id));
-    let Some(k) = pressed
-        .k
-        .chars()
-        .next()
-        .filter(|_| pressed.k.chars().count() == 1)
-    else {
-        return StatusCode::BAD_REQUEST;
-    };
-    let mut boards = app.boards.lock().unwrap_or_else(|p| p.into_inner());
-    match boards.get_mut(&key).map(|board| board.key(k)) {
-        Some(true) => StatusCode::NO_CONTENT,
-        Some(false) => StatusCode::UNPROCESSABLE_ENTITY,
-        None => StatusCode::NOT_FOUND,
-    }
-}
-
-/// What the frame's place on the page says instead, when there is no frame.
-/// Text, not markup: the message may be Google's, and it is escaped as such.
-fn refused(status: StatusCode, message: String) -> Response {
-    let escaped = message
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;");
-    (status, Html(format!("<p class=\"refused\">{escaped}</p>"))).into_response()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1985,7 +1817,7 @@ mod tests {
     }
 
     /// The templates, by the name askama knows them by.
-    const TEMPLATES: [(&str, &str); 14] = [
+    const TEMPLATES: [(&str, &str); 13] = [
         ("layout.html", include_str!("../../templates/layout.html")),
         ("start.html", include_str!("../../templates/start.html")),
         ("signin.html", include_str!("../../templates/signin.html")),
@@ -2005,7 +1837,6 @@ mod tests {
         ("tag.html", include_str!("../../templates/tag.html")),
         ("connect.html", include_str!("../../templates/connect.html")),
         ("error.html", include_str!("../../templates/error.html")),
-        ("dash.html", include_str!("../../templates/dash.html")),
     ];
 
     /// Every local address a template points at: form targets and links, but
@@ -2063,10 +1894,6 @@ mod tests {
             // Where a sign-in is sent back round when the connector needs a
             // refresh token and Google did not send one.
             "/signin/consent",
-            // What the dashboard page's script asks for — every frame, and
-            // every key pressed — rather than anything a person follows.
-            "/dash/:x/frame",
-            "/dash/:x/key",
         ];
         let linked: Vec<String> = TEMPLATES
             .iter()

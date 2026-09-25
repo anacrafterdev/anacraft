@@ -465,9 +465,6 @@ struct App {
     /// Present when this is a hosted server, and then the only place a
     /// visitor's sign-in is kept.
     hosted: Option<hosted::Hosted>,
-    /// The dashboards browsers are looking at, one per viewer and property,
-    /// each the terminal's own board kept running between frames.
-    boards: std::sync::Mutex<std::collections::HashMap<String, crate::ui::Board>>,
 }
 
 impl App {
@@ -576,7 +573,6 @@ pub async fn run(opts: Options) -> Result<()> {
         last: AtomicU64::new(now()),
         mcp: tokio::sync::Mutex::new(None),
         hosted: None,
-        boards: Default::default(),
     });
 
     // Two routers, because one route has to be reachable without the token:
@@ -704,7 +700,6 @@ async fn run_hosted(opts: Options, public: String) -> Result<()> {
         last: AtomicU64::new(now()),
         mcp: tokio::sync::Mutex::new(None),
         hosted: Some(hosted::Hosted::new(public.clone(), web, grants)),
-        boards: Default::default(),
     });
 
     let sweeper = app.clone();
@@ -2250,7 +2245,6 @@ mod tests {
             last: AtomicU64::new(0),
             mcp: tokio::sync::Mutex::new(None),
             hosted: None,
-            boards: Default::default(),
         };
         assert!(allowed(&app, "http://127.0.0.1:52413"));
         assert!(allowed(&app, "http://localhost:52413"));
@@ -2437,7 +2431,6 @@ mod tests {
             last: AtomicU64::new(0),
             mcp: tokio::sync::Mutex::new(None),
             hosted: None,
-            boards: Default::default(),
         };
         assert_eq!(app.token_for("demo"), "banner");
         assert_eq!(app.token_for("397412345"), "banner");

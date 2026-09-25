@@ -28,8 +28,6 @@
     </a>
     {#- The name travels with the id so the page on the other end can say
         which property it means without going back to Google for the word. -#}
-    <a class="bin mcp" href="/dash/{{ property.id }}?n={{ property.encoded }}"
-      title="Open the dashboard for this property">dash</a>
     <a class="bin mcp" href="/connect/{{ property.id }}?n={{ property.encoded }}"
       title="Copy the MCP connector for this property">mcp</a>
     <a class="bin trash" href="{{ property.trash }}"
@@ -50,8 +48,6 @@
       <span class="id">{{ demo.id }}</span>
       <span class="ac">{{ demo.account }}</span>
     </a>
-    <a class="bin mcp" href="/dash/{{ demo.id }}?n={{ demo.encoded }}"
-      title="Open the dashboard for the demo">dash</a>
     <a class="bin mcp" href="/connect/{{ demo.id }}?n={{ demo.encoded }}"
       title="Copy the MCP connector for the demo">mcp</a>
   </div>
@@ -63,9 +59,8 @@
   {%- endif %}
 </div>
 <p class="fine">
-  <b>dash</b> on a row opens the terminal dashboard for that property, here in
-  the browser. <b>mcp</b> hands you the line that wires an AI assistant to it —
-  one connector per site, each reading only its own.
+  <b>mcp</b> on a row hands you the line that wires an AI assistant to that
+  property — one connector per site, each reading only its own.
 </p>
 <div class="acts">
   <form method="post" action="/signout">

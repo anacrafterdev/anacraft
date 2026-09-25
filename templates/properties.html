@@ -4,8 +4,8 @@
 <h2>Pick this site's property</h2>
 <p>
   One property per site, so each site's numbers are its own. A site rebuilt a
-  few times leaves a few behind — hover a row to throw one into the Analytics
-  trash, where Google keeps it restorable for 35 days.
+  few times leaves a few behind — the bin on a row throws one into the
+  Analytics trash, where Google keeps it restorable for 35 days.
 </p>
 <div class="list">
   <div class="row make">
@@ -32,8 +32,14 @@
       title="Open the dashboard for this property">dash</a>
     <a class="bin mcp" href="/connect/{{ property.id }}?n={{ property.encoded }}"
       title="Copy the MCP connector for this property">mcp</a>
-    <a class="bin" href="{{ property.trash }}"
-      title="Move this property to the Analytics trash">trash</a>
+    <a class="bin trash" href="{{ property.trash }}"
+      title="Move this property to the Analytics trash"
+      aria-label="Move {{ property.name }} to the Analytics trash">
+      <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor"
+        stroke-width="1.5" stroke-linecap="square" aria-hidden="true">
+        <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4M6.8 6.5v4.5M9.2 6.5v4.5" />
+      </svg>
+    </a>
   </div>
   {%- endfor %}
   {%- if let Some(demo) = demo %}

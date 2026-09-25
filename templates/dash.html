@@ -1,0 +1,101 @@
+{#- The terminal dashboard in a browser tab.
+
+    Not the card every other view sits in: the dashboard wants the whole
+    window, the way it wants the whole terminal. What is drawn inside it is
+    not markup this template knows anything about — it is a frame the server
+    drew with the terminal's own code and sent as two plates of cells, the
+    same shape the site's captures are. The script below only does the three
+    things a terminal would: say how big it is, ask for the next frame, and
+    pass keys along. -#}
+<!DOCTYPE html>
+<html lang="en"{% if !shell.pal.is_empty() %} data-pal="{{ shell.pal }}"{% endif %}>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ name }} — anacraft</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+
+<body class="board">
+  <nav class="board-bar">
+    <a href="/properties">← properties</a>
+    <span class="nm">{{ name }}</span>
+    <span class="keys"><b>1</b>–<b>8</b> panels · <b>?</b> help · <b>r</b> refresh</span>
+  </nav>
+  <main id="board" data-property="{{ property }}" data-name="{{ name }}">
+    <p class="refused">opening the dashboard…</p>
+  </main>
+  {#- One cell of the frame's own font, measured rather than assumed: the
+      browser's monospace is whatever this machine has, and the column count
+      is only right if it is counted in that face's cells. -#}
+  <pre class="dash probe" aria-hidden="true"><span class="lyr">MMMMMMMMMM</span></pre>
+<script>
+(function () {
+  var board = document.getElementById('board');
+  var probe = document.querySelector('.probe');
+  var property = board.dataset.property;
+  var base = '/dash/' + encodeURIComponent(property);
+  var every = 1000;
+  var timer = null;
+
+  function cells() {
+    var box = probe.firstElementChild.getBoundingClientRect();
+    var w = box.width / 10 || 8, h = box.height || 16;
+    var room = board.getBoundingClientRect();
+    return {
+      cols: Math.max(1, Math.floor(room.width / w)),
+      rows: Math.max(1, Math.floor((window.innerHeight - room.top) / h))
+    };
+  }
+
+  function next() {
+    clearTimeout(timer);
+    var size = cells();
+    var url = base + '/frame?cols=' + size.cols + '&rows=' + size.rows +
+      '&n=' + encodeURIComponent(board.dataset.name);
+    fetch(url, { credentials: 'same-origin' })
+      .then(function (r) { return r.text().then(function (t) { return { ok: r.ok, t: t }; }); })
+      .then(function (got) {
+        board.innerHTML = got.t;
+        var frame = board.querySelector('.dash');
+        if (frame && frame.dataset.ground) {
+          document.body.style.background = frame.dataset.ground;
+        }
+        // A tab nobody is looking at asks for nothing; coming back to it asks
+        // again. A refusal is not going to change on its own every second.
+        if (document.hidden) { return; }
+        timer = setTimeout(next, got.ok ? every : every * 15);
+      })
+      .catch(function () { timer = setTimeout(next, every * 5); });
+  }
+
+  var keys = '12345678elmpvgod?hr';
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) { return; }
+    if (e.key === 'Escape' || e.key === 'q') { window.location = '/properties'; return; }
+    if (e.key.length !== 1 || keys.indexOf(e.key) < 0) { return; }
+    e.preventDefault();
+    fetch(base + '/key', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'k=' + encodeURIComponent(e.key)
+    }).then(next);
+  });
+
+  var resized = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(resized);
+    resized = setTimeout(next, 150);
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) { next(); }
+  });
+
+  next();
+})();
+</script>
+</body>
+
+</html>

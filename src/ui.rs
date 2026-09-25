@@ -1496,6 +1496,88 @@ fn landed(rotation: &[Property], index: usize) -> Option<String> {
     rotation.get(index).map(|p| p.id.clone())
 }
 
+/// Applies every update that has landed since the last frame.
+///
+/// The terminal and the web dashboard both run through this, so a part that
+/// arrives is applied the same way whichever screen it is arriving on.
+fn absorb(dash: &mut Dash, rx: &mut mpsc::UnboundedReceiver<Update>) {
+    while let Ok(update) = rx.try_recv() {
+        match update {
+            Update::Totals { current, previous } => {
+                dash.apply_totals(current, previous);
+                dash.in_flight = dash.in_flight.saturating_sub(1);
+            }
+            Update::Trend(daily) => {
+                dash.apply_trend(daily);
+                dash.in_flight = dash.in_flight.saturating_sub(1);
+            }
+            Update::Pages(pages) => {
+                dash.apply_pages(pages);
+                dash.in_flight = dash.in_flight.saturating_sub(1);
+            }
+            Update::Events(events) => {
+                dash.apply_events(events);
+                dash.in_flight = dash.in_flight.saturating_sub(1);
+            }
+            Update::Realms(realms) => {
+                dash.realms = realms;
+                dash.updated = stamp();
+                dash.in_flight = dash.in_flight.saturating_sub(1);
+            }
+            Update::Portals(portals) => {
+                dash.portals = portals;
+                dash.updated = stamp();
+                dash.in_flight = dash.in_flight.saturating_sub(1);
+            }
+            Update::Live { total, realms } => {
+                dash.apply_live(total, realms);
+                dash.live_fetching = false;
+            }
+            Update::Failed(err) => {
+                dash.error = Some(err);
+                dash.in_flight = dash.in_flight.saturating_sub(1);
+            }
+        }
+    }
+}
+
+/// Starts the next report and realtime poll when they are due.
+fn schedule(
+    dash: &mut Dash,
+    source: &Source,
+    tx: &UnboundedSender<Update>,
+    last_live: &mut Instant,
+    now: Instant,
+) {
+    if dash.in_flight == 0 && dash.last_report.elapsed() >= dash.report_every {
+        dash.in_flight = source.request_report(dash.days, tx);
+        dash.last_report = now;
+    }
+    if !dash.live_fetching && last_live.elapsed() >= dash.live_every {
+        source.request_live(tx);
+        dash.live_fetching = true;
+        *last_live = now;
+    }
+}
+
+/// The panel a key toggles: its number, or the letter in its title.
+///
+/// `o`, not `p`, for portals: the chunk list took that one, and a portal is a
+/// thing you come thrOugh.
+fn tile_for(key: char) -> Option<Tile> {
+    Some(match key {
+        '1' | 'e' => Tile::Events,
+        '2' | 'l' => Tile::Live,
+        '3' | 'm' => Tile::Map,
+        '4' | 'p' => Tile::Chunks,
+        '5' | 'v' => Tile::Vitals,
+        '6' | 'g' => Tile::RealmsRanked,
+        '7' | 'd' => Tile::Trend,
+        '8' | 'o' => Tile::Portals,
+        _ => return None,
+    })
+}
+
 async fn event_loop(
     terminal: &mut DefaultTerminal,
     source: &mut Source,
@@ -1512,44 +1594,7 @@ async fn event_loop(
     loop {
         // Everything waiting is applied before the frame is drawn, so a part
         // that lands mid-frame shows up on the very next one.
-        while let Ok(update) = rx.try_recv() {
-            match update {
-                Update::Totals { current, previous } => {
-                    dash.apply_totals(current, previous);
-                    dash.in_flight = dash.in_flight.saturating_sub(1);
-                }
-                Update::Trend(daily) => {
-                    dash.apply_trend(daily);
-                    dash.in_flight = dash.in_flight.saturating_sub(1);
-                }
-                Update::Pages(pages) => {
-                    dash.apply_pages(pages);
-                    dash.in_flight = dash.in_flight.saturating_sub(1);
-                }
-                Update::Events(events) => {
-                    dash.apply_events(events);
-                    dash.in_flight = dash.in_flight.saturating_sub(1);
-                }
-                Update::Realms(realms) => {
-                    dash.realms = realms;
-                    dash.updated = stamp();
-                    dash.in_flight = dash.in_flight.saturating_sub(1);
-                }
-                Update::Portals(portals) => {
-                    dash.portals = portals;
-                    dash.updated = stamp();
-                    dash.in_flight = dash.in_flight.saturating_sub(1);
-                }
-                Update::Live { total, realms } => {
-                    dash.apply_live(total, realms);
-                    dash.live_fetching = false;
-                }
-                Update::Failed(err) => {
-                    dash.error = Some(err);
-                    dash.in_flight = dash.in_flight.saturating_sub(1);
-                }
-            }
-        }
+        absorb(dash, &mut rx);
 
         let now = Instant::now();
         let dt = now.duration_since(last_frame).as_secs_f64();
@@ -1562,15 +1607,7 @@ async fn event_loop(
 
         terminal.draw(|frame| draw(frame, dash))?;
 
-        if dash.in_flight == 0 && dash.last_report.elapsed() >= dash.report_every {
-            dash.in_flight = source.request_report(dash.days, &tx);
-            dash.last_report = now;
-        }
-        if !dash.live_fetching && last_live.elapsed() >= dash.live_every {
-            source.request_live(&tx);
-            dash.live_fetching = true;
-            last_live = now;
-        }
+        schedule(dash, source, &tx, &mut last_live, now);
 
         // The poll timeout is the frame budget: input wakes us early, and
         // otherwise this is the tick that advances the animation.
@@ -1637,16 +1674,9 @@ async fn event_loop(
                         // Ctrl+digit and the bare digit do the same thing: the
                         // titles advertise Ctrl, but not every terminal can
                         // send it.
-                        KeyCode::Char('1') | KeyCode::Char('e') => dash.toggle(Tile::Events),
-                        KeyCode::Char('2') | KeyCode::Char('l') => dash.toggle(Tile::Live),
-                        KeyCode::Char('3') | KeyCode::Char('m') => dash.toggle(Tile::Map),
-                        KeyCode::Char('4') | KeyCode::Char('p') => dash.toggle(Tile::Chunks),
-                        KeyCode::Char('5') | KeyCode::Char('v') => dash.toggle(Tile::Vitals),
-                        KeyCode::Char('6') | KeyCode::Char('g') => dash.toggle(Tile::RealmsRanked),
-                        KeyCode::Char('7') | KeyCode::Char('d') => dash.toggle(Tile::Trend),
-                        // `o`, not `p`: the chunk list took that one, and a
-                        // portal is a thing you come thrOugh.
-                        KeyCode::Char('8') | KeyCode::Char('o') => dash.toggle(Tile::Portals),
+                        KeyCode::Char(key) if tile_for(key).is_some() => {
+                            dash.toggle(tile_for(key).expect("checked"))
+                        }
                         // Shift, not a bare `d`: that one toggles the daily
                         // users panel and always has. A key people press to
                         // look at a chart is the wrong place to put anything
@@ -2073,6 +2103,207 @@ pub fn capture() -> Result<String> {
     }
 
     Ok(out)
+}
+
+// -------------------------------------------------------------------- web ---
+
+/// Serialises every frame drawn for a browser. The palette and the vocabulary
+/// are process-wide — the terminal only ever had one screen — so a frame is
+/// drawn with both set to the viewer's and put back afterwards, and two
+/// viewers on different palettes wait for each other rather than trade colors.
+static PAINTING: Mutex<()> = Mutex::new(());
+
+/// The size a browser asked for, held to what the dashboard can draw: at least
+/// the size it would otherwise refuse, and at most one wide monitor's worth so
+/// a hand-typed query cannot ask the server to paint a million cells.
+pub(crate) fn web_size(cols: u16, rows: u16) -> (u16, u16) {
+    (cols.clamp(MIN_COLS, 320), rows.clamp(MIN_ROWS, 120))
+}
+
+/// The terminal dashboard, driven by a browser instead of a keyboard loop.
+///
+/// Everything a frame shows is the terminal's: the same [`Dash`], fed by the
+/// same [`Source`], advanced by the same [`absorb`] and [`schedule`], and drawn
+/// by the same [`draw`]. What is different is only who asks for the next
+/// frame — the page polls rather than the loop ticking — and where it lands,
+/// which is [`plate`]'s HTML rather than a tty.
+pub(crate) struct Board {
+    dash: Dash,
+    source: Source,
+    tx: UnboundedSender<Update>,
+    rx: mpsc::UnboundedReceiver<Update>,
+    last_live: Instant,
+    last_frame: Instant,
+    last_trace: Instant,
+    /// When a browser last asked for a frame, so a board nobody is looking at
+    /// can be let go of.
+    pub(crate) seen: Instant,
+}
+
+impl Board {
+    /// A board on a real property, opened the way `craft dash` opens one: the
+    /// first report is fetched before anything is shown, so a property the
+    /// account cannot read is an error on the page and not an empty grid.
+    pub(crate) async fn open(
+        client: Arc<Ga>,
+        property: &str,
+        title: String,
+        settings: Settings,
+        tier: Option<crate::license::Tier>,
+    ) -> Result<Board> {
+        let snapshot = fetch_report(&client, property, settings.days).await?;
+        let (live, realms) = fetch_live(&client, property)
+            .await
+            .unwrap_or((0.0, Vec::new()));
+        let source = Source::Api {
+            client,
+            property: property.to_string(),
+        };
+        let mut board = Board::with(source, title, snapshot, live, realms, settings);
+        board.dash.supporter = tier.is_some();
+        board.dash.tier = tier;
+        Ok(board)
+    }
+
+    /// The demo board, on the terminal's synthetic site.
+    pub(crate) fn demo(settings: Settings) -> Board {
+        let mut synthetic = Synthetic::new();
+        let mut rng = rand::thread_rng();
+        let snapshot = synthetic.report(&mut rng);
+        let (live, realms) = synthetic.live(&mut rng);
+        let source = Source::Demo(Mutex::new(synthetic));
+        let mut board = Board::with(
+            source,
+            "Contoso Labs (demo)".to_string(),
+            snapshot,
+            live,
+            realms,
+            settings,
+        );
+        board.dash.demo = true;
+        board
+    }
+
+    fn with(
+        source: Source,
+        title: String,
+        snapshot: Snapshot,
+        live: f64,
+        realms: Vec<(String, f64)>,
+        settings: Settings,
+    ) -> Board {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let now = Instant::now();
+        Board {
+            dash: Dash::new(
+                title,
+                settings.days,
+                snapshot,
+                live,
+                realms,
+                Duration::from_secs(settings.refresh.max(5)),
+                Duration::from_secs(settings.live_refresh.max(LIVE_FLOOR)),
+            ),
+            source,
+            tx,
+            rx,
+            last_live: now,
+            last_frame: now,
+            last_trace: now,
+            seen: now,
+        }
+    }
+
+    /// Everything the terminal loop does between two frames, for however long
+    /// it has been since the last one.
+    ///
+    /// A browser asks far less often than the terminal's 50ms, so the realtime
+    /// trace is sampled once for every interval that passed rather than once
+    /// per call — otherwise the line would crawl at a fraction of the speed it
+    /// moves at in a terminal.
+    pub(crate) fn tick(&mut self) {
+        absorb(&mut self.dash, &mut self.rx);
+
+        let now = Instant::now();
+        let dt = now.duration_since(self.last_frame).as_secs_f64();
+        self.last_frame = now;
+        self.dash.step(dt);
+        let behind = now.duration_since(self.last_trace).as_millis() / TRACE_EVERY.as_millis();
+        for _ in 0..behind.min(HISTORY as u128) {
+            self.dash.trace();
+        }
+        if behind > 0 {
+            self.last_trace = now;
+        }
+
+        schedule(
+            &mut self.dash,
+            &self.source,
+            &self.tx,
+            &mut self.last_live,
+            now,
+        );
+        self.seen = now;
+    }
+
+    /// A key pressed on the page. Only the ones that change what is drawn —
+    /// the panels, help and a refresh — since the rest act on this machine's
+    /// config and a browser, possibly someone else's, has no business there.
+    pub(crate) fn key(&mut self, key: char) -> bool {
+        match key {
+            _ if tile_for(key).is_some() => self.dash.toggle(tile_for(key).expect("checked")),
+            '?' | 'h' => self.dash.help = !self.dash.help,
+            'r' => {
+                let now = Instant::now();
+                self.dash.last_report = now - self.dash.report_every;
+                self.last_live = now - self.dash.live_every;
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    /// One frame, as the two stacked plates the site's captures use, in the
+    /// viewer's palette and vocabulary.
+    pub(crate) fn frame(
+        &self,
+        cols: u16,
+        rows: u16,
+        palette: &str,
+        boring: bool,
+    ) -> Result<String> {
+        use ratatui::backend::TestBackend;
+
+        let (cols, rows) = web_size(cols, rows);
+        let _painting = PAINTING
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let (was, was_boring) = (theme::palette().name, theme::boring());
+        theme::select(palette);
+        if theme::boring() != boring {
+            theme::toggle_boring();
+        }
+
+        let mut terminal = Terminal::new(TestBackend::new(cols, rows))?;
+        let drawn = terminal.draw(|frame| draw(frame, &self.dash)).map(|_| ());
+        let buffer = terminal.backend().buffer();
+        let html = format!(
+            "<pre class=\"dash\" data-theme=\"{}\" data-ground=\"{}\">\
+             <span class=\"lyr bgl\" aria-hidden=\"true\">{}</span>\
+             <span class=\"lyr fgl\">{}</span></pre>",
+            theme::palette().name,
+            hex(theme::palette().ink).unwrap_or_default(),
+            plate(buffer, true),
+            plate(buffer, false),
+        );
+
+        theme::select(was);
+        if theme::boring() != was_boring {
+            theme::toggle_boring();
+        }
+        drawn?;
+        Ok(html)
+    }
 }
 
 // ------------------------------------------------------------------- draw ---
@@ -7117,5 +7348,57 @@ mod wired_tests {
         let long = "a".repeat(25);
         let pieces = wrapped(&long, 10);
         assert_eq!(pieces, vec!["a".repeat(10), "a".repeat(10), "a".repeat(5)]);
+    }
+}
+
+#[cfg(test)]
+mod board_tests {
+    use super::*;
+
+    fn settings() -> Settings {
+        Settings {
+            days: 7,
+            refresh: 30,
+            live_refresh: 5,
+        }
+    }
+
+    #[tokio::test]
+    async fn a_web_frame_is_the_two_plates_at_the_size_asked_for() {
+        let mut board = Board::demo(settings());
+        board.tick();
+        // Drawn in the palette already selected: the selection is process-wide
+        // and other tests read it, so this one does not move it.
+        let palette = theme::palette().name;
+        let html = board.frame(120, 40, palette, false).expect("draws");
+        assert!(html.contains("class=\"lyr bgl\""));
+        assert!(html.contains("class=\"lyr fgl\""));
+        assert!(html.contains(&format!("data-theme=\"{palette}\"")));
+        // One line per terminal row in the glyph plate.
+        let glyphs = html
+            .split("class=\"lyr fgl\">")
+            .nth(1)
+            .expect("glyph plate");
+        assert_eq!(glyphs.matches('\n').count(), 39);
+    }
+
+    #[test]
+    fn a_browser_cannot_ask_for_a_screen_the_dashboard_would_refuse_or_a_huge_one() {
+        assert_eq!(web_size(1, 1), (MIN_COLS, MIN_ROWS));
+        assert_eq!(web_size(u16::MAX, u16::MAX), (320, 120));
+        assert_eq!(web_size(132, 52), (132, 52));
+    }
+
+    #[tokio::test]
+    async fn the_page_can_toggle_panels_and_nothing_that_touches_the_config() {
+        let mut board = Board::demo(settings());
+        assert!(!board.dash.panels.realms_ranked);
+        assert!(board.key('6'));
+        assert!(board.dash.panels.realms_ranked);
+        // Forget, subscribe-preview, the palette and the connector act on this
+        // machine's config or clipboard, which a browser has no business in.
+        for refused in ['D', 's', 't', 'b', 'c', 'q'] {
+            assert!(!board.key(refused), "`{refused}` should be refused");
+        }
     }
 }

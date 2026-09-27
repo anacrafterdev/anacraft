@@ -1,11 +1,11 @@
 <h1 align="center">⛏ craft</h1>
 
-<p align="center"><b>Google Analytics, mined block by block.</b></p>
+<p align="center"><b>Set up GA4. Read it. Fix it.</b></p>
 
 <p align="center">
-  Sets Google Analytics 4 up for a domain in one command, then reads it back as
-  a terminal dashboard — seven live panels, ore-textured bars, a realtime event
-  feed, and achievement toasts when the numbers move.
+  Sets Google Analytics 4 up for a domain in one command, reads it back as a
+  terminal dashboard or through an MCP server your assistant can ask, and audits
+  what it is measuring so you can fix what is wrong.
 </p>
 
 <p align="center">

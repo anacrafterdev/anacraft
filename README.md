@@ -1,11 +1,11 @@
 <h1 align="center">⛏ craft</h1>
 
-<p align="center"><b>Set up GA4. Read it. Fix it.</b></p>
+<p align="center"><b>Your GA4, set up right.</b></p>
 
 <p align="center">
-  Sets Google Analytics 4 up for a domain in one command, reads it back as a
-  terminal dashboard or through an MCP server your assistant can ask, and audits
-  what it is measuring so you can fix what is wrong.
+  Creates the Google Analytics 4 property and tag for a domain in one command,
+  audits what it is measuring so you can fix what is wrong, and reads it back as
+  a terminal dashboard or through an MCP server your assistant can ask.
 </p>
 
 <p align="center">

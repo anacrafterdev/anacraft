@@ -1,11 +1,13 @@
 <h1 align="center">⛏ craft</h1>
 
-<p align="center"><b>Your GA4, set up right.</b></p>
+<p align="center"><b>Ask GA4 in plain English.</b></p>
 
 <p align="center">
-  Creates the Google Analytics 4 property and tag for a domain in one command,
-  audits what it is measuring so you can fix what is wrong, and reads it back as
-  a terminal dashboard or through an MCP server your assistant can ask.
+  Connects your assistant to Google Analytics 4 through an MCP server, so you
+  can ask how your site is doing and get the answer from your own numbers. It
+  also creates the property and tag for a domain in one command, audits what it
+  is measuring so you can fix what is wrong, and reads it back as a terminal
+  dashboard.
 </p>
 
 <p align="center">

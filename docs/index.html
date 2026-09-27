@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>anacraft — your Google Analytics expert</title>
-<meta name="description" content="Set up a GA4 property and get its tag with one command. Audit what it is measuring and find what is wrong with it. Then read it as a free terminal dashboard, one-shot reports and an MCP server.">
+<meta name="description" content="Ask your Google Analytics questions in plain English through an MCP server, or read it on a free terminal dashboard. Set up a GA4 property and its tag in one command, and audit what it is measuring.">
 <meta name="keywords" content="Google Analytics expert, GA4 consultant, Google Analytics consultant, GA4 audit, audit Google Analytics, configure Google Analytics, set up GA4, create GA4 property, GA4 measurement id, gtag snippet, GA4 CLI, GA4 dashboard, GA4 terminal dashboard, Google Analytics 4, Google Analytics CLI, analytics TUI, GA4 MCP server">
 <link rel="canonical" href="https://anacraft.dev/">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://anacraft.dev/">
-<meta property="og:title" content="anacraft — Your GA4, set up right.">
-<meta property="og:description" content="Set up a GA4 property and get its tag with one command. Audit what it is measuring and find what is wrong with it. Then read it as a free terminal dashboard, one-shot reports and an MCP server.">
+<meta property="og:title" content="anacraft — Ask GA4 in plain English.">
+<meta property="og:description" content="Ask your Google Analytics questions in plain English through an MCP server, or read it on a free terminal dashboard. Set up a GA4 property and its tag in one command, and audit what it is measuring.">
 <meta property="og:image" content="https://anacraft.dev/dash.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://anacraft.dev/dash.png">
@@ -248,11 +248,11 @@
   /* No gutter between the columns: the panel carries its own frame, and a
      gap on top of that border reads as the layout coming apart.
 
-     `start`, not `stretch`. The panel is a square, so its height is its own
-     business (see rows() in the script) and stretching a column to the row
-     height would only ever pull it out of square. */
+     `start`, not `stretch`. The panel is a fixed number of rows, so its
+     height is its own business, and stretching a column to the row height
+     would only pull its frame away from its text. */
   .hero-in { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 0; }
-  /* Centred, not top-aligned: the square is shorter than the sentence beside
+  /* Centred, not top-aligned: the panel is shorter than the sentence beside
      it, and centring is what splits that slack evenly above and below rather
      than dropping it all under the panel. */
   .hero-art { display: none; justify-self: end; align-self: center; }
@@ -260,36 +260,30 @@
     .hero-in { grid-template-columns: minmax(0, 1fr) auto; }
     .hero-art { display: block; }
   }
-  /* 38 characters at 17px is about 390px — the same footprint the first
-     version had at 44 characters and 11px, but with glyphs half again as big,
-     which is the whole difference between reading as a panel and reading as a
-     footnote beside a poster.
-
-     `.wrap` stops growing at 1180px, so every pixel this takes is one the
-     sentence gives up. That is the ceiling, and it is why the answer was
-     fewer characters rather than a bigger box. The headline wraps to three
-     lines at this width, which is deliberate.
+  /* 38 characters at 17px is about 390px. `.wrap` stops growing at 1180px,
+     so every pixel this takes is one the headline gives up; that is the
+     ceiling, and why the answers are written to fit 34 columns rather than
+     the box growing to fit them.
 
      Letter-spacing stays at zero or the panel's rules stop meeting its
      corners. */
-  #chart {
+  #ask {
     font-family: var(--mono); font-size: 17px; line-height: 1.25;
     letter-spacing: 0; white-space: pre; user-select: none;
     color: var(--fg);
     filter: drop-shadow(0 0 34px rgba(45, 213, 183, .16));
     filter: drop-shadow(0 0 34px color-mix(in srgb, var(--jade) 16%, transparent));
   }
-  #chart .f  { color: var(--line-2); }
-  #chart .ti { color: var(--jade); }
-  #chart .v  { color: var(--white); font-weight: 700; }
-  #chart .lv { color: var(--jade); }
-  /* The graph is a filled area, so the body has to recede or the panel is a
-     wall: dim fill, and the lit cell is the one at the top of each column,
-     which is the line the eye actually follows. The newest column arrives in
-     gold — it is the one thing on the page that is happening now. */
-  #chart .b  { color: var(--jade-deep); opacity: .34; }
-  #chart .bc { color: var(--jade); }
-  #chart .nb { color: var(--gold); }
+  #ask .f  { color: var(--line-2); }
+  #ask .ti { color: var(--jade); }
+  #ask .q  { color: var(--white); }
+  #ask .t  { color: var(--dim); }
+  #ask .v  { color: var(--white); font-weight: 700; }
+  #ask .bc { color: var(--jade); }
+  /* One highlight per answer, in gold: the number or name the question was
+     really asking for. */
+  #ask .nb { color: var(--gold); }
+  #ask .cur { color: var(--jade); }
   .eyebrow {
     font-family: var(--mono); font-size: 11.5px; letter-spacing: .16em;
     text-transform: uppercase; color: var(--jade); margin-bottom: 22px;
@@ -613,12 +607,12 @@
   <div class="wrap hero-in">
    <div class="hero-say">
     <div class="eyebrow">The last GA4 expert you'll ever hire</div>
-    <h1>Your GA4,<br><em>set up right.</em></h1>
+    <h1>Ask GA4 in<br><em>plain English.</em></h1>
     <p class="lede">
-      <code style="font-family:var(--mono);color:var(--fg)">craft configure yoursite.com</code> creates your property
-      and tag in one command. Read the numbers on a live terminal dashboard, or
-      ask Claude through <a href="/mcp.html">the MCP server</a>. <code style="font-family:var(--mono);color:var(--fg)">craft audit</code>
-      finds what it is measuring wrong.
+      Ask Claude, or any AI tool, how your site is doing and get the answer from your
+      own GA4 through <a href="/mcp.html">the MCP server</a>. No property yet?
+      <code style="font-family:var(--mono);color:var(--fg)">craft configure yoursite.com</code> creates it and the tag in
+      one command, and <code style="font-family:var(--mono);color:var(--fg)">craft audit</code> finds what it is measuring wrong.
     </p>
     <div class="cta">
       <button class="install" onclick="cp(this)">
@@ -628,7 +622,7 @@
       </button>
     </div>
    </div>
-   <div class="hero-art" aria-hidden="true"><pre id="chart"></pre></div>
+   <div class="hero-art" aria-hidden="true"><pre id="ask"></pre></div>
   </div>
 </header>
 
@@ -2572,167 +2566,139 @@
     try { saved = localStorage.getItem('palette'); } catch (e) {}
     if (saved && saved !== DEFAULT) { apply(saved); }
   })();
-  /* The hero's panel: RIGHT NOW, running.
+  /* The hero's panel: a question asked, a tool called, an answer read back.
    *
-   * The headline is capped at 15ch, so on anything wide the right half of the
-   * hero was empty. What fills it is the panel this product is known for — a
-   * realtime graph, scrolling — drawn in the same chrome, the same ■^n tag and
-   * the same block ramp `render.rs` builds bars out of. A screenshot would say
-   * the same thing and say it dead.
+   * The headline says ask, so the panel shows asking: what an assistant looks
+   * like with the MCP server connected, drawn in the same chrome and the same
+   * ■ tag as the dashboard below it. Typed out rather than shown finished,
+   * because the point is that it is a conversation.
    *
-   * The numbers are a function of time, not a feed, which is why the panel
-   * carries DEMO in its footer the way `craft dash --demo` does. Nobody's real
-   * traffic is being implied.
+   * The answers are the demo property's — the same Contoso numbers the
+   * dashboard under it shows — which is why the panel carries DEMO in its
+   * footer. Nobody's real traffic is being implied.
    */
   (function () {
-    var pre = document.getElementById('chart');
+    var pre = document.getElementById('ask');
     if (!pre) return;
 
     var W = 36;   // inner columns
-    var H = 11;   // inner rows — replaced by rows() before the first frame
+    var H = 11;   // inner rows: the longest exchange, plus air
 
-    // `theme.rs`: the sparkline ramp, low to high, and the live indicator.
-    var SPARK = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-    var FULL = '█';
-    var PULSE = ['○', '◉', '●'];
+    // Each answer line is [class, text] runs, written to fit W - 2 columns so
+    // nothing has to be wrapped at runtime and every line breaks where a
+    // person would break it.
+    var TALK = [
+      { q: 'how is the site doing this week?', tool: 'site_status', a: [
+        [['v', '45,753'], [null, ' events, up '], ['nb', '22%'], [null, ' on']],
+        [[null, 'last week. Thursday was busiest.']],
+        [],
+        [['bc', '▃▄▅█▆▄▃'], ['t', '  mon → sun']]
+      ] },
+      { q: 'who is on the site right now?', tool: 'live_visitors', a: [
+        [['nb', '130'], [null, ' people. US '], ['v', '39'], [null, ', India '], ['v', '17'], [null, ',']],
+        [[null, 'Germany '], ['v', '13'], [null, ', Brazil '], ['v', '10'], [null, ', UK '], ['v', '9'], [null, '.']]
+      ] },
+      { q: 'is anything measuring wrong?', tool: 'audit_site', a: [
+        [['nb', 'page_view'], [null, ' fires twice on']],
+        [['v', '/checkout'], [null, ', so views there read']],
+        [[null, 'double. Two tags are on the page;']],
+        [[null, 'remove one.']]
+      ] }
+    ];
+    var SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
     var still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    /* How tall to draw: square, measured rather than chosen.
-     *
-     * The panel is a fixed 38 characters across counting its own rules, and a
-     * monospace cell is a good deal taller than it is wide, so the row count
-     * that draws a square is a property of this font at this size — not a
-     * number to pick. Draw one rule the full width of the panel, ask the
-     * browser how wide it came out and how tall a line of it is, and the
-     * quotient is how many rows fit in that width.
-     */
-    function rows() {
-      var line = parseFloat(getComputedStyle(pre).lineHeight);
-      // Filled with a single row of the panel's own width, so what gets
-      // measured is the box that is about to be drawn, then emptied again so
-      // nothing of the ruler is left on screen.
-      pre.textContent = new Array(W + 2 + 1).join('─');
-      var wide = pre.offsetWidth;
-      pre.textContent = '';
-      if (!line || !isFinite(line) || !wide) return 11;
-      // Two of those rows are the panel's top and bottom rules. They are part
-      // of the square, so they come out of the graph's share of it.
-      return Math.max(10, Math.round(wide / line) - 2);
-    }
-
-    /* The traffic. A sum of slow sines rather than random noise: noise
-     * reshuffles every sample and reads as static, where this drifts and has
-     * quiet stretches and busy ones, which is what a real minute looks like. */
-    function sampleAt(n) {
-      var v = 0.54
-            + 0.26 * Math.sin(n * 0.21)
-            + 0.13 * Math.sin(n * 0.53 + 2.1)
-            + 0.07 * Math.sin(n * 1.30 + 0.7);
-      return Math.max(0.06, Math.min(1, v));
-    }
-
-    var seq = 0;            // how many samples have ever been taken
-    var buf = [];           // the last W of them
-    for (var i = 0; i < W; i++) { buf.push(sampleAt(i)); seq = i + 1; }
-
     function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
     function span(cls, s) { return cls ? '<span class="' + cls + '">' + esc(s) + '</span>' : esc(s); }
-    function frame(tick) {
-      var lines = [];
-      var CH = H;   // the graph has the panel to itself
+    function pad(n) { return new Array(Math.max(0, n) + 1).join(' '); }
+    function rule(n) { return new Array(Math.max(1, n) + 1).join('─'); }
 
-      // ── header: the live count, off the newest sample ──
-      var online = Math.round(40 + buf[buf.length - 1] * 190);
-      var pulse = PULSE[Math.floor(tick / 6) % PULSE.length];
-      var title = ' ■^2 RIGHT NOW ';
-      var right = ' ' + pulse + ' ' + online + ' online ';
-      var rule = W - title.length - right.length;
-      lines.push(
-        span('f', '┌') + span('ti', title) +
-        span('f', new Array(Math.max(1, rule) + 1).join('─')) +
-        span('lv', ' ' + pulse + ' ') + span('v', online + '') + span('ti', ' online ') +
-        span('f', '┐')
-      );
-
-      // ── the graph, newest column at the right ──
-      for (var r = 0; r < CH; r++) {
-        // Row 0 is the top of the chart, so the height a column must reach to
-        // put anything here counts down from the top.
-        var cells = [];
-        for (var c = 0; c < W; c++) {
-          var filled = buf[c] * CH;          // in rows, fractional
-          var full = Math.floor(filled);
-          var rest = filled - full;
-          var fromBottom = CH - r;           // this row's index from the floor
-
-          var ch = ' ', cls = null;
-          if (fromBottom <= full) {
-            // Body dim, and only the cell at the very top of the column lit.
-            // Filled solid and evenly coloured, a chart this dense stops being
-            // a chart and becomes a wall with a ragged top.
-            ch = FULL; cls = (fromBottom === full) ? 'bc' : 'b';
-          } else if (fromBottom === full + 1 && rest > 0.12) {
-            // The top of a column lands between two rows, and the ramp is what
-            // gets it to the right height instead of rounding it there.
-            ch = SPARK[Math.max(0, Math.min(7, Math.floor(rest * 8)))];
-            cls = 'bc';
-          }
-          // The newest column is the one arriving, and it is lit whole.
-          if (ch !== ' ' && c === W - 1) cls = 'nb';
-          cells.push(ch === ' ' ? null : [cls, ch]);
-        }
-
-        var out = '', run = '', cur = null;
-        for (c = 0; c < W; c++) {
-          var cell = cells[c];
-          var cc = cell ? cell[0] : '';
-          var chh = cell ? cell[1] : ' ';
-          if (cc !== cur) { if (run) out += span(cur, run); run = ''; cur = cc; }
-          run += chh;
-        }
-        out += span(cur, run);
-        lines.push(span('f', '│') + out + span('f', '│'));
+    // Runs cut to the first `left` characters, so an answer can arrive a few
+    // letters at a time without its colours arriving separately.
+    function cut(runs, left) {
+      var html = '', used = 0;
+      for (var i = 0; i < runs.length && left > 0; i++) {
+        var t = runs[i][1].slice(0, left);
+        html += span(runs[i][0], t); used += t.length; left -= t.length;
       }
+      return { html: html, len: used };
+    }
+    function row(html, len) { return span('f', '│') + ' ' + html + pad(W - 1 - len) + span('f', '│'); }
 
+    /* One exchange at one moment. `typed` letters of the question are in,
+     * the tool has either not started, is running or is done, and `shown`
+     * letters of the answer are out. */
+    function frame(t, typed, tool, shown, tick) {
+      var lines = [];
+      var title = ' ■ ASK ';
+      var right = ' contoso labs ';
+      lines.push(span('f', '┌') + span('ti', title) +
+        span('f', rule(W - title.length - right.length)) + span('t', right) + span('f', '┐'));
+
+      var body = [['', 0]];
+      var q = t.q.slice(0, typed);
+      var caret = typed < t.q.length ? span('cur', '▌') : '';
+      body.push([span('ti', '›') + ' ' + span('q', q) + caret, 2 + q.length + (caret ? 1 : 0)]);
+      body.push(['', 0]);
+
+      if (tool) {
+        var mark = tool === 'done' ? span('bc', '✓') : span('ti', SPIN[tick % SPIN.length]);
+        body.push([mark + ' ' + span('t', t.tool), 2 + t.tool.length]);
+        body.push(['', 0]);
+      }
+      if (tool === 'done') {
+        var left = shown;
+        for (var i = 0; i < t.a.length; i++) {
+          var total = t.a[i].reduce(function (n, r) { return n + r[1].length; }, 0);
+          var c = cut(t.a[i], left);
+          body.push([c.html, c.len]);
+          left -= total;
+          if (left <= 0) break;
+        }
+      }
+      for (var r = 0; r < H; r++) {
+        var b = body[r] || ['', 0];
+        lines.push(row(b[0], b[1]));
+      }
       var tag = ' DEMO ';
-      lines.push(
-        span('f', '└') +
-        span('f', new Array(W - tag.length - 2 + 1).join('─')) +
-        span('ti', tag) + span('f', '──') + span('f', '┘')
-      );
+      lines.push(span('f', '└') + span('f', rule(W - tag.length - 2)) +
+        span('ti', tag) + span('f', '──') + span('f', '┘'));
       return lines.join('\n');
     }
 
-    /* One poll: the graph shifts left by a column. The real dashboard polls
-     * every few seconds, so this does too — a graph redrawn sixty times a
-     * second is not a realtime graph, it is a waveform. */
-    function poll() {
-      buf.shift();
-      buf.push(sampleAt(seq++));
+    function size(t) {
+      return t.a.reduce(function (n, line) {
+        return n + line.reduce(function (m, r) { return m + r[1].length; }, 0);
+      }, 0);
     }
 
-    if (still) { H = rows(); pre.innerHTML = frame(6); return; }
+    if (still) { pre.innerHTML = frame(TALK[0], 99, 'done', 999, 0); return; }
 
-    var tick = 0;
-    H = rows();
-    pre.innerHTML = frame(0);
-
-    // Re-measured on resize: the metrics the square is cut from can still move
-    // under it — a late webfont, a zoom step — and a stale row count is a
-    // panel that is no longer square.
-    var settle;
-    window.addEventListener('resize', function () {
-      clearTimeout(settle);
-      settle = setTimeout(function () { H = rows(); pre.innerHTML = frame(tick); }, 150);
-    });
-
+    /* A small state machine on one clock: type the question, pause, run the
+     * tool, stream the answer, let it sit long enough to read, move on. */
+    var n = 0, phase = 'type', at = 0, tick = 0;
     setInterval(function () {
       if (document.hidden) return;
-      tick++;
-      if (tick % 12 === 0) poll();   // a new column roughly every 1.4s
-      pre.innerHTML = frame(tick);
-    }, 120);
+      var t = TALK[n];
+      tick++; at++;
+      var typed = t.q.length, tool = null, shown = 0;
+      if (phase === 'type') {
+        typed = Math.min(t.q.length, Math.floor(at / 1.2));
+        if (typed === t.q.length && at > t.q.length * 1.2 + 6) { phase = 'tool'; at = 0; }
+      } else if (phase === 'tool') {
+        tool = 'run';
+        if (at > 11) { phase = 'say'; at = 0; }
+      } else if (phase === 'say') {
+        tool = 'done'; shown = at * 3;
+        if (shown >= size(t)) { phase = 'hold'; at = 0; }
+      } else {
+        tool = 'done'; shown = 999;
+        if (at > 45) { n = (n + 1) % TALK.length; phase = 'type'; at = 0; }
+      }
+      pre.innerHTML = frame(t, typed, tool, shown, tick);
+    }, 60);
+    pre.innerHTML = frame(TALK[0], 0, null, 0, 0);
   })();
 </script>
 </body>

@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>anacraft — your Google Analytics expert</title>
-<meta name="description" content="Ask your Google Analytics questions in plain English through an MCP server, or read it on a free terminal dashboard. Set up a GA4 property and its tag in one command, and audit what it is measuring.">
+<meta name="description" content="Ask your Google Analytics questions in plain English through an MCP server. Create a GA4 property and its tag from the dashboard, audit what it is measuring, and read it on a free terminal dashboard.">
 <meta name="keywords" content="Google Analytics expert, GA4 consultant, Google Analytics consultant, GA4 audit, audit Google Analytics, configure Google Analytics, set up GA4, create GA4 property, GA4 measurement id, gtag snippet, GA4 CLI, GA4 dashboard, GA4 terminal dashboard, Google Analytics 4, Google Analytics CLI, analytics TUI, GA4 MCP server">
 <link rel="canonical" href="https://anacraft.dev/">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://anacraft.dev/">
 <meta property="og:title" content="anacraft — Ask GA4 in plain English.">
-<meta property="og:description" content="Ask your Google Analytics questions in plain English through an MCP server, or read it on a free terminal dashboard. Set up a GA4 property and its tag in one command, and audit what it is measuring.">
+<meta property="og:description" content="Ask your Google Analytics questions in plain English through an MCP server. Create a GA4 property and its tag from the dashboard, audit what it is measuring, and read it on a free terminal dashboard.">
 <meta property="og:image" content="https://anacraft.dev/dash.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://anacraft.dev/dash.png">
@@ -323,14 +323,68 @@
   .install.done .copy .sheet { display: none; }
   .install.done .copy .tick { display: block; }
 
+  /* The hero's one line of how: your assistant asks the MCP server, the
+     server asks GA4. */
+  .flow {
+    display: inline-flex; align-items: center; flex-wrap: wrap; gap: 10px;
+    font-family: var(--mono); font-size: 13px; color: var(--dim);
+  }
+  .flow .n { border: 1px solid var(--line-2); border-radius: 999px; padding: 6px 14px; color: var(--fg); }
+  .flow .n.on { border-color: var(--jade); color: var(--jade); }
+
   /* ── dashview ──────────────────────────────────────── */
-  .dashview { padding: 8px 0 40px; }
+  /* A band a shade up from the page, edge to edge: the hero is for asking,
+     this is for watching, and the change of ground is what says so. `--ink`
+     is that shade in every palette. */
+  .dashview {
+    padding: 80px 0 72px; background: var(--ink);
+    border-top: 1px solid var(--line);
+  }
+  /* It is laid out the way the hero is — the sentence and the command on the left,
+     so they run straight down into the palettes and the dashboard, and the
+     panel on the right from 1180px. Below that the panel is simply not
+     there. */
+  .dash-get {
+    display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px;
+    margin-bottom: 36px;
+  }
+  .dash-say { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+  .dash-say .sec-label { margin-bottom: 0; }
+  .dash-say .sec-sub { margin: 0 0 10px; }
+  .dash-art { display: none; justify-self: end; align-self: center; }
+  @media (min-width: 1180px) {
+    .dash-get { grid-template-columns: minmax(0, 1fr) auto; }
+    .dash-art { display: block; }
+  }
+  /* The dashboard's map in the hero's Ask panel chrome: same frame, same
+     ■^n tag, same glow. */
+  #chart {
+    font-family: var(--mono); font-size: 17px; line-height: 1.25;
+    letter-spacing: 0; white-space: pre; user-select: none;
+    color: var(--fg);
+    filter: drop-shadow(0 0 34px rgba(45, 213, 183, .16));
+    filter: drop-shadow(0 0 34px color-mix(in srgb, var(--jade) 16%, transparent));
+  }
+  #chart .f  { color: var(--line-2); }
+  #chart .ti { color: var(--jade); }
+  #chart .v  { color: var(--white); font-weight: 700; }
+  #chart .lv { color: var(--jade); }
+  /* The line is braille dots, painted rather than typed: braille is rarely
+     in the page's monospace font, and the fallback glyph comes out wider
+     than a cell and pushes the frame's right edge out. On a canvas laid over
+     the frame's inside, every dot lands on the grid a terminal would put it
+     on. */
+  .dash-art { position: relative; }
+  #chart-dots { position: absolute; pointer-events: none; }
+  .dash-get h2 { max-width: none; }
+  .dash-get h2 em { font-style: normal; color: var(--jade); }
+  /* The palettes sit on the dashboard's top edge, so a click shows its
+     effect right where the eye already is. */
   .dash-head {
-    display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap;
+    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
     margin-bottom: 16px;
   }
-  .dash-head p { font-size: 13.5px; color: var(--dim); }
-  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
   .tabs button {
     font-family: var(--mono); font-size: 11.5px; color: var(--dim);
     background: none; border: 1px solid var(--line); border-radius: 0;
@@ -402,13 +456,12 @@
   /* Two captures of the same dashboard: 132 columns for desktop, 74 for
      phones. Scaling the wide one down just yields an unreadable smear — the
      TUI reflows for narrow terminals, so show what it actually looks like. */
-  .plate.narrow, .at-narrow { display: none; }
+  .plate.narrow { display: none; }
   .plate.wide .dash { font-size: clamp(5.6px, 1.14vw, 13.3333px); }
   .plate.narrow .dash { font-size: clamp(6px, 1.88vw, 12px); }
   @media (max-width: 860px) {
-    .plate.wide, .at-wide { display: none; }
+    .plate.wide { display: none; }
     .plate.narrow { display: block; }
-    .at-narrow { display: inline; }
   }
   .legend {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -566,7 +619,6 @@
     .close { padding: 76px 0; }
     .install { font-size: 12px; padding: 12px 14px; gap: 10px; }
     .dash-head { gap: 12px; }
-    .tabs { margin-left: 0; }
     .code { font-size: 11.5px; padding: 18px 16px; }
     footer .r { margin-left: 0; flex-wrap: wrap; }
   }
@@ -606,20 +658,15 @@
 <header class="hero">
   <div class="wrap hero-in">
    <div class="hero-say">
-    <div class="eyebrow">The last GA4 expert you'll ever hire</div>
+    <div class="eyebrow">Google Analytics · MCP</div>
     <h1>Ask GA4 in<br><em>plain English.</em></h1>
     <p class="lede">
-      Ask Claude, or any AI tool, how your site is doing and get the answer from your
-      own GA4 through <a href="/mcp.html">the MCP server</a>. No property yet?
-      <code style="font-family:var(--mono);color:var(--fg)">craft configure yoursite.com</code> creates it and the tag in
-      one command, and <code style="font-family:var(--mono);color:var(--fg)">craft audit</code> finds what it is measuring wrong.
+      Ask Claude, or any AI tool, how your site is doing. The answer comes from your own GA4.
     </p>
     <div class="cta">
-      <button class="install" onclick="cp(this)">
-        <span class="p">$</span>
-        <span class="c">curl -fsSL https://anacraft.dev/install.sh | bash</span>
-        <span class="copy" aria-label="Copy install command"><svg viewBox="0 0 16 16" aria-hidden="true"><g class="sheet"><rect x="5.9" y="5.9" width="8.2" height="8.2"/><path d="M10.4 3.4a1.5 1.5 0 0 0-1.5-1.5H3.4a1.5 1.5 0 0 0-1.5 1.5v5.5a1.5 1.5 0 0 0 1.5 1.5"/></g><path class="tick" d="M3 8.6l3.2 3.2L13 4.8"/></svg></span>
-      </button>
+      <div class="flow">
+        <span class="n">Your AI</span><span class="a">→</span><span class="n on">anacraft MCP</span><span class="a">→</span><span class="n">GA4</span>
+      </div>
     </div>
    </div>
    <div class="hero-art" aria-hidden="true"><pre id="ask"></pre></div>
@@ -628,8 +675,21 @@
 
 <div class="dashview" id="dashboard">
   <div class="wrap">
+    <div class="dash-get">
+     <div class="dash-say">
+      <div class="sec-label">In the terminal</div>
+      <h2>Watch your analytics<br>on a <em>terminal dashboard.</em></h2>
+      <p class="sec-sub">A free GA4 dashboard that runs in your terminal. Install it, run
+      <code style="font-family:var(--mono);color:var(--fg)">craft</code>, and it opens on demo data until you sign in.</p>
+      <button class="install" onclick="cp(this)">
+        <span class="p">$</span>
+        <span class="c">curl -fsSL https://anacraft.dev/install.sh | bash</span>
+        <span class="copy" aria-label="Copy install command"><svg viewBox="0 0 16 16" aria-hidden="true"><g class="sheet"><rect x="5.9" y="5.9" width="8.2" height="8.2"/><path d="M10.4 3.4a1.5 1.5 0 0 0-1.5-1.5H3.4a1.5 1.5 0 0 0-1.5 1.5v5.5a1.5 1.5 0 0 0 1.5 1.5"/></g><path class="tick" d="M3 8.6l3.2 3.2L13 4.8"/></svg></span>
+      </button>
+     </div>
+     <div class="dash-art" aria-hidden="true"><pre id="chart"></pre><canvas id="chart-dots"></canvas></div>
+    </div>
     <div class="dash-head">
-      <p>The real thing — <code style="font-family:var(--mono);color:var(--fg)">craft dash --demo</code>, captured at <span class="at-wide">132×52</span><span class="at-narrow">74×58</span>.</p>
       <div class="tabs" role="tablist">
         <button role="tab" aria-selected="true" data-theme="osaka-jade" data-bg="#09100d"><span class="sw" style="background:#2dd5b7"></span>Osaka Jade</button>
         <button role="tab" aria-selected="false" data-theme="solarized-dark" data-bg="#001f27"><span class="sw" style="background:#2aa198"></span>Solarized Dark</button>
@@ -2182,12 +2242,12 @@
     <div class="sec-label">What you get</div>
     <h2>Every panel earns its rows.</h2>
     <p class="sec-sub">
-      One command to set the property up, then seven panels, each toggleable with a
+      Set the property up from the dashboard, then seven panels, each toggleable with a
       number key. Turn off what you do not care about and the rest reflows to fill
       the terminal.
     </p>
     <div class="rows">
-      <div class="row"><span class="n">01</span><h3>It configures your analytics</h3><p><code style="font-family:var(--mono)">craft configure yoursite.com</code> creates the Google Analytics property, adds the web stream and prints the tag with its real measurement id in it — the three console steps between a new domain and its first number. Run it twice and it hands the tag back rather than quietly creating a second property. Part of the <a href="/pricing.html">Anacrafter</a> plan, $2.99/mo — the ask arrives on the page the Google sign-in already ends on, and the terminal picks the payment up from there.</p><span class="arw">→</span></div>
+      <div class="row"><span class="n">01</span><h3>It configures your analytics</h3><p><a href="https://app.anacraft.dev">Sign in at app.anacraft.dev</a>, press <b>Create a new property</b> and give it your site's URL. It creates the Google Analytics property, adds the web stream and hands you the tag with its real measurement id in it — the three console steps between a new domain and its first number. A site that already has a property gets its tag back rather than a second property. Part of the <a href="/pricing.html">Anacrafter</a> plan, $2.99/mo.</p><span class="arw">→</span></div>
       <div class="row"><span class="n">02</span><h3>It audits your analytics</h3><p><code style="font-family:var(--mono)">craft audit</code> checks how the property is <i>measuring</i> rather than what it measured — sixteen checks over four weeks, each finding graded and carrying what it means, and <code style="font-family:var(--mono)">--fix</code> applies the ones GA4 can repair itself. <a href="/audit.html">Nothing marked as a key event</a>, an outcome arriving unmarked, measurement switched on and recording nothing, <code style="font-family:var(--mono)">purchase</code> arriving without its value, page views counted twice. Part of the <a href="/pricing.html">Anacrafter Pro</a> plan, $5.99/mo — <code style="font-family:var(--mono)">craft audit --demo</code> is ungated.</p><span class="arw">→</span></div>
       <div class="row"><span class="n">03</span><h3>Seven toggleable panels</h3><p>Events, Right Now, Top Chunks, Daily Villagers, Realms, Vitals and Top Realms — keys <code style="font-family:var(--mono)">1</code>–<code style="font-family:var(--mono)">7</code>, or their letter aliases.</p><span class="arw">→</span></div>
       <div class="row"><span class="n">04</span><h3>Realtime event feed</h3><p>Players online polled every few seconds, with spawn and wander-off events that fade as they age out of the window.</p><span class="arw">→</span></div>
@@ -2238,10 +2298,8 @@
     <h2>Two minutes from curl to numbers.</h2>
     <p class="sec-sub">
       Official builds carry their own OAuth client, so <code style="font-family:var(--mono);color:var(--fg)">craft login</code> needs no
-      Google Cloud project — and <code style="font-family:var(--mono);color:var(--fg)">craft configure</code> replaces the four console
-      screens between a new domain and its first number. That one is part of the
-      <a href="/pricing.html" style="color:var(--jade)">Anacrafter</a> plan ($2.99/mo); everything else
-      on this page is free.
+      Google Cloud project. No property yet? <a href="https://app.anacraft.dev" style="color:var(--jade)">Create one from the dashboard</a>,
+      then connect it here. Everything on this page is free.
     </p>
     <div class="two">
       <div>
@@ -2251,10 +2309,7 @@
 <span class="d"># no command = the dashboard; no property = synthetic data</span>
 <span class="c">$</span> <span class="w">craft</span>
 
-<span class="d"># no GA4 property yet? this makes one and prints its tag</span>
-<span class="c">$</span> <span class="w">craft configure yoursite.com</span>
-
-<span class="d"># already have one? connect it instead</span>
+<span class="d"># connect your GA4 property</span>
 <span class="c">$</span> <span class="w">craft login</span>
 <span class="c">$</span> <span class="w">craft props</span>
 <span class="c">$</span> <span class="w">craft use 1234567</span>
@@ -2277,7 +2332,6 @@
         <table class="keys" style="margin-top:38px">
           <tr><th>Command</th><th>What it does</th></tr>
           <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">craft</code></td><td>Opens the dashboard — <code style="font-family:var(--mono)">dash</code> is the default</td></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">craft configure &lt;domain&gt;</code></td><td><b>Creates the GA4 property</b>, adds the web stream, prints the tag — <a href="/setup-ga4.html" style="color:var(--jade)">the guide</a>, and part of the <a href="/pricing.html" style="color:var(--jade)">Anacrafter</a> plan</td></tr>
         </table>
         <table class="keys" style="margin-top:38px">
           <tr><th>Path</th><th>What lives there</th></tr>
@@ -2565,6 +2619,171 @@
     var saved = null;
     try { saved = localStorage.getItem('palette'); } catch (e) {}
     if (saved && saved !== DEFAULT) { apply(saved); }
+  })();
+  /* The terminal section's panel: COUNTRIES, the dashboard's map.
+   *
+   * The same rough world `ui.rs` draws its map from — 60 columns of longitude
+   * by 12 rows from 78°N to 57°S, one `#` per land cell — and the same
+   * country centroids, redrawn in braille: each character a 2×4 grid of
+   * dots, land dim, and the places visitors arrived from lit. Each poll one
+   * of them flashes gold, the way an arrival does in the terminal.
+   *
+   * The frame is text in the <pre>; the dots are painted on the canvas over
+   * its inside (see the CSS for why), in the palette's own colours, read each
+   * frame so a palette switch repaints them.
+   *
+   * The visitors are the demo property's — the same Contoso split the
+   * dashboard under it shows — so the panel carries DEMO in its footer.
+   */
+  (function () {
+    var pre = document.getElementById('chart');
+    var cv = document.getElementById('chart-dots');
+    if (!pre || !cv || !cv.getContext) return;
+    var ctx = cv.getContext('2d');
+
+    var W = 36;   // inner columns
+    var H = 10;   // inner rows
+    var DX = 2 * W, DY = 4 * H;   // braille dots
+    var PULSE = ['○', '◉', '●'];
+    var still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // `ui.rs` WORLD, verbatim.
+    var WORLD = [
+      '    ################   ####      ########################## ',
+      '   #################   ###   ############################## ',
+      '    ################        ######## ###################### ',
+      '     ##############         ####### ######################  ',
+      '       ##########          #############################    ',
+      '            #####         ############     ###  ######      ',
+      '                 #####     ###########           #####      ',
+      '                 #######    #########            #######    ',
+      '                 #######     #######              #######   ',
+      '                  #####       #####               ######    ',
+      '                   ###                                  ##  ',
+      '                   ##                                       '
+    ];
+    var TOP = 78, BOTTOM = -57;
+    function land(x, y) {
+      var r = WORLD[Math.min(11, Math.floor(y / DY * 12))];
+      return r.charAt(Math.min(59, Math.floor(x / DX * 60))) === '#';
+    }
+
+    // The demo's countries, with `ui.rs` PLACES centroids and a share of the
+    // online count each.
+    var PLACES = [
+      ['US', 39, 39, -98], ['IN', 17, 21, 78], ['DE', 13, 51, 10],
+      ['BR', 10, -10, -55], ['UK', 9, 54, -2], ['JP', 6, 36, 138],
+      ['AU', 4, -25, 134], ['CA', 5, 56, -106], ['NG', 3, 10, 8]
+    ];
+    function spot(lat, lon) {
+      var x = Math.round((lon + 180) / 360 * (DX - 1));
+      var y = Math.round((TOP - lat) / (TOP - BOTTOM) * (DY - 1));
+      return [Math.max(0, Math.min(DX - 1, x)), Math.max(0, Math.min(DY - 1, y))];
+    }
+
+    var poll = 0;
+    function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+    function span(cls, s) { return cls ? '<span class="' + cls + '">' + esc(s) + '</span>' : esc(s); }
+    function online() { return Math.round(130 + 14 * Math.sin(poll * 0.4) + 6 * Math.sin(poll * 1.1)); }
+
+    function text(tick) {
+      var lines = [];
+      var pulse = PULSE[Math.floor(tick / 6) % PULSE.length];
+      var n = online();
+      var title = ' ■^3 COUNTRIES ';
+      var right = ' ' + pulse + ' ' + n + ' online ';
+      var rule = W - title.length - right.length;
+      lines.push(
+        span('f', '┌') + span('ti', title) +
+        span('f', new Array(Math.max(1, rule) + 1).join('─')) +
+        span('lv', ' ' + pulse + ' ') + span('v', n + '') + span('ti', ' online ') +
+        span('f', '┐')
+      );
+      var blank = new Array(W + 1).join(' ');
+      for (var r = 0; r < H; r++) lines.push(span('f', '│') + blank + span('f', '│'));
+      // The footer names the top three, the way the dashboard's bar does.
+      var top = ' US:' + Math.round(n * .30) + ' IN:' + Math.round(n * .13) + ' DE:' + Math.round(n * .10) + ' ';
+      var tag = ' DEMO ';
+      lines.push(
+        span('f', '└─') + span('v', top) +
+        span('f', new Array(Math.max(1, W - 1 - top.length - tag.length - 2) + 1).join('─')) +
+        span('ti', tag) + span('f', '──') + span('f', '┘')
+      );
+      return lines.join('\n');
+    }
+
+    // The cell the canvas is cut to: one character wide, one line tall,
+    // measured off the frame just drawn rather than assumed.
+    var cw = 0, lh = 0;
+    function fit() {
+      lh = parseFloat(getComputedStyle(pre).lineHeight);
+      cw = pre.getBoundingClientRect().width / (W + 2);
+      var ratio = window.devicePixelRatio || 1;
+      cv.style.left = (pre.offsetLeft + cw) + 'px';
+      cv.style.top = (pre.offsetTop + lh) + 'px';
+      cv.style.width = (W * cw) + 'px';
+      cv.style.height = (H * lh) + 'px';
+      cv.width = Math.round(W * cw * ratio);
+      cv.height = Math.round(H * lh * ratio);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
+
+    function paint(tick) {
+      var st = getComputedStyle(document.documentElement);
+      var jade = st.getPropertyValue('--jade').trim() || '#2dd5b7';
+      var deep = st.getPropertyValue('--jade-deep').trim() || '#509475';
+      var gold = st.getPropertyValue('--gold').trim() || '#ffe16b';
+      ctx.clearRect(0, 0, W * cw, H * lh);
+      var rad = Math.max(1, Math.min(cw / 2, lh / 4) * 0.34);
+      function at(x, y, r) {
+        var px = (x >> 1) * cw + ((x & 1) ? 0.72 : 0.28) * cw;
+        var py = (y >> 2) * lh + ((y & 3) + 0.5) / 4 * lh;
+        ctx.beginPath(); ctx.arc(px, py, r, 0, 6.2832); ctx.fill();
+      }
+
+      // The ground: every land dot, quiet.
+      ctx.fillStyle = deep; ctx.globalAlpha = 0.32;
+      for (var y = 0; y < DY; y++) for (var x = 0; x < DX; x++) if (land(x, y)) at(x, y, rad);
+
+      // The places people are, a patch of dots sized by their share.
+      var flash = PLACES[poll % PLACES.length][0];
+      for (var i = 0; i < PLACES.length; i++) {
+        var pl = PLACES[i], c = spot(pl[2], pl[3]);
+        var reach = pl[1] >= 15 ? 2 : pl[1] >= 8 ? 1 : 0;
+        var lit = pl[0] === flash && (tick % 12) < 8;
+        ctx.fillStyle = lit ? gold : jade;
+        ctx.globalAlpha = lit ? 1 : 0.9;
+        for (var dy = -reach; dy <= reach; dy++) for (var dx = -reach; dx <= reach; dx++) {
+          if (dx * dx + dy * dy > reach * reach + 1) continue;
+          var xx = c[0] + dx, yy = c[1] + dy;
+          if (xx >= 0 && yy >= 0 && xx < DX && yy < DY) at(xx, yy, rad * 1.15);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    var tick = 0;
+    pre.innerHTML = text(6);
+    fit(); paint(6);
+
+    // Re-measured on resize and once the webfont lands: the cell the dots
+    // sit on is a property of the font at this size.
+    var settle;
+    window.addEventListener('resize', function () {
+      clearTimeout(settle);
+      settle = setTimeout(function () { fit(); paint(tick); }, 150);
+    });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { fit(); paint(tick); });
+    if (still) return;
+
+    // A poll every ~1.4s, as the dashboard does; the pulse runs between.
+    setInterval(function () {
+      if (document.hidden) return;
+      tick++;
+      if (tick % 12 === 0) poll++;
+      pre.innerHTML = text(tick);
+      paint(tick);
+    }, 120);
   })();
   /* The hero's panel: a question asked, a tool called, an answer read back.
    *

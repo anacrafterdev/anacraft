@@ -4,10 +4,10 @@
 
 <p align="center">
   Connects your assistant to Google Analytics 4 through an MCP server, so you
-  can ask how your site is doing and get the answer from your own numbers. It
-  also creates the property and tag for a domain in one command, audits what it
-  is measuring so you can fix what is wrong, and reads it back as a terminal
-  dashboard.
+  can ask how your site is doing and get the answer from your own numbers. Its
+  dashboard at <a href="https://app.anacraft.dev">app.anacraft.dev</a> creates the
+  property and hands you the tag; the CLI audits what it is measuring so you can
+  fix what is wrong, and reads it back as a terminal dashboard.
 </p>
 
 <p align="center">
@@ -55,10 +55,7 @@ property saved it runs on synthetic data, so it works before you sign in.
 # The dashboard, on synthetic data — no Google account needed
 craft
 
-# No GA4 property yet? One command creates it and prints the tag (★ Anacrafter)
-craft configure yoursite.com
-
-# Already have one? Connect it instead
+# Connect your GA4 property
 craft login        # OAuth sign-in
 craft props        # list the properties this account can read
 craft use 1234567  # save it as the default
@@ -67,26 +64,31 @@ craft use 1234567  # save it as the default
 craft
 ```
 
-`craft configure` is part of the [Anacrafter plan](https://anacraft.dev/pricing.html)
-($2.99/month; the plans above it each add one more thing).
-It creates the property and its web data stream, prints the gtag.js snippet with
-your measurement id already in it, and saves the property as the default. The
-subscription ask arrives on the page the Google sign-in already ends on, and the
-terminal picks the payment up from there — nothing is created in your Analytics
-account before it clears. Paste the snippet into `<head>`, then `craft live` to watch the
-first visit arrive.
+**No property yet?** Sign in at [app.anacraft.dev](https://app.anacraft.dev),
+choose **Create a new property** and give it your site's URL. It creates the
+property and its web data stream and hands you the gtag.js snippet with your
+measurement id already in it, with a copy button — nothing to install. Paste it
+into `<head>`, then `craft use <id>` here and `craft live` to watch the first
+visit arrive. The dashboard is part of the
+[Anacrafter Elite plan](https://anacraft.dev/pricing.html) ($9.99/month, the
+same one `craft mcp` is on); the paywall comes before anything is created in
+your Analytics account.
 
-Run it again for the same domain and it creates nothing — it finds the property
-already measuring that site and prints its tag again. This is the only command
-that changes anything in your Analytics account, so it asks Google for
-permission to do so when you run it, and never at sign-in; see
+Give it a domain that already has a property and it creates nothing — it finds
+that property and hands its tag back — so doing it twice is how you get the tag
+again, not how you end up with two properties splitting your traffic.
+
+Rather stay in the terminal? `craft configure yoursite.com` does the same thing
+in one command, on the $2.99 [Anacrafter plan](https://anacraft.dev/pricing.html),
+and saves the property as the default. It asks Google for permission to write to
+your Analytics account when you run it, never at sign-in; see
 [docs/oauth-scopes.md](docs/oauth-scopes.md).
 
-### The same thing in a browser
+### The dashboard, on your own machine
 
-`craft serve` is that flow with a page in front of it, for when a terminal is
-not where you want to be — or when the person who needs the tag is not the
-person who reads terminals.
+`craft serve` is the page at app.anacraft.dev, run locally — for when you would
+rather your Google sign-in never left your machine, or want to script against
+the same API.
 
 ```sh
 craft serve          # opens a page: sign in, pick or make the property, copy the tag
@@ -98,8 +100,8 @@ and answers a browser only from its own origin. The page is the first caller of
 an API the whole of which is documented at
 [anacraft.dev/serve.html](https://anacraft.dev/serve.html) — so a script, an
 editor extension or another service can register a tag the same way. It creates
-nothing `craft configure` would not create, through the same two Admin API
-calls — and it can throw a property into Google's trash the way
+the same property and stream the hosted dashboard does, through the same two
+Admin API calls — and it can throw a property into Google's trash the way
 `craft delete --all` does, asking for the id twice before it will.
 
 It is part of the [Anacrafter Elite plan](https://anacraft.dev/pricing.html),
@@ -569,11 +571,12 @@ people's quota consumption.
 
 ## Setting up GA4
 
-`craft configure <domain>` is the preferred route: property, data stream and
-tag in one command, without the console. It is part of the subscription, the
-same as `craft watch` and `craft mcp` — the ask arrives on the page the Google
-sign-in already ends on, and nothing is created in the Analytics account until
-the payment clears. The rest of the Google side — access management, retention,
+[app.anacraft.dev](https://app.anacraft.dev) is the preferred route: sign in,
+**Create a new property**, and the property, data stream and tag are done
+without the console. `craft configure <domain>` does the same from a terminal.
+Both are part of a subscription — the dashboard on Elite, the command on
+Anacrafter — and nothing is created in the Analytics account until the payment
+clears. The rest of the Google side — access management, retention,
 key events, API enablement — is console work, and is documented in
 [Configure your analytics](https://anacraft.dev/setup-ga4.html).
 

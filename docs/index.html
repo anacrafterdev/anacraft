@@ -229,7 +229,11 @@
   }
 
   /* ── hero ──────────────────────────────────────────── */
-  .hero { padding: 100px 0 56px; position: relative; }
+  /* clip, sideways only: the glow below is drawn 10% past the right edge,
+     which on a phone was 37px of page to scroll into. `clip` rather than
+     `hidden` so it does not become a scroll container, and the glow still
+     spills up behind the nav. */
+  .hero { padding: 100px 0 56px; position: relative; overflow-x: clip; }
   .hero::before {
     content: ''; position: absolute; inset: -20% -10% 40%;
     background: radial-gradient(60% 55% at 22% 30%, rgba(45,213,183,.10), transparent 70%);
@@ -521,9 +525,16 @@
   .code .w { color: var(--white); }
 
   /* two-up */
-  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; margin-top: 44px; }
-  @media (max-width: 820px) { .two { grid-template-columns: 1fr; gap: 40px; } }
+  /* minmax(0, …), not a bare 1fr: a bare 1fr will not shrink below its
+     content, so the longest line in a code block set the column's width and
+     pushed the whole page sideways on a phone. At zero the column keeps to
+     the screen and the block scrolls inside itself. */
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; margin-top: 44px; }
+  @media (max-width: 820px) { .two { grid-template-columns: minmax(0, 1fr); gap: 40px; } }
   .keys { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  /* `anywhere` counts toward the table's narrowest size, so on a small phone
+     a long cell wraps instead of widening the table past the page. */
+  .keys td { overflow-wrap: anywhere; }
   .keys th {
     text-align: left; font-family: var(--mono); font-weight: 400; font-size: 11px;
     letter-spacing: .14em; text-transform: uppercase; color: var(--jade-deep);

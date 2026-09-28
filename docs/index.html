@@ -267,23 +267,25 @@
 
      Letter-spacing stays at zero or the panel's rules stop meeting its
      corners. */
-  #ask {
+  .pnl {
     font-family: var(--mono); font-size: 17px; line-height: 1.25;
     letter-spacing: 0; white-space: pre; user-select: none;
     color: var(--fg);
     filter: drop-shadow(0 0 34px rgba(45, 213, 183, .16));
     filter: drop-shadow(0 0 34px color-mix(in srgb, var(--jade) 16%, transparent));
   }
-  #ask .f  { color: var(--line-2); }
-  #ask .ti { color: var(--jade); }
-  #ask .q  { color: var(--white); }
-  #ask .t  { color: var(--dim); }
-  #ask .v  { color: var(--white); font-weight: 700; }
-  #ask .bc { color: var(--jade); }
+  .pnl .f  { color: var(--line-2); }
+  .pnl .ti { color: var(--jade); }
+  .pnl .q  { color: var(--white); }
+  .pnl .t  { color: var(--dim); }
+  .pnl .v  { color: var(--white); font-weight: 700; }
+  .pnl .bc { color: var(--jade); }
+  .pnl .lv { color: var(--jade); }
   /* One highlight per answer, in gold: the number or name the question was
      really asking for. */
-  #ask .nb { color: var(--gold); }
-  #ask .cur { color: var(--jade); }
+  .pnl .nb { color: var(--gold); }
+  .pnl .dn { color: var(--coral); }
+  .pnl .cur { color: var(--jade); }
   .eyebrow {
     font-family: var(--mono); font-size: 11.5px; letter-spacing: .16em;
     text-transform: uppercase; color: var(--jade); margin-bottom: 22px;
@@ -333,51 +335,64 @@
   .flow .n.on { border-color: var(--jade); color: var(--jade); }
 
   /* ── dashview ──────────────────────────────────────── */
-  /* A band a shade up from the page, edge to edge: the hero is for asking,
-     this is for watching, and the change of ground is what says so. `--ink`
-     is that shade in every palette. */
-  .dashview {
-    padding: 80px 0 72px; background: var(--ink);
-    border-top: 1px solid var(--line);
-  }
-  /* It is laid out the way the hero is — the sentence and the command on the left,
-     so they run straight down into the palettes and the dashboard, and the
-     panel on the right from 1180px. Below that the panel is simply not
-     there. */
-  .dash-get {
+  /* The features, one section each — Lovable, the terminal, Slack — and
+     each laid out the way the hero is: the sentence and the one thing to do
+     on the left, the feature's own panel on the right from 1180px. Below that
+     the panel is simply not there; a section that has to choose keeps the
+     sentence. They alternate ground, a shade up from the page and back, so
+     each reads as its own place. `--ink` is that shade in every palette. */
+  .band { background: var(--ink); }
+  .dashview { padding: 84px 0 72px; border-top: 1px solid var(--line); }
+  .feat {
     display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px;
-    margin-bottom: 36px;
   }
-  .dash-say { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
-  .dash-say .sec-label { margin-bottom: 0; }
-  .dash-say .sec-sub { margin: 0 0 10px; }
-  .dash-art { display: none; justify-self: end; align-self: center; }
+  .dashview .feat { margin-bottom: 36px; }
+  .feat-say { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+  .feat-say .sec-label { margin-bottom: 0; }
+  .feat-say .sec-sub { margin: 0 0 10px; }
+  .feat-say h2 { max-width: none; }
+  .feat-say h2 em { font-style: normal; color: var(--jade); }
+  .feat-art { display: none; justify-self: end; align-self: center; position: relative; }
   @media (min-width: 1180px) {
-    .dash-get { grid-template-columns: minmax(0, 1fr) auto; }
-    .dash-art { display: block; }
+    .feat { grid-template-columns: minmax(0, 1fr) auto; }
+    .feat-art { display: block; }
   }
-  /* The dashboard's map in the hero's Ask panel chrome: same frame, same
-     ■^n tag, same glow. */
-  #chart {
-    font-family: var(--mono); font-size: 17px; line-height: 1.25;
-    letter-spacing: 0; white-space: pre; user-select: none;
-    color: var(--fg);
-    filter: drop-shadow(0 0 34px rgba(45, 213, 183, .16));
-    filter: drop-shadow(0 0 34px color-mix(in srgb, var(--jade) 16%, transparent));
-  }
-  #chart .f  { color: var(--line-2); }
-  #chart .ti { color: var(--jade); }
-  #chart .v  { color: var(--white); font-weight: 700; }
-  #chart .lv { color: var(--jade); }
-  /* The line is braille dots, painted rather than typed: braille is rarely
-     in the page's monospace font, and the fallback glyph comes out wider
-     than a cell and pushes the frame's right edge out. On a canvas laid over
-     the frame's inside, every dot lands on the grid a terminal would put it
-     on. */
-  .dash-art { position: relative; }
+  /* The map's dots are painted rather than typed: braille is rarely in the
+     page's monospace font, and the fallback glyph comes out wider than a
+     cell and pushes the frame's right edge out. On a canvas laid over the
+     frame's inside, every dot lands on the grid a terminal would put it on. */
   #chart-dots { position: absolute; pointer-events: none; }
-  .dash-get h2 { max-width: none; }
-  .dash-get h2 em { font-style: normal; color: var(--jade); }
+  /* A way in that is a link, not a command: the same box as the install
+     button, lit, since it is the section's one thing to do. */
+  .go {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-family: var(--mono); font-size: 13.5px; color: var(--on-accent);
+    background: var(--jade); border: 1px solid var(--jade);
+    padding: 13px 18px; text-decoration: none; transition: filter .15s;
+  }
+  .go:hover { filter: brightness(1.08); }
+  .feat-say .also { font-size: 13.5px; color: var(--dim); }
+  /* The Lovable panel is the two marks in squares, the way the Lovable
+     page draws them: what you build with, times what reads it. Sized to the
+     width the other panels take, so the sections' right columns line up. */
+  .lockup { width: 390px; display: flex; align-items: center; justify-content: space-between; }
+  .lk {
+    width: 166px; aspect-ratio: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 4px;
+    background: var(--panel); border: 1px solid var(--line);
+  }
+  .lk img, .lk svg { width: 56px; height: 56px; margin-bottom: 14px; }
+  .lk svg { color: var(--jade); }
+  .lk b { font-family: 'Archivo', sans-serif; font-size: 15px; color: var(--white); font-weight: 700; }
+  .lk span { font-size: 12px; color: var(--dim); }
+  .lk-x { font-family: var(--mono); font-size: 22px; color: var(--jade); }
+  /* The Badge panel: the badge itself, big, and the other palettes it comes
+     in under it. The same 390px column as the other panels. */
+  .bdg { width: 390px; display: flex; flex-direction: column; align-items: center; gap: 22px; }
+  .bdg-big svg { display: block; filter: drop-shadow(0 0 34px color-mix(in srgb, var(--jade) 18%, transparent)); }
+  .bdg-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 12px; }
+  .bdg-chip svg { display: block; }
+  .feat-say .also a { color: var(--jade); }
   /* The palettes sit on the dashboard's top edge, so a click shows its
      effect right where the eye already is. */
   .dash-head {
@@ -484,33 +499,6 @@
   }
   .sec-sub { margin-top: 16px; max-width: 56ch; font-size: 15.5px; color: var(--dim); }
 
-  /* feature rows */
-  .rows { margin-top: 52px; border-top: 1px solid var(--line); }
-  .row {
-    display: grid; grid-template-columns: 76px 1.05fr 1.35fr 28px;
-    gap: 24px; align-items: center;
-    padding: 26px 6px; border-bottom: 1px solid var(--line);
-    transition: background .18s, padding .18s;
-  }
-  .row:hover { background: rgba(45,213,183,.035);
-               background: color-mix(in srgb, var(--jade) 3.5%, transparent); }
-  .row .n { font-family: var(--mono); font-size: 12px; color: var(--jade-deep); }
-  .row h3 {
-    font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 20px;
-    letter-spacing: -.02em; color: var(--white);
-  }
-  .row p { font-size: 14.5px; color: var(--dim); }
-  .row .arw { justify-self: end; color: var(--line-2); transition: color .18s, transform .18s; }
-  .row:hover .arw { color: var(--jade); transform: translateX(4px); }
-  @media (max-width: 760px) {
-    .row { grid-template-columns: 60px 1fr; }
-    .row .arw { display: none; }
-    .row p { grid-column: 2; }
-  }
-
-  .row.soon:hover { background: rgba(255,225,107,.045);
-                    background: color-mix(in srgb, var(--gold) 4.5%, transparent); }
-  .row.soon:hover .arw { color: var(--gold); }
   .tag {
     font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
     text-transform: uppercase; color: var(--gold);
@@ -668,14 +656,35 @@
       </div>
     </div>
    </div>
-   <div class="hero-art" aria-hidden="true"><pre id="ask"></pre></div>
+   <div class="hero-art" aria-hidden="true"><pre id="ask" class="pnl"></pre></div>
   </div>
 </header>
 
+<section id="lovable" class="band">
+  <div class="wrap feat">
+   <div class="feat-say">
+    <div class="sec-label">Lovable</div>
+    <h2>Analytics for your<br><em>Lovable app.</em></h2>
+    <p class="sec-sub">Sign in, pick or create the GA4 property for your app, and paste one
+      prompt into Lovable. It adds the tag; then ask Claude how the app is doing.
+      Nothing to install.</p>
+    <a class="go" href="https://app.anacraft.dev">Get your tag <span aria-hidden="true">→</span></a>
+    <p class="also"><a href="/lovable.html">anacraft × Lovable</a> — the whole setup, step by step.</p>
+   </div>
+   <div class="feat-art" aria-hidden="true">
+    <div class="lockup">
+     <div class="lk"><img src="lovable-logo.svg" alt="" width="104" height="104"><b>Lovable</b><span>builds the app</span></div>
+     <div class="lk-x">×</div>
+     <div class="lk"><svg viewBox="1 1 14 14" width="104" height="104" shape-rendering="crispEdges" fill="currentColor"><rect x="6" y="1" width="4" height="1"/><rect x="5" y="2" width="6" height="1"/><rect x="4" y="3" width="8" height="1"/><rect x="4" y="4" width="8" height="1"/><rect x="3" y="5" width="4" height="1"/><rect x="9" y="5" width="4" height="1"/><rect x="3" y="6" width="4" height="1"/><rect x="9" y="6" width="4" height="1"/><rect x="2" y="7" width="4" height="1"/><rect x="10" y="7" width="4" height="1"/><rect x="2" y="8" width="4" height="1"/><rect x="10" y="8" width="4" height="1"/><rect x="1" y="9" width="4" height="1"/><rect x="11" y="9" width="4" height="1"/><rect x="1" y="10" width="14" height="1"/><rect x="1" y="11" width="14" height="1"/><rect x="1" y="12" width="4" height="1"/><rect x="11" y="12" width="4" height="1"/><rect x="1" y="13" width="4" height="1"/><rect x="11" y="13" width="4" height="1"/><rect x="1" y="14" width="4" height="1"/><rect x="11" y="14" width="4" height="1"/></svg><b>anacraft</b><span>reads the numbers</span></div>
+    </div>
+   </div>
+  </div>
+</section>
+
 <div class="dashview" id="dashboard">
   <div class="wrap">
-    <div class="dash-get">
-     <div class="dash-say">
+    <div class="feat">
+     <div class="feat-say">
       <div class="sec-label">In the terminal</div>
       <h2>Watch your analytics<br>on a <em>terminal dashboard.</em></h2>
       <p class="sec-sub">A free GA4 dashboard that runs in your terminal. Install it, run
@@ -686,7 +695,7 @@
         <span class="copy" aria-label="Copy install command"><svg viewBox="0 0 16 16" aria-hidden="true"><g class="sheet"><rect x="5.9" y="5.9" width="8.2" height="8.2"/><path d="M10.4 3.4a1.5 1.5 0 0 0-1.5-1.5H3.4a1.5 1.5 0 0 0-1.5 1.5v5.5a1.5 1.5 0 0 0 1.5 1.5"/></g><path class="tick" d="M3 8.6l3.2 3.2L13 4.8"/></svg></span>
       </button>
      </div>
-     <div class="dash-art" aria-hidden="true"><pre id="chart"></pre><canvas id="chart-dots"></canvas></div>
+     <div class="feat-art" aria-hidden="true"><pre id="chart" class="pnl"></pre><canvas id="chart-dots"></canvas></div>
     </div>
     <div class="dash-head">
       <div class="tabs" role="tablist">
@@ -2236,58 +2245,81 @@
   </div>
 </div>
 
-<section id="features">
+<section id="alerts" class="band">
   <div class="wrap">
-    <div class="sec-label">What you get</div>
-    <h2>Every panel earns its rows.</h2>
-    <p class="sec-sub">
-      Set the property up from the dashboard, then seven panels, each toggleable with a
-      number key. Turn off what you do not care about and the rest reflows to fill
-      the terminal.
-    </p>
-    <div class="rows">
-      <div class="row"><span class="n">01</span><h3>It configures your analytics</h3><p><a href="https://app.anacraft.dev">Sign in at app.anacraft.dev</a>, press <b>Create a new property</b> and give it your site's URL. It creates the Google Analytics property, adds the web stream and hands you the tag with its real measurement id in it — the three console steps between a new domain and its first number. A site that already has a property gets its tag back rather than a second property. Part of the <a href="/pricing.html">Anacrafter</a> plan, $2.99/mo.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">02</span><h3>It audits your analytics</h3><p><code style="font-family:var(--mono)">craft audit</code> checks how the property is <i>measuring</i> rather than what it measured — sixteen checks over four weeks, each finding graded and carrying what it means, and <code style="font-family:var(--mono)">--fix</code> applies the ones GA4 can repair itself. <a href="/audit.html">Nothing marked as a key event</a>, an outcome arriving unmarked, measurement switched on and recording nothing, <code style="font-family:var(--mono)">purchase</code> arriving without its value, page views counted twice. Part of the <a href="/pricing.html">Anacrafter Pro</a> plan, $5.99/mo — <code style="font-family:var(--mono)">craft audit --demo</code> is ungated.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">03</span><h3>Seven toggleable panels</h3><p>Events, Right Now, Top Chunks, Daily Villagers, Realms, Vitals and Top Realms — keys <code style="font-family:var(--mono)">1</code>–<code style="font-family:var(--mono)">7</code>, or their letter aliases.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">04</span><h3>Realtime event feed</h3><p>Players online polled every few seconds, with spawn and wander-off events that fade as they age out of the window.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">05</span><h3>Achievement toasts</h3><p>Diamond Streak, Creeper Repelled, Deep Vein — unlocks pop in when a metric crosses a milestone, then get out of the way.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">06</span><h3>Seven palettes, one texture pack</h3><p>Osaka Jade, Catppuccin, GitHub, Tokyo Night, Catppuccin Latte and Solarized in both dark and light. The ore vocabulary survives the swap; <code style="font-family:var(--mono)">t</code> cycles, and the choice persists.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">07</span><h3>One-shot reports</h3><p>Not everything needs a dashboard. <code style="font-family:var(--mono)">overview</code>, <code style="font-family:var(--mono)">pages</code>, <code style="font-family:var(--mono)">portals</code>, <code style="font-family:var(--mono)">realms</code> and <code style="font-family:var(--mono)">live</code> print and exit — pipe them anywhere.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">08</span><h3>Runs before you sign in</h3><p><code style="font-family:var(--mono)">craft</code> on its own opens the dashboard, and with no property saved it drives the whole thing from synthetic data — so you see it working before touching OAuth.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">09</span><h3>Every property in one session</h3><p>Save as many GA4 properties as you like and <code style="font-family:var(--mono)">Tab</code> walks them without leaving the dashboard — each one keeping its own palette and time window.</p><span class="arw">→</span></div>
-      <div class="row"><span class="n">10</span><h3>Readable by an assistant</h3><p><code style="font-family:var(--mono)">craft mcp</code> serves the dashboard's numbers over the Model Context Protocol — <a href="/mcp.html">twelve tools</a>, one command to wire into <a href="#mcp">Claude Desktop</a>. Part of the <a href="/pricing.html">Anacrafter Elite</a> plan, $9.99/mo — <code style="font-family:var(--mono)">craft mcp --demo</code> is ungated.</p><span class="arw">→</span></div>
+    <div class="feat">
+     <div class="feat-say">
+      <div class="sec-label">Slack alerts</div>
+      <h2>Told, <em>not asked.</em></h2>
+      <p class="sec-sub">A dashboard answers <i>how is the site doing</i> when somebody thinks to
+      ask. <code style="font-family:var(--mono);color:var(--fg)">craft watch</code> answers the one nobody is awake to ask —
+      <b>did something break</b> — and says it in Slack. A site's own history is
+      the threshold, so there is nothing to configure for it to be useful.</p>
+      <button class="install" onclick="cp(this)">
+        <span class="p">$</span>
+        <span class="c">craft slack --install</span>
+        <span class="copy" aria-label="Copy command"><svg viewBox="0 0 16 16" aria-hidden="true"><g class="sheet"><rect x="5.9" y="5.9" width="8.2" height="8.2"/><path d="M10.4 3.4a1.5 1.5 0 0 0-1.5-1.5H3.4a1.5 1.5 0 0 0-1.5 1.5v5.5a1.5 1.5 0 0 0 1.5 1.5"/></g><path class="tick" d="M3 8.6l3.2 3.2L13 4.8"/></svg></span>
+      </button>
+     </div>
+     <div class="feat-art" aria-hidden="true"><pre id="slack-pnl" class="pnl"></pre></div>
     </div>
+    <div class="two">
+      <div>
+        <pre class="code"><span class="d"># check once, print what moved, exit</span>
+<span class="c">$</span> <span class="w">craft watch</span>
 
-    <div class="sec-label" style="margin-top:64px">On the roadmap</div>
-    <p class="sec-sub" style="margin-bottom:32px">
-      Where each one stands.
-    </p>
-    <div class="rows">
-      <div class="row soon">
-        <span class="n"><span class="tag">Soon</span></span>
-        <h3>AI insights</h3>
-        <p>Anomaly detection on sudden drops, content suggestions from page trends, and goal projections — surfaced in an Enchantment Table panel.</p>
-        <span class="arw">→</span>
+<span class="d"># pick a slack channel, then keep checking</span>
+<span class="c">$</span> <span class="w">craft slack --install</span>
+<span class="c">$</span> <span class="w">craft watch --every 3600</span>
+
+<span class="d"># see all three shapes on synthetic data</span>
+<span class="c">$</span> <span class="w">craft watch --demo</span>
+
+<span class="d">⛏ VILLAGERS      412  ▼38%</span>
+<span class="d">  28-day normal 664 · fires past 30%</span>
+<span class="d">⛏ DIAMONDS         0  nothing recorded</span>
+<span class="d">  28-day normal 12 · fires past 40%</span></pre>
       </div>
-      <div class="row soon">
-        <span class="n"><span class="tag live">Live</span></span>
-        <h3>One-click Google sign-in</h3>
-        <p><code style="font-family:var(--mono)">craft login</code> in a single round trip — consent, redirect, token stored. The OAuth client is verified and live.</p>
-        <span class="arw">→</span>
-      </div>
-      <div class="row soon">
-        <span class="n"><span class="tag live">Live</span></span>
-        <h3>Plans and tiers</h3>
-        <p>Three plans from one checkout — Anacrafter ($2.99), Pro ($5.99) and Elite ($9.99) — sold by <code style="font-family:var(--mono)">craft subscribe --plan pro|elite</code>. The tier rides the payment: Slack alerts gate on Pro, the MCP server on Elite.</p>
-        <span class="arw">→</span>
-      </div>
-      <div class="row soon">
-        <span class="n"><span class="tag live">Live</span></span>
-        <h3>Themes</h3>
-        <p>Seven palettes — Osaka Jade, Catppuccin, GitHub, Tokyo Night, Catppuccin Latte and Solarized in both dark and light. <code style="font-family:var(--mono)">craft theme &lt;name&gt;</code> switches and persists, <code style="font-family:var(--mono)">t</code> cycles inside the dashboard, and a property can keep its own palette.</p>
-        <span class="arw">→</span>
+      <div>
+        <table class="keys">
+          <tr><th>Fires on</th><th>Which is</th></tr>
+          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">drop</code></td><td><b>Down past the metric's threshold</b> — 30% for users, 40% for conversions, 20% for bounce rate</td></tr>
+          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">spike</code></td><td>Up past the same line. A good morning is worth knowing about too</td></tr>
+          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">silent</code></td><td><b>A count that went to nothing</b> against a baseline that was not nothing — a deleted tag, a broken banner, a site that is down</td></tr>
+          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">no data</code></td><td>Nothing anywhere in the window. Said once, rather than as six metrics all going quiet</td></tr>
+        </table>
+        <p class="sec-sub" style="margin-top:22px">
+          Tuned per property when the defaults are wrong for your site, and
+          silent about a day it has already told you about — one message about a
+          drop, not one an hour.
+          <a href="/alerts.html" style="color:var(--jade)">How alerts work &rarr;</a>
+        </p>
       </div>
     </div>
+  </div>
+</section>
+
+<section id="badge">
+  <div class="wrap feat">
+   <div class="feat-say">
+    <div class="sec-label">Badge</div>
+    <h2>Show who<br><em>links to you.</em></h2>
+    <p class="sec-sub">A small badge for your site with how many other sites link to it, counted
+      from your own GA4 over thirty days. One line of HTML, the number stays current, and it
+      wears any of the dashboard's palettes. Free, no subscription.</p>
+    <button class="install" onclick="cp(this)">
+      <span class="p">$</span>
+      <span class="c">craft burn</span>
+      <span class="copy" aria-label="Copy command"><svg viewBox="0 0 16 16" aria-hidden="true"><g class="sheet"><rect x="5.9" y="5.9" width="8.2" height="8.2"/><path d="M10.4 3.4a1.5 1.5 0 0 0-1.5-1.5H3.4a1.5 1.5 0 0 0-1.5 1.5v5.5a1.5 1.5 0 0 0 1.5 1.5"/></g><path class="tick" d="M3 8.6l3.2 3.2L13 4.8"/></svg></span>
+    </button>
+    <p class="also"><a href="/burn.html">How the badge works</a> — minting it, palettes, and where the number comes from.</p>
+   </div>
+   <div class="feat-art" aria-hidden="true">
+    <div class="bdg">
+     <div class="bdg-big"><svg xmlns="http://www.w3.org/2000/svg" width="372" height="80" viewBox="0 0 93 20" role="img" aria-label="12 sites"><rect width="93" height="20" rx="3" fill="#111c18"/><rect width="24" height="20" rx="3" fill="#3a5247" fill-opacity="0.45"/><rect x="21" width="3" height="20" fill="#3a5247" fill-opacity="0.45"/><g transform="translate(6,4.0) scale(0.8571)" fill="#2dd5b7" shape-rendering="crispEdges"><rect x="5" y="0" width="4" height="1"/><rect x="4" y="1" width="6" height="1"/><rect x="3" y="2" width="8" height="1"/><rect x="3" y="3" width="8" height="1"/><rect x="2" y="4" width="4" height="1"/><rect x="8" y="4" width="4" height="1"/><rect x="2" y="5" width="4" height="1"/><rect x="8" y="5" width="4" height="1"/><rect x="1" y="6" width="4" height="1"/><rect x="9" y="6" width="4" height="1"/><rect x="1" y="7" width="4" height="1"/><rect x="9" y="7" width="4" height="1"/><rect x="0" y="8" width="4" height="1"/><rect x="10" y="8" width="4" height="1"/><rect x="0" y="9" width="14" height="1"/><rect x="0" y="10" width="14" height="1"/><rect x="0" y="11" width="4" height="1"/><rect x="10" y="11" width="4" height="1"/><rect x="0" y="12" width="4" height="1"/><rect x="10" y="12" width="4" height="1"/><rect x="0" y="13" width="4" height="1"/><rect x="10" y="13" width="4" height="1"/></g><g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11"><text x="58.5" y="14" text-anchor="middle"><tspan fill="#2dd5b7" font-weight="700">12</tspan><tspan fill="#c1c497"> sites</tspan></text></g></svg></div>
+     <div class="bdg-row"><span class="bdg-chip"><svg xmlns="http://www.w3.org/2000/svg" width="112" height="24" viewBox="0 0 93 20" role="img" aria-label="12 sites"><rect width="93" height="20" rx="3" fill="#002b36"/><rect width="24" height="20" rx="3" fill="#586e75" fill-opacity="0.45"/><rect x="21" width="3" height="20" fill="#586e75" fill-opacity="0.45"/><g transform="translate(6,4.0) scale(0.8571)" fill="#2aa198" shape-rendering="crispEdges"><rect x="5" y="0" width="4" height="1"/><rect x="4" y="1" width="6" height="1"/><rect x="3" y="2" width="8" height="1"/><rect x="3" y="3" width="8" height="1"/><rect x="2" y="4" width="4" height="1"/><rect x="8" y="4" width="4" height="1"/><rect x="2" y="5" width="4" height="1"/><rect x="8" y="5" width="4" height="1"/><rect x="1" y="6" width="4" height="1"/><rect x="9" y="6" width="4" height="1"/><rect x="1" y="7" width="4" height="1"/><rect x="9" y="7" width="4" height="1"/><rect x="0" y="8" width="4" height="1"/><rect x="10" y="8" width="4" height="1"/><rect x="0" y="9" width="14" height="1"/><rect x="0" y="10" width="14" height="1"/><rect x="0" y="11" width="4" height="1"/><rect x="10" y="11" width="4" height="1"/><rect x="0" y="12" width="4" height="1"/><rect x="10" y="12" width="4" height="1"/><rect x="0" y="13" width="4" height="1"/><rect x="10" y="13" width="4" height="1"/></g><g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11"><text x="58.5" y="14" text-anchor="middle"><tspan fill="#2aa198" font-weight="700">12</tspan><tspan fill="#839496"> sites</tspan></text></g></svg></span><span class="bdg-chip"><svg xmlns="http://www.w3.org/2000/svg" width="112" height="24" viewBox="0 0 93 20" role="img" aria-label="12 sites"><rect width="93" height="20" rx="3" fill="#1a1b26"/><rect width="24" height="20" rx="3" fill="#393f51" fill-opacity="0.45"/><rect x="21" width="3" height="20" fill="#393f51" fill-opacity="0.45"/><g transform="translate(6,4.0) scale(0.8571)" fill="#7aa2f7" shape-rendering="crispEdges"><rect x="5" y="0" width="4" height="1"/><rect x="4" y="1" width="6" height="1"/><rect x="3" y="2" width="8" height="1"/><rect x="3" y="3" width="8" height="1"/><rect x="2" y="4" width="4" height="1"/><rect x="8" y="4" width="4" height="1"/><rect x="2" y="5" width="4" height="1"/><rect x="8" y="5" width="4" height="1"/><rect x="1" y="6" width="4" height="1"/><rect x="9" y="6" width="4" height="1"/><rect x="1" y="7" width="4" height="1"/><rect x="9" y="7" width="4" height="1"/><rect x="0" y="8" width="4" height="1"/><rect x="10" y="8" width="4" height="1"/><rect x="0" y="9" width="14" height="1"/><rect x="0" y="10" width="14" height="1"/><rect x="0" y="11" width="4" height="1"/><rect x="10" y="11" width="4" height="1"/><rect x="0" y="12" width="4" height="1"/><rect x="10" y="12" width="4" height="1"/><rect x="0" y="13" width="4" height="1"/><rect x="10" y="13" width="4" height="1"/></g><g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11"><text x="58.5" y="14" text-anchor="middle"><tspan fill="#7aa2f7" font-weight="700">12</tspan><tspan fill="#c0caf5"> sites</tspan></text></g></svg></span><span class="bdg-chip"><svg xmlns="http://www.w3.org/2000/svg" width="112" height="24" viewBox="0 0 93 20" role="img" aria-label="12 sites"><rect width="93" height="20" rx="3" fill="#1e1e2e"/><rect width="24" height="20" rx="3" fill="#45475a" fill-opacity="0.45"/><rect x="21" width="3" height="20" fill="#45475a" fill-opacity="0.45"/><g transform="translate(6,4.0) scale(0.8571)" fill="#94e2d5" shape-rendering="crispEdges"><rect x="5" y="0" width="4" height="1"/><rect x="4" y="1" width="6" height="1"/><rect x="3" y="2" width="8" height="1"/><rect x="3" y="3" width="8" height="1"/><rect x="2" y="4" width="4" height="1"/><rect x="8" y="4" width="4" height="1"/><rect x="2" y="5" width="4" height="1"/><rect x="8" y="5" width="4" height="1"/><rect x="1" y="6" width="4" height="1"/><rect x="9" y="6" width="4" height="1"/><rect x="1" y="7" width="4" height="1"/><rect x="9" y="7" width="4" height="1"/><rect x="0" y="8" width="4" height="1"/><rect x="10" y="8" width="4" height="1"/><rect x="0" y="9" width="14" height="1"/><rect x="0" y="10" width="14" height="1"/><rect x="0" y="11" width="4" height="1"/><rect x="10" y="11" width="4" height="1"/><rect x="0" y="12" width="4" height="1"/><rect x="10" y="12" width="4" height="1"/><rect x="0" y="13" width="4" height="1"/><rect x="10" y="13" width="4" height="1"/></g><g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11"><text x="58.5" y="14" text-anchor="middle"><tspan fill="#94e2d5" font-weight="700">12</tspan><tspan fill="#cdd6f4"> sites</tspan></text></g></svg></span><span class="bdg-chip"><svg xmlns="http://www.w3.org/2000/svg" width="112" height="24" viewBox="0 0 93 20" role="img" aria-label="12 sites"><rect width="93" height="20" rx="3" fill="#fdf6e3"/><rect width="24" height="20" rx="3" fill="#93a1a1" fill-opacity="0.45"/><rect x="21" width="3" height="20" fill="#93a1a1" fill-opacity="0.45"/><g transform="translate(6,4.0) scale(0.8571)" fill="#2aa198" shape-rendering="crispEdges"><rect x="5" y="0" width="4" height="1"/><rect x="4" y="1" width="6" height="1"/><rect x="3" y="2" width="8" height="1"/><rect x="3" y="3" width="8" height="1"/><rect x="2" y="4" width="4" height="1"/><rect x="8" y="4" width="4" height="1"/><rect x="2" y="5" width="4" height="1"/><rect x="8" y="5" width="4" height="1"/><rect x="1" y="6" width="4" height="1"/><rect x="9" y="6" width="4" height="1"/><rect x="1" y="7" width="4" height="1"/><rect x="9" y="7" width="4" height="1"/><rect x="0" y="8" width="4" height="1"/><rect x="10" y="8" width="4" height="1"/><rect x="0" y="9" width="14" height="1"/><rect x="0" y="10" width="14" height="1"/><rect x="0" y="11" width="4" height="1"/><rect x="10" y="11" width="4" height="1"/><rect x="0" y="12" width="4" height="1"/><rect x="10" y="12" width="4" height="1"/><rect x="0" y="13" width="4" height="1"/><rect x="10" y="13" width="4" height="1"/></g><g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11"><text x="58.5" y="14" text-anchor="middle"><tspan fill="#2aa198" font-weight="700">12</tspan><tspan fill="#657b83"> sites</tspan></text></g></svg></span><span class="bdg-chip"><svg xmlns="http://www.w3.org/2000/svg" width="112" height="24" viewBox="0 0 93 20" role="img" aria-label="12 sites"><rect width="93" height="20" rx="3" fill="#fafbfe"/><rect width="24" height="20" rx="3" fill="#c8cfda" fill-opacity="0.45"/><rect x="21" width="3" height="20" fill="#c8cfda" fill-opacity="0.45"/><g transform="translate(6,4.0) scale(0.8571)" fill="#0969da" shape-rendering="crispEdges"><rect x="5" y="0" width="4" height="1"/><rect x="4" y="1" width="6" height="1"/><rect x="3" y="2" width="8" height="1"/><rect x="3" y="3" width="8" height="1"/><rect x="2" y="4" width="4" height="1"/><rect x="8" y="4" width="4" height="1"/><rect x="2" y="5" width="4" height="1"/><rect x="8" y="5" width="4" height="1"/><rect x="1" y="6" width="4" height="1"/><rect x="9" y="6" width="4" height="1"/><rect x="1" y="7" width="4" height="1"/><rect x="9" y="7" width="4" height="1"/><rect x="0" y="8" width="4" height="1"/><rect x="10" y="8" width="4" height="1"/><rect x="0" y="9" width="14" height="1"/><rect x="0" y="10" width="14" height="1"/><rect x="0" y="11" width="4" height="1"/><rect x="10" y="11" width="4" height="1"/><rect x="0" y="12" width="4" height="1"/><rect x="10" y="12" width="4" height="1"/><rect x="0" y="13" width="4" height="1"/><rect x="10" y="13" width="4" height="1"/></g><g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11"><text x="58.5" y="14" text-anchor="middle"><tspan fill="#0969da" font-weight="700">12</tspan><tspan fill="#242938"> sites</tspan></text></g></svg></span><span class="bdg-chip"><svg xmlns="http://www.w3.org/2000/svg" width="112" height="24" viewBox="0 0 93 20" role="img" aria-label="12 sites"><rect width="93" height="20" rx="3" fill="#0d1117"/><rect width="24" height="20" rx="3" fill="#30363d" fill-opacity="0.45"/><rect x="21" width="3" height="20" fill="#30363d" fill-opacity="0.45"/><g transform="translate(6,4.0) scale(0.8571)" fill="#39c5cf" shape-rendering="crispEdges"><rect x="5" y="0" width="4" height="1"/><rect x="4" y="1" width="6" height="1"/><rect x="3" y="2" width="8" height="1"/><rect x="3" y="3" width="8" height="1"/><rect x="2" y="4" width="4" height="1"/><rect x="8" y="4" width="4" height="1"/><rect x="2" y="5" width="4" height="1"/><rect x="8" y="5" width="4" height="1"/><rect x="1" y="6" width="4" height="1"/><rect x="9" y="6" width="4" height="1"/><rect x="1" y="7" width="4" height="1"/><rect x="9" y="7" width="4" height="1"/><rect x="0" y="8" width="4" height="1"/><rect x="10" y="8" width="4" height="1"/><rect x="0" y="9" width="14" height="1"/><rect x="0" y="10" width="14" height="1"/><rect x="0" y="11" width="4" height="1"/><rect x="10" y="11" width="4" height="1"/><rect x="0" y="12" width="4" height="1"/><rect x="10" y="12" width="4" height="1"/><rect x="0" y="13" width="4" height="1"/><rect x="10" y="13" width="4" height="1"/></g><g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11"><text x="58.5" y="14" text-anchor="middle"><tspan fill="#39c5cf" font-weight="700">12</tspan><tspan fill="#c9d1d9"> sites</tspan></text></g></svg></span></div>
+    </div>
+   </div>
   </div>
 </section>
 
@@ -2342,99 +2374,14 @@
   </div>
 </section>
 
-<section id="mcp">
-  <div class="wrap">
-    <div class="sec-label">MCP server</div>
-    <h2>Your numbers, in a conversation.</h2>
-    <p class="sec-sub">
-      <code style="font-family:var(--mono);color:var(--fg)">craft mcp</code> serves the same numbers over the Model Context
-      Protocol, so Claude Desktop — or any MCP client — answers “how is the site
-      doing” without a human reading a TUI.
-      The dashboard and the one-shot reports are free; this is the one thing
-      the <a href="/pricing.html" style="color:var(--jade)">Anacrafter Elite</a>
-      plan ($9.99 a month) adds beyond
-      <a href="/pricing.html" style="color:var(--jade)">Pro</a>, and
-      <code style="font-family:var(--mono);color:var(--fg)">craft mcp --demo</code>
-      is ungated so it can be wired up and looked at first.
-    </p>
-    <div class="two">
-      <div>
-        <pre class="code"><span class="d"># wire it into Claude Desktop, then restart it</span>
-<span class="c">$</span> <span class="w">craft mcp --install</span>
-
-<span class="d"># try it first — synthetic data, no account</span>
-<span class="c">$</span> <span class="w">craft mcp --demo</span>
-
-<span class="d"># or paste it in yourself. an absolute path —</span>
-<span class="d"># a desktop app never sees your shell's PATH</span>
-<span class="d">{</span>
-<span class="d">  "mcpServers": {</span>
-<span class="d">    "anacraft": {</span>
-<span class="d">      "command":</span> <span class="w">"/usr/local/bin/craft"</span><span class="d">,</span>
-<span class="d">      "args": ["mcp"]</span>
-<span class="d">    }</span>
-<span class="d">  }</span>
-<span class="d">}</span></pre>
-      </div>
-      <div>
-        <table class="keys">
-          <tr><th>Tool</th><th>Answers</th></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">site_status</code></td><td><b>How the site is doing</b> — every headline metric against the period before it</td></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">audit_site</code></td><td><b>Whether the numbers can be trusted</b> — twelve graded checks on how the property is measuring</td></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">live_visitors</code></td><td>Who is on it right now, by country</td></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">list_pages</code></td><td>Most-visited pages</td></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">list_events</code></td><td>Events by count, and whether they are rising</td></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">list_referrers</code></td><td>The links sending traffic</td></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">list_traffic_sources</code></td><td>The source / medium mix</td></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">list_countries</code></td><td>Traffic by country</td></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">list_properties</code></td><td>Every property this account can read</td></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">search_pages</code></td><td>Pages whose path contains a substring</td></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">search_events</code></td><td>Events whose name contains a substring</td></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">configure_site</code></td><td>The one write — creates the property and web stream for a domain and returns the tag to paste</td></tr>
-        </table>
-      </div>
-    </div>
-    <p class="sec-sub" style="margin-top:34px;max-width:72ch">
-      Every tool is a read but one: <code style="font-family:var(--mono)">configure_site</code>
-      takes a <code style="font-family:var(--mono)">domain</code>, creates the Google Analytics property
-      and web stream for it, and hands back the tag with its real measurement id. Nothing
-      here signs in, writes to disk, or moves your default property — <code style="font-family:var(--mono)">login</code> and
-      <code style="font-family:var(--mono)">use</code> stay human-only commands, and <code style="font-family:var(--mono)">configure_site</code>
-      never changes what the dashboard opens on. Answers come back as labelled JSON carrying the
-      property and the date window they cover, so an assistant can attribute the
-      numbers it quotes. Needs <code style="font-family:var(--mono)">craft login</code> first (a fresh one carries the
-      write scope), and a subscription — Anacrafter Elite for the server, the
-      configure for the write;       <code style="font-family:var(--mono)">--demo</code> needs neither.
-    </p>
-    <p class="sec-sub" style="margin-top:16px;max-width:72ch">
-      <a href="/mcp.html" style="color:var(--jade)">How the MCP server works &rarr;</a> — wiring it
-      into Claude Desktop and Claude Code, what each tool answers, and what comes back.
-    </p>
-    <p class="sec-sub" style="margin-top:16px;max-width:72ch">
-      Building with <a href="https://lovable.dev" style="color:var(--jade)">Lovable</a>?
-      <a href="/lovable.html" style="color:var(--jade)">anacraft × Lovable</a> — add
-      GA4 to your app, then read the numbers from Claude or any MCP client.
-    </p>
-  </div>
-</section>
-
 <section id="audit">
   <div class="wrap">
     <div class="sec-label">Audit</div>
     <h2>Before you trust a number.</h2>
     <p class="sec-sub">
-      Every other command answers <i>what happened</i>.
-      <code style="font-family:var(--mono);color:var(--fg)">craft audit</code>
-      answers the one before it — <b>is this property measuring the site at all,
-      and is what it measured worth reading</b>. Sixteen checks over four weeks,
-      each finding graded and carrying what it means and what fixes it — and
-      <code style="font-family:var(--mono)">--fix</code> applies the handful
-      Google Analytics can repair from its own side. It reads
-      the reporting API and the admin API, because measurement and configuration
-      fail separately: one says how often <code style="font-family:var(--mono)">purchase</code>
-      fired, the other says whether anybody ever told Google Analytics that
-      <code style="font-family:var(--mono)">purchase</code> was the point. A site
-      can pass the first and fail the second for a year without noticing.
+      <code style="font-family:var(--mono);color:var(--fg)">craft audit</code> checks whether your property is measuring the site
+      correctly: sixteen checks over four weeks, each finding graded with what fixes it.
+      <code style="font-family:var(--mono)">--fix</code> applies the ones Google Analytics can repair itself.
     </p>
     <div class="two">
       <div>
@@ -2475,54 +2422,6 @@
           <code style="font-family:var(--mono)">2</code> when it finds something,
           so a weekly audit into Slack is one cron line.
           <a href="/audit.html" style="color:var(--jade)">What the audit checks &rarr;</a>
-        </p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="alerts">
-  <div class="wrap">
-    <div class="sec-label">Alerts</div>
-    <h2>Told, not asked.</h2>
-    <p class="sec-sub">
-      A dashboard answers <i>how is the site doing</i> when somebody thinks to
-      ask. <code style="font-family:var(--mono);color:var(--fg)">craft watch</code>
-      answers the one nobody is awake to ask — <b>did something break</b>. It
-      compares the most recent complete day against the mean of the days before
-      it and reports what moved further than it usually does. Nothing to
-      configure for it to be useful: a site's own history is the threshold.
-    </p>
-    <div class="two">
-      <div>
-        <pre class="code"><span class="d"># check once, print what moved, exit</span>
-<span class="c">$</span> <span class="w">craft watch</span>
-
-<span class="d"># pick a slack channel, then keep checking</span>
-<span class="c">$</span> <span class="w">craft slack --install</span>
-<span class="c">$</span> <span class="w">craft watch --every 3600</span>
-
-<span class="d"># see all three shapes on synthetic data</span>
-<span class="c">$</span> <span class="w">craft watch --demo</span>
-
-<span class="d">⛏ VILLAGERS      412  ▼38%</span>
-<span class="d">  28-day normal 664 · fires past 30%</span>
-<span class="d">⛏ DIAMONDS         0  nothing recorded</span>
-<span class="d">  28-day normal 12 · fires past 40%</span></pre>
-      </div>
-      <div>
-        <table class="keys">
-          <tr><th>Fires on</th><th>Which is</th></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">drop</code></td><td><b>Down past the metric's threshold</b> — 30% for users, 40% for conversions, 20% for bounce rate</td></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">spike</code></td><td>Up past the same line. A good morning is worth knowing about too</td></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">silent</code></td><td><b>A count that went to nothing</b> against a baseline that was not nothing — a deleted tag, a broken banner, a site that is down</td></tr>
-          <tr><td style="width:auto"><code style="font-family:var(--mono);color:var(--fg)">no data</code></td><td>Nothing anywhere in the window. Said once, rather than as six metrics all going quiet</td></tr>
-        </table>
-        <p class="sec-sub" style="margin-top:22px">
-          Tuned per property when the defaults are wrong for your site, and
-          silent about a day it has already told you about — one message about a
-          drop, not one an hour.
-          <a href="/alerts.html" style="color:var(--jade)">How alerts work &rarr;</a>
         </p>
       </div>
     </div>
@@ -2582,7 +2481,7 @@
 
 <script>
   function cp(el) {
-    navigator.clipboard.writeText('curl -fsSL https://anacraft.dev/install.sh | bash').then(function () {
+    navigator.clipboard.writeText(el.querySelector('.c').textContent.trim()).then(function () {
       el.classList.add('done');
       setTimeout(function () { el.classList.remove('done'); }, 1600);
     });
@@ -2795,34 +2694,13 @@
    * dashboard under it shows — which is why the panel carries DEMO in its
    * footer. Nobody's real traffic is being implied.
    */
-  (function () {
-    var pre = document.getElementById('ask');
+  function talkPanel(id, title, right, TALK) {
+    var pre = document.getElementById(id);
     if (!pre) return;
 
     var W = 36;   // inner columns
     var H = 11;   // inner rows: the longest exchange, plus air
 
-    // Each answer line is [class, text] runs, written to fit W - 2 columns so
-    // nothing has to be wrapped at runtime and every line breaks where a
-    // person would break it.
-    var TALK = [
-      { q: 'how is the site doing this week?', tool: 'site_status', a: [
-        [['v', '45,753'], [null, ' events, up '], ['nb', '22%'], [null, ' on']],
-        [[null, 'last week. Thursday was busiest.']],
-        [],
-        [['bc', '▃▄▅█▆▄▃'], ['t', '  mon → sun']]
-      ] },
-      { q: 'who is on the site right now?', tool: 'live_visitors', a: [
-        [['nb', '130'], [null, ' people. US '], ['v', '39'], [null, ', India '], ['v', '17'], [null, ',']],
-        [[null, 'Germany '], ['v', '13'], [null, ', Brazil '], ['v', '10'], [null, ', UK '], ['v', '9'], [null, '.']]
-      ] },
-      { q: 'is anything measuring wrong?', tool: 'audit_site', a: [
-        [['nb', 'page_view'], [null, ' fires twice on']],
-        [['v', '/checkout'], [null, ', so views there read']],
-        [[null, 'double. Two tags are on the page;']],
-        [[null, 'remove one.']]
-      ] }
-    ];
     var SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
     var still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -2849,8 +2727,6 @@
      * letters of the answer are out. */
     function frame(t, typed, tool, shown, tick) {
       var lines = [];
-      var title = ' ■ ASK ';
-      var right = ' contoso labs ';
       lines.push(span('f', '┌') + span('ti', title) +
         span('f', rule(W - title.length - right.length)) + span('t', right) + span('f', '┐'));
 
@@ -2917,6 +2793,105 @@
       pre.innerHTML = frame(t, typed, tool, shown, tick);
     }, 60);
     pre.innerHTML = frame(TALK[0], 0, null, 0, 0);
+  }
+    // Each answer line is [class, text] runs, written to fit W - 2 columns so
+  // nothing has to be wrapped at runtime and every line breaks where a
+  // person would break it.
+  var ASK = [
+    { q: 'how is the site doing this week?', tool: 'site_status', a: [
+      [['v', '45,753'], [null, ' events, up '], ['nb', '22%'], [null, ' on']],
+      [[null, 'last week. Thursday was busiest.']],
+      [],
+      [['bc', '▃▄▅█▆▄▃'], ['t', '  mon → sun']]
+    ] },
+    { q: 'who is on the site right now?', tool: 'live_visitors', a: [
+      [['nb', '130'], [null, ' people. US '], ['v', '39'], [null, ', India '], ['v', '17'], [null, ',']],
+      [[null, 'Germany '], ['v', '13'], [null, ', Brazil '], ['v', '10'], [null, ', UK '], ['v', '9'], [null, '.']]
+    ] },
+    { q: 'is anything measuring wrong?', tool: 'audit_site', a: [
+      [['nb', 'page_view'], [null, ' fires twice on']],
+      [['v', '/checkout'], [null, ', so views there read']],
+      [[null, 'double. Two tags are on the page;']],
+      [[null, 'remove one.']]
+    ] }
+  ];
+
+  talkPanel('ask', ' ■ ASK ', ' contoso labs ', ASK);
+
+  /* The Slack section's panel: a channel, and the alerts `craft watch` posts
+   * to it arriving one morning at a time. Shaped like the real message in
+   * `watch.rs` — the property and a count as the heading, a line per metric,
+   * the bar down the side red for a drop or a silence and jade for a spike.
+   *
+   * DEMO in the footer: the Contoso property again, nobody's real traffic.
+   */
+  (function () {
+    var pre = document.getElementById('slack-pnl');
+    if (!pre) return;
+    var W = 36, H = 11;
+    var still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    var MSGS = [
+      [
+        [['v', 'anacraft'], ['t', '  APP  Tue 9:00 AM']],
+        [['dn', '▌'], ['q', ' Contoso Labs · 2 alerts']],
+        [['dn', '▌'], [null, ' '], ['v', 'Users'], [null, ' 412, '], ['dn', '▼38%'], ['t', ' vs 664']],
+        [['dn', '▌'], [null, ' '], ['v', 'Sign-ups'], ['t', ' nothing recorded']]
+      ],
+      [
+        [['v', 'anacraft'], ['t', '  APP  Wed 9:00 AM']],
+        [['bc', '▌'], ['q', ' Contoso Labs · 1 alert']],
+        [['bc', '▌'], [null, ' '], ['v', 'Users'], [null, ' 1,204, '], ['bc', '▲61%'], ['t', ' vs 664']],
+        [['bc', '▌'], ['t', ' mostly Referral, from HN']]
+      ]
+    ];
+
+    function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+    function span(cls, s) { return cls ? '<span class="' + cls + '">' + esc(s) + '</span>' : esc(s); }
+    function pad(n) { return new Array(Math.max(0, n) + 1).join(' '); }
+    function rule(n) { return new Array(Math.max(1, n) + 1).join('─'); }
+    function line(runs) {
+      var html = '', len = 0;
+      runs.forEach(function (r) { html += span(r[0], r[1]); len += r[1].length; });
+      return span('f', '│') + ' ' + html + pad(W - 1 - len) + span('f', '│');
+    }
+
+    function frame(shown, typing, tick) {
+      var title = ' ■ #analytics ', right = ' slack ';
+      var out = [span('f', '┌') + span('ti', title) +
+        span('f', rule(W - title.length - right.length)) + span('t', right) + span('f', '┐')];
+      var body = [[]];
+      for (var m = 0; m < shown; m++) {
+        if (m) body.push([]);
+        MSGS[m].forEach(function (l) { body.push(l); });
+      }
+      if (typing) {
+        if (shown) body.push([]);
+        body.push([['t', 'anacraft is posting' + '...'.slice(0, 1 + tick % 3)]]);
+      }
+      for (var r = 0; r < H; r++) out.push(line(body[r] || []));
+      var tag = ' DEMO ';
+      out.push(span('f', '└') + span('f', rule(W - tag.length - 2)) +
+        span('ti', tag) + span('f', '──') + span('f', '┘'));
+      return out.join('\n');
+    }
+
+    if (still) { pre.innerHTML = frame(MSGS.length, false, 0); return; }
+
+    // Tuesday's alert is already there, so the panel is never an empty
+    // channel; Wednesday's arrives, sits long enough to read, and the
+    // channel goes back to Tuesday.
+    var at = 0, tick = 0;
+    pre.innerHTML = frame(1, false, 0);
+    setInterval(function () {
+      if (document.hidden) return;
+      at++;
+      if (at % 4 === 0) tick++;
+      var shown = at < 40 ? 1 : 2;
+      var typing = at >= 28 && at < 40;
+      if (at > 120) at = 0;
+      pre.innerHTML = frame(shown, typing, tick);
+    }, 100);
   })();
 </script>
 </body>

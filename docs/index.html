@@ -619,6 +619,10 @@
     .install { font-size: 12px; padding: 12px 14px; gap: 10px; }
     .dash-head { gap: 12px; }
     .code { font-size: 11.5px; padding: 18px 16px; }
+    /* A phone gets the commands and not the sample output: the output is
+       the tool's own words, which cannot be shortened without inventing
+       them, and they would scroll. */
+    .code .out { display: none; }
     footer .r { margin-left: 0; flex-wrap: wrap; }
   }
   /* ── light mode overrides (solarized-light) ───── */
@@ -2276,20 +2280,20 @@
     </div>
     <div class="two">
       <div>
-        <pre class="code"><span class="d"># check once, print what moved, exit</span>
+        <pre class="code"><span class="d"># check once, print what moved</span>
 <span class="c">$</span> <span class="w">craft watch</span>
 
-<span class="d"># pick a slack channel, then keep checking</span>
+<span class="d"># pick a channel, keep checking</span>
 <span class="c">$</span> <span class="w">craft slack --install</span>
 <span class="c">$</span> <span class="w">craft watch --every 3600</span>
 
-<span class="d"># see all three shapes on synthetic data</span>
-<span class="c">$</span> <span class="w">craft watch --demo</span>
+<span class="d"># every shape, on demo data</span>
+<span class="c">$</span> <span class="w">craft watch --demo</span><span class="out">
 
 <span class="d">⛏ VILLAGERS      412  ▼38%</span>
 <span class="d">  28-day normal 664 · fires past 30%</span>
 <span class="d">⛏ DIAMONDS         0  nothing recorded</span>
-<span class="d">  28-day normal 12 · fires past 40%</span></pre>
+<span class="d">  28-day normal 12 · fires past 40%</span></span></pre>
       </div>
       <div>
         <table class="keys">

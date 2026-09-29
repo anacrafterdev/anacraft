@@ -332,6 +332,8 @@
     .doc { padding: 48px 18px 72px; }
     footer .r { margin-left: 0; flex-wrap: wrap; }
   }
+  ol.steps { margin: 0 0 18px; padding-left: 1.4em; }
+  ol.steps li { margin: 8px 0; padding-left: 4px; }
 </style>
 <!-- palette-restore:start -->
 <script>
@@ -366,7 +368,7 @@
 
 <div class="eyebrow">Guide</div>
 <h1>Google Analytics MCP server</h1>
-<div class="stamp">a connector link from the dashboard, or craft mcp · part of the <a href="/pricing.html">Anacrafter Elite</a> plan · <code>--demo</code> needs no account</div>
+<div class="stamp">one link from the dashboard, nothing to install · part of the <a href="/pricing.html">Anacrafter Elite</a> plan · <code>--demo</code> needs no account</div>
 
 <div class="tldr">
   <div class="h">What it does</div>
@@ -379,13 +381,20 @@
 </div>
 
 <h2><span class="n">01</span>Wire it up</h2>
-<p><a href="https://app.anacraft.dev">Sign in at app.anacraft.dev</a>, and press <b>mcp</b> on the
-property's row. It hands you one link, token and all: paste it into Claude or ChatGPT as a
-<b>custom connector</b> and there is nothing to install. There is one link per property, it
-reads only that property, and it is the same link next week and on every device. Treat it like a
-password; the same page has a switch that turns every link off at once.</p>
+<p>Nothing to install, and no terminal. Four steps from the dashboard:</p>
+<ol class="steps">
+  <li><a href="https://app.anacraft.dev">Sign in at app.anacraft.dev</a> with the Google account that has your Analytics.</li>
+  <li>Press <b>mcp</b> on your site's row and copy the link it gives you.</li>
+  <li>In Claude, open <b>Settings → Connectors → Add custom connector</b> and paste the link. In ChatGPT it is <b>Settings → Connectors → Create</b>, with the same link.</li>
+  <li>Ask it how your site is doing.</li>
+</ol>
+<p>There is one link per property, it reads only that property, and it is the same link next week
+and on every device. Treat it like a password; the same page has a switch that turns every link off
+at once.</p>
 
-<h3>From the terminal</h3>
+<h3>For developers: from the terminal</h3>
+<p>Optional — skip this if the link above works for you. It keeps everything on your own machine,
+and it is how Cursor, Windsurf and other local clients connect.</p>
 <p>Claude Desktop is one command. It merges into the config and leaves any other servers alone.</p>
 <pre class="code"><span class="d"># sign in, pick a property, then install</span>
 <span class="k">$</span> craft login

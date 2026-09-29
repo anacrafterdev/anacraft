@@ -40,7 +40,7 @@
           "name": "How do I connect Claude to Google Analytics?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Run craft login to sign in with Google, craft use to pick a property, then craft mcp --install to write the server into Claude Desktop's config, and restart it. For Claude Code the command is claude mcp add anacraft -- craft mcp. Any other MCP client takes the same command and argument."
+            "text": "Add https://app.anacraft.dev/mcp as a custom connector in Claude (Settings, Connectors, Add custom connector), sign in with the Google account that has your Analytics, and press Allow. From a terminal instead: craft login, craft use to pick a property, then craft mcp --install to write the server into Claude Desktop's config. For Claude Code the command is claude mcp add anacraft -- craft mcp."
           }
         },
         {
@@ -368,29 +368,38 @@
 
 <div class="eyebrow">Guide</div>
 <h1>Google Analytics MCP server</h1>
-<div class="stamp">one link from the dashboard, nothing to install · part of the <a href="/pricing.html">Anacrafter Elite</a> plan · <code>--demo</code> needs no account</div>
+<div class="stamp">one URL, sign in with Google, nothing to install · part of the <a href="/pricing.html">Anacrafter Elite</a> plan · <code>--demo</code> needs no account</div>
 
 <div class="tldr">
   <div class="h">What it does</div>
   <p>anacraft serves a Google Analytics 4 property over the
   <a href="https://modelcontextprotocol.io">Model Context Protocol</a>, so Claude, ChatGPT or any
   MCP client answers <i>how is the site doing</i> <b>without a human reading a dashboard</b>.</p>
-  <p>Twelve tools. One link from the dashboard, or one command in a terminal. Eleven of them only read, and one of them —
+  <p>Twelve tools. One URL to paste, or one command in a terminal. Eleven of them only read, and one of them —
   <a href="/audit.html"><code>audit_site</code></a> — tells the assistant whether the other eleven
   are worth quoting.</p>
 </div>
 
 <h2><span class="n">01</span>Wire it up</h2>
-<p>Nothing to install, and no terminal. Four steps from the dashboard:</p>
+<p>Nothing to install, and no terminal. Add one URL to your AI tool:</p>
+<pre class="code">https://app.anacraft.dev/mcp</pre>
 <ol class="steps">
-  <li><a href="https://app.anacraft.dev">Sign in at app.anacraft.dev</a> with the Google account that has your Analytics.</li>
-  <li>Press <b>mcp</b> on your site's row and copy the link it gives you.</li>
-  <li>In Claude, open <b>Settings → Connectors → Add custom connector</b> and paste the link. In ChatGPT it is <b>Settings → Connectors → Create</b>, with the same link.</li>
+  <li>In Claude, open <b>Settings → Connectors → Add custom connector</b> and paste the URL. In ChatGPT it is <b>Settings → Connectors → Create</b>; in Cursor, add it as a remote MCP server.</li>
+  <li>Your tool opens a sign-in page. Sign in with the Google account that has your Analytics, and press <b>Allow</b>.</li>
   <li>Ask it how your site is doing.</li>
 </ol>
-<p>There is one link per property, it reads only that property, and it is the same link next week
-and on every device. Treat it like a password; the same page has a switch that turns every link off
-at once.</p>
+<p>Connected this way, it can read every property your Google account can see, and asks which one
+you mean when there are several. The connect page names the app it is sending you back to — if
+that is not the tool you started from, do not allow it. To disconnect every tool at once, open
+<b>mcp</b> on any row at <a href="https://app.anacraft.dev">app.anacraft.dev</a> and turn your
+connector off.</p>
+
+<h3>Or paste a link for one property</h3>
+<p>For a tool that has no sign-in step, or to give an assistant only one site:
+<a href="https://app.anacraft.dev">sign in at app.anacraft.dev</a>, press <b>mcp</b> on that site's
+row, and paste the link it gives you in place of the URL above. The link has its token built in and
+reads only that property. It is the same link next week and on every device, so treat it like a
+password; the same switch turns every link off at once.</p>
 
 <h3>For developers: from the terminal</h3>
 <p>Optional — skip this if the link above works for you. It keeps everything on your own machine,
@@ -516,7 +525,7 @@ Lovable</a> adds GA4 to your app, then reads the numbers back from Claude or any
 <h3>What is an MCP server for Google Analytics?</h3>
 <p>The Model Context Protocol is a standard way for an AI assistant to call tools. An MCP server for Google Analytics exposes the reporting API as tools the assistant can call, so it can read a property's real numbers instead of being pasted a screenshot. craft mcp is one: a single command that speaks the protocol on stdin and stdout, which the client spawns as a child process. A client that cannot spawn one — a confined snap, a Mac App Store build, a container — reaches the same tools over HTTP instead, at craft serve's /v1/mcp.</p>
 <h3>How do I connect Claude to Google Analytics?</h3>
-<p>Run craft login to sign in with Google, craft use to pick a property, then craft mcp --install to write the server into Claude Desktop's config, and restart it. For Claude Code the command is claude mcp add anacraft -- craft mcp. Any other MCP client takes the same command and argument.</p>
+<p>Add https://app.anacraft.dev/mcp as a custom connector in Claude (Settings, Connectors, Add custom connector), sign in with the Google account that has your Analytics, and press Allow. From a terminal instead: craft login, craft use to pick a property, then craft mcp --install to write the server into Claude Desktop's config. For Claude Code the command is claude mcp add anacraft -- craft mcp.</p>
 <h3>Can the assistant change anything in my Analytics account?</h3>
 <p>Eleven of the twelve tools only read. The exception is configure_site, which creates a property and web data stream for a domain the account does not measure yet and returns the tag to paste. Nothing signs in, writes credentials to disk, or changes which property the dashboard opens on — login and use stay human-only commands.</p>
 <h3>Does it work without a Google account?</h3>

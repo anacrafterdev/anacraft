@@ -1,0 +1,25 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "dev.anacraft/anacraft",
+  "title": "anacraft — Google Analytics 4",
+  "description": "Ask your Google Analytics 4 property how the site is doing: traffic, pages, events, audit.",
+  "version": "0.41.0",
+  "websiteUrl": "https://anacraft.dev/mcp.html",
+  "repository": {
+    "url": "https://github.com/anacrafterdev/anacraft",
+    "source": "github"
+  },
+  "icons": [
+    {
+      "src": "https://anacraft.dev/logo-512.png",
+      "mimeType": "image/png",
+      "sizes": ["512x512"]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://app.anacraft.dev/mcp"
+    }
+  ]
+}

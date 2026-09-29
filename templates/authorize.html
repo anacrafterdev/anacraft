@@ -1,0 +1,40 @@
+{#- The consent an MCP client asks for when it was given the bare URL.
+
+    The client's name is its own word — anybody can register as "Claude" — so
+    the page leads with the one thing a registration cannot fake: the host the
+    answer is sent to. The request rides through as hidden fields and is
+    checked again when the form comes back. -#}
+{% extends "layout.html" %}
+{% block title %}anacraft — connect {{ name }}?{% endblock %}
+{% block pane %}
+<h2>Let {{ name }} read your Google Analytics?</h2>
+<p>
+  It will be able to ask about every GA4 property {{ email }} can see, with
+  the twelve tools <code>craft mcp</code> serves, until you turn your
+  connector off. The answer goes back to <b>{{ to }}</b> — if that is not the
+  app you just came from, do not allow it.
+</p>
+{%- if !paid %}
+<p class="fine">
+  Reading real numbers through the connector is on Anacrafter Elite. You can
+  connect now and <a class="lnk" href="/unlock">pick up the plan</a> later.
+</p>
+{%- endif %}
+<div class="acts">
+  <form method="post" action="/oauth/authorize">
+    <input type="hidden" name="response_type" value="{{ ask.response_type }}">
+    <input type="hidden" name="client_id" value="{{ ask.client_id }}">
+    <input type="hidden" name="redirect_uri" value="{{ ask.redirect_uri }}">
+    <input type="hidden" name="state" value="{{ ask.state }}">
+    <input type="hidden" name="code_challenge" value="{{ ask.code_challenge }}">
+    <input type="hidden" name="code_challenge_method" value="{{ ask.code_challenge_method }}">
+    <input type="hidden" name="resource" value="{{ ask.resource }}">
+    <input type="hidden" name="scope" value="{{ ask.scope }}">
+    <button class="primary" type="submit" name="decision" value="allow" style="margin-top:0">Allow</button>
+    <button class="lnk" type="submit" name="decision" value="deny">deny</button>
+  </form>
+</div>
+<p class="fine">
+  Signing out here does not disconnect it; <a class="lnk" href="/connect">turning your connector off</a> does.
+</p>
+{% endblock %}

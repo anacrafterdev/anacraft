@@ -42,6 +42,7 @@ use serde_json::{json, Value};
 
 mod grants;
 mod hosted;
+mod oauth;
 mod views;
 
 use hosted::Ctx;
@@ -713,11 +714,9 @@ async fn run_hosted(opts: Options, public: String) -> Result<()> {
     });
 
     let router = views::hosted_router(app.clone())
+        .merge(oauth::router())
+        .merge(hosted::router())
         .route("/v1/health", get(health))
-        .route(
-            "/v1/mcp",
-            axum::routing::post(hosted::mcp).get(mcp_no_stream),
-        )
         .fallback(local_only)
         .layer(middleware::from_fn_with_state(app.clone(), hosted::outer))
         .with_state(app.clone());

@@ -29,6 +29,7 @@ use axum::extract::{Request, State};
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Redirect, Response};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
@@ -47,6 +48,10 @@ pub(super) const SESSION: &str = "__Host-craft_session";
 /// The OAuth `state`, held by the browser that started the sign-in, so the
 /// callback can tell its own round trip from one somebody else started.
 const OAUTH: &str = "__Host-craft_oauth";
+
+/// Where a sign-in goes once it is through, when that is not `/`: the
+/// consent page an MCP client sent somebody to before they were signed in.
+const NEXT: &str = "__Host-craft_next";
 
 /// The palette a visitor picked. Not a secret and not a session: somebody
 /// who has not signed in can still change the colours of the sign-in page.
@@ -80,6 +85,8 @@ pub(super) struct Hosted {
     /// One MCP server per connector link in use, so an assistant's run of
     /// questions is not a Supabase lookup and a token refresh apiece.
     mcp: tokio::sync::Mutex<HashMap<String, Built>>,
+    /// OAuth codes between the consent page and the token endpoint.
+    pub codes: super::oauth::Codes,
 }
 
 /// An MCP server built for one connector link, and when. Rebuilt after
@@ -138,6 +145,7 @@ impl Hosted {
             pending: Mutex::new(HashMap::new()),
             grants,
             mcp: tokio::sync::Mutex::new(HashMap::new()),
+            codes: super::oauth::Codes::default(),
         }
     }
 
@@ -151,7 +159,7 @@ impl Hosted {
     pub fn connector(&self, account: &Account, property: &str) -> Option<super::Connector> {
         let grants = self.grants.as_ref()?;
         Some(super::Connector::at(
-            format!("{}/v1/mcp", self.public),
+            format!("{}{}", self.public, super::oauth::MCP),
             grants.connector_link(account, property),
             None,
         ))
@@ -239,6 +247,11 @@ impl Hosted {
             .lock()
             .expect("pending lock poisoned")
             .retain(|_, p| p.born.elapsed() < PENDING);
+        self.codes.sweep();
+        // Busy is fine to skip: the next minute comes round.
+        if let Ok(mut built) = self.mcp.try_lock() {
+            built.retain(|_, b| b.at.elapsed() < REBUILD);
+        }
     }
 }
 
@@ -419,11 +432,14 @@ pub(super) async fn outer(State(app): State<Arc<App>>, request: Request, next: N
         .expect("the hosted guard runs on a hosted server");
 
     // A browser always names its origin on a POST. One that names another,
-    // or none, is not this server's own page submitting a form. `/v1/mcp` is
+    // or none, is not this server's own page submitting a form. The connector is
     // the exception: its callers are assistants' servers, which name no
     // origin, and what it answers to is the token in the request — never a
-    // cookie a forged form could ride on.
-    let connector = request.uri().path() == "/v1/mcp";
+    // cookie a forged form could ride on. The OAuth token and registration
+    // endpoints are the same: called by those servers, answering to what the
+    // request carries.
+    let path = request.uri().path();
+    let connector = is_connector(path) || super::oauth::cross_origin(path);
     if !connector && request.method() != Method::GET && request.method() != Method::HEAD {
         let origin = request
             .headers()
@@ -553,6 +569,28 @@ fn begin(app: &App, consent: bool) -> Response {
     response
 }
 
+/// Off to Google, and back to `next` rather than `/` once signed in — the
+/// consent page, for somebody an MCP client sent here signed out. Only ever a
+/// path on this server: the cookie is read back through [`next_of`].
+pub(super) fn sign_in_then(app: &App, next: &str) -> Response {
+    let mut response = begin(app, false);
+    if response.status().is_redirection() {
+        response.headers_mut().append(
+            header::SET_COOKIE,
+            set(NEXT, &URL_SAFE_NO_PAD.encode(next), PENDING.as_secs()),
+        );
+    }
+    response
+}
+
+/// Where the cookie says to go after signing in, if it says somewhere this
+/// server will send people: the consent page, and nothing else.
+fn next_of(headers: &HeaderMap) -> Option<String> {
+    let raw = URL_SAFE_NO_PAD.decode(cookie(headers, NEXT)?).ok()?;
+    let next = String::from_utf8(raw).ok()?;
+    next.starts_with("/oauth/authorize?").then_some(next)
+}
+
 #[derive(Deserialize)]
 pub(super) struct Callback {
     #[serde(default)]
@@ -646,10 +684,14 @@ pub(super) async fn callback(
     let id = hosted
         .open(account, tokens)
         .map_err(|err| Refused::Google(err.to_string()))?;
-    let mut response = Redirect::to("/").into_response();
+    let next = next_of(headers);
+    let mut response = Redirect::to(next.as_deref().unwrap_or("/")).into_response();
     let jar = response.headers_mut();
     jar.append(header::SET_COOKIE, set(SESSION, &id, IDLE * 2));
     jar.append(header::SET_COOKIE, unset(OAUTH));
+    if next.is_some() {
+        jar.append(header::SET_COOKIE, unset(NEXT));
+    }
     Ok(response)
 }
 
@@ -676,11 +718,26 @@ pub(super) struct Wire {
     property: Option<String>,
 }
 
-/// `POST /v1/mcp` on a hosted server: an assistant, with a connector link,
+/// The connector's two paths: `/mcp`, and `/v1/mcp` for the links handed out
+/// before it had its own. The local server keeps `/v1/mcp`, beside the rest
+/// of its API; a hosted server has no API for it to sit beside.
+pub(super) fn router() -> axum::Router<Arc<App>> {
+    use axum::routing::post;
+    axum::Router::new()
+        .route(super::oauth::MCP, post(mcp).get(super::mcp_no_stream))
+        .route("/v1/mcp", post(mcp).get(super::mcp_no_stream))
+}
+
+fn is_connector(path: &str) -> bool {
+    path == super::oauth::MCP || path == "/v1/mcp"
+}
+
+/// `POST /mcp` on a hosted server: an assistant, with a connector link,
 /// asking about one user's property. The link's token says whose; the grant
 /// store says with what.
 pub(super) async fn mcp(
     State(app): State<Arc<App>>,
+    uri: axum::http::Uri,
     headers: HeaderMap,
     axum::extract::Query(wire): axum::extract::Query<Wire>,
     body: axum::body::Bytes,
@@ -692,6 +749,16 @@ pub(super) async fn mcp(
             axum::Json(serde_json::json!({ "error": { "message": message } })),
         )
             .into_response()
+    };
+    // A 401 says where to sign in, which is all a client given the bare URL
+    // has to go on (the MCP authorization spec, via RFC 9728).
+    let unauthorized = |error: Option<&str>, message: &str| {
+        let mut response = refuse(StatusCode::UNAUTHORIZED, message);
+        response.headers_mut().insert(
+            header::WWW_AUTHENTICATE,
+            super::oauth::challenge(&hosted.public, uri.path(), error),
+        );
+        response
     };
     let Some(grants) = &hosted.grants else {
         return refuse(
@@ -707,9 +774,10 @@ pub(super) async fn mcp(
         .or(wire.token)
         .unwrap_or_default();
     if token.is_empty() {
-        return refuse(
-            StatusCode::UNAUTHORIZED,
-            "this connector wants its token — copy the link again from app.anacraft.dev",
+        return unauthorized(
+            None,
+            "this connector wants a token — sign in when your app asks, or copy the link \
+             again from app.anacraft.dev",
         );
     }
     let message: serde_json::Value = match serde_json::from_slice(&body) {
@@ -722,13 +790,29 @@ pub(super) async fn mcp(
             .into_response()
         }
     };
-    let holder = grants.read(&token);
+    // An OAuth access token names the account and no property, like a link
+    // that dropped its own: the assistant picks one with `list_properties`.
+    // It is cached by account rather than by token, since the token changes
+    // every hour and the server it would build does not.
+    let (holder, id) = match super::oauth::access(grants, &token) {
+        Some(super::oauth::Access::Live { sub }) => (
+            super::grants::Holder::Account {
+                sub: sub.clone(),
+                property: String::new(),
+            },
+            format!("oauth:{}", hex(&digest(&sub))),
+        ),
+        Some(super::oauth::Access::Expired) => {
+            return unauthorized(Some("invalid_token"), "that access token has expired")
+        }
+        None => (grants.read(&token), hex(&digest(&token))),
+    };
     let property = wire
         .property
         .or(holder.property().map(str::to_string))
         .map(|p| super::bare(&p))
         .unwrap_or_default();
-    let key = format!("{}:{property}", hex(&digest(&token)));
+    let key = format!("{id}:{property}");
 
     let server = {
         let mut built = hosted.mcp.lock().await;
@@ -761,8 +845,8 @@ pub(super) async fn mcp(
                 let grant = match grants.open(&holder).await {
                     Ok(Some(grant)) => grant,
                     Ok(None) => {
-                        return refuse(
-                            StatusCode::UNAUTHORIZED,
+                        return unauthorized(
+                            Some("invalid_token"),
                             "that connector link is not one this server knows — it may have \
                              been turned off. Copy it again from app.anacraft.dev",
                         )

@@ -119,6 +119,21 @@ impl Grants {
         seal_connector(&self.key, &account.sub, property.trim())
     }
 
+    /// A small record sealed for one `purpose` — an OAuth client, an access
+    /// token, a refresh token. Each purpose has its own key, derived from the
+    /// grant key, so one kind can never be presented as another, and the
+    /// server keeps none of them: what they say is in them, and only this key
+    /// could have written it.
+    pub fn seal_for(&self, purpose: &str, plain: &[u8]) -> String {
+        seal_record(&self.key, purpose, plain)
+    }
+
+    /// What [`Grants::seal_for`] sealed for this purpose, or `None` for
+    /// anything else.
+    pub fn open_for(&self, purpose: &str, sealed: &str) -> Option<Vec<u8>> {
+        open_record(&self.key, purpose, sealed)
+    }
+
     /// What a presented connector token says, without reaching the store.
     pub fn read(&self, presented: &str) -> Holder {
         if let Some((sub, property)) = open_connector(&self.key, presented) {
@@ -306,6 +321,30 @@ fn open_connector(key: &[u8; 32], presented: &str) -> Option<(String, String)> {
     (!sub.is_empty()).then_some((sub, property))
 }
 
+/// A fresh nonce in front of the ciphertext, url-safe, under the purpose's key.
+fn seal_record(key: &[u8; 32], purpose: &str, plain: &[u8]) -> String {
+    let cipher =
+        ChaCha20Poly1305::new(&hmac(key, format!("anacraft-oauth:{purpose}").as_bytes()).into());
+    let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
+    let sealed = cipher
+        .encrypt(&nonce, plain)
+        .expect("sealing a few bytes in memory does not fail");
+    let mut out = nonce.to_vec();
+    out.extend(sealed);
+    URL_SAFE_NO_PAD.encode(out)
+}
+
+fn open_record(key: &[u8; 32], purpose: &str, sealed: &str) -> Option<Vec<u8>> {
+    let raw = URL_SAFE_NO_PAD.decode(sealed.trim()).ok()?;
+    if raw.len() < 12 + 16 {
+        return None;
+    }
+    let (nonce, body) = raw.split_at(12);
+    let cipher =
+        ChaCha20Poly1305::new(&hmac(key, format!("anacraft-oauth:{purpose}").as_bytes()).into());
+    cipher.decrypt(Nonce::from_slice(nonce), body).ok()
+}
+
 fn digest(token: &str) -> String {
     Sha256::digest(token.as_bytes())
         .iter()
@@ -395,6 +434,31 @@ mod tests {
             open_connector(&key, &bare),
             Some(("110147".to_string(), String::new()))
         );
+    }
+
+    #[test]
+    fn a_record_opens_only_for_its_own_purpose_and_key() {
+        let key = [7u8; 32];
+        let sealed = seal_record(&key, "access", b"{\"sub\":\"110147\"}");
+        assert!(!sealed.contains("110147"));
+        assert_eq!(
+            open_record(&key, "access", &sealed).as_deref(),
+            Some(&b"{\"sub\":\"110147\"}"[..])
+        );
+        assert_eq!(
+            open_record(&key, "refresh", &sealed),
+            None,
+            "another purpose"
+        );
+        assert_eq!(
+            open_record(&[8u8; 32], "access", &sealed),
+            None,
+            "another key"
+        );
+        // A connector link is not a record, nor the other way round.
+        let link = seal_connector(&key, "110147", "552157097");
+        assert_eq!(open_record(&key, "access", &link), None);
+        assert_eq!(open_connector(&key, &sealed), None);
     }
 
     #[test]

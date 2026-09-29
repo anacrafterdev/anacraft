@@ -329,6 +329,18 @@ a.bin { display: inline-block; }
 
 .choose:focus-visible { outline: 1px solid var(--jade); outline-offset: -2px; }
 
+/* A row that is a choice rather than a link: the consent page's property
+   picker. The global `label` is a field caption, so this one puts that back. */
+.row label.choose {
+  margin: 0; cursor: pointer; font: inherit; letter-spacing: 0;
+  text-transform: none; color: inherit;
+}
+.row input[type=radio] {
+  flex: none; align-self: center; width: auto; margin: 0; padding: 0; border: 0;
+  accent-color: var(--jade);
+}
+.row:has(input:checked) { background: var(--ink); }
+
 /* Quiet until the row is under the pointer: throwing a property away is
    not something to offer as prominently as picking one. */
 .bin {

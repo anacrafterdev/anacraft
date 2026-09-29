@@ -414,13 +414,22 @@ fn same_resource(asked: &str, ours: &str) -> bool {
 
 /// The consent page's yes: a code, one use, two minutes, sent back to the
 /// client.
-pub(super) fn allow(app: &App, account: &Account, ask: &Ask, asked: &Asked) -> Response {
+/// `property` is the one the user picked on the page, sealed into every
+/// token this consent turns into; empty is every property the account reads.
+pub(super) fn allow(
+    app: &App,
+    account: &Account,
+    ask: &Ask,
+    asked: &Asked,
+    property: &str,
+) -> Response {
     let hosted = app.hosted.as_ref().expect("hosted route");
     let code = crate::auth::nonce(43);
     hosted.codes.put(
         &code,
         Code {
             sub: account.sub.clone(),
+            property: property.to_string(),
             client: digest(&ask.client_id),
             redirect_uri: asked.redirect_uri.clone(),
             challenge: ask.code_challenge.clone(),
@@ -467,6 +476,7 @@ fn encode(value: &str) -> String {
 /// A consent, waiting to be traded.
 pub(super) struct Code {
     sub: String,
+    property: String,
     client: String,
     redirect_uri: String,
     challenge: String,
@@ -526,12 +536,18 @@ struct Trade {
 #[derive(Serialize, Deserialize)]
 struct Bearer {
     sub: String,
+    /// Absent on tokens from before the consent page asked, which read every
+    /// property, as an empty one does.
+    #[serde(default)]
+    property: String,
     exp: u64,
 }
 
 #[derive(Serialize, Deserialize)]
 struct Renewal {
     sub: String,
+    #[serde(default)]
+    property: String,
     client: String,
 }
 
@@ -556,7 +572,7 @@ async fn token(
     }
     let client = digest(&trade.client_id);
 
-    let sub = match trade.grant_type.as_str() {
+    let (sub, property) = match trade.grant_type.as_str() {
         "authorization_code" => {
             let Some(code) = app
                 .hosted
@@ -573,7 +589,7 @@ async fn token(
             if !super::same(&challenge_of(&trade.code_verifier), &code.challenge) {
                 return invalid_grant("the code_verifier does not match the code_challenge");
             }
-            code.sub
+            (code.sub, code.property)
         }
         "refresh_token" => {
             let Some(renewal) = grants
@@ -585,7 +601,7 @@ async fn token(
             if renewal.client != client {
                 return invalid_grant("that refresh_token was issued to another client");
             }
-            renewal.sub
+            (renewal.sub, renewal.property)
         }
         _ => {
             return refuse(
@@ -622,13 +638,19 @@ async fn token(
         "access",
         &serde_json::to_vec(&Bearer {
             sub: sub.clone(),
+            property: property.clone(),
             exp: now() + ACCESS_FOR,
         })
         .expect("a bearer serializes"),
     );
     let refresh = grants.seal_for(
         "refresh",
-        &serde_json::to_vec(&Renewal { sub, client }).expect("a renewal serializes"),
+        &serde_json::to_vec(&Renewal {
+            sub,
+            property,
+            client,
+        })
+        .expect("a renewal serializes"),
     );
     Json(json!({
         "access_token": access,
@@ -670,7 +692,7 @@ fn digest(value: &str) -> String {
 
 /// What a presented bearer is, if it is one of this module's access tokens.
 pub(super) enum Access {
-    Live { sub: String },
+    Live { sub: String, property: String },
     Expired,
 }
 
@@ -679,7 +701,10 @@ pub(super) fn access(grants: &Grants, presented: &str) -> Option<Access> {
     Some(if bearer.exp <= now() {
         Access::Expired
     } else {
-        Access::Live { sub: bearer.sub }
+        Access::Live {
+            sub: bearer.sub,
+            property: bearer.property,
+        }
     })
 }
 
@@ -769,6 +794,7 @@ mod tests {
         let codes = Codes::default();
         let pending = || Code {
             sub: "110147".into(),
+            property: "552157097".into(),
             client: "c".into(),
             redirect_uri: "https://claude.ai/cb".into(),
             challenge: challenge_of("verifier"),
@@ -787,6 +813,14 @@ mod tests {
             },
         );
         assert!(codes.take("old").is_none(), "an old code is refused");
+    }
+
+    #[test]
+    fn a_token_from_before_the_picker_reads_every_property() {
+        let old: Bearer = serde_json::from_str(r#"{"sub":"110147","exp":1}"#).unwrap();
+        assert_eq!((old.sub.as_str(), old.property.as_str()), ("110147", ""));
+        let old: Renewal = serde_json::from_str(r#"{"sub":"110147","client":"c"}"#).unwrap();
+        assert_eq!(old.property, "");
     }
 
     #[test]

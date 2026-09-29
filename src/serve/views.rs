@@ -1764,6 +1764,8 @@ async fn oauth_callback(
 #[template(path = "authorize.html")]
 struct AuthorizeView {
     shell: Shell,
+    /// The sites it could read, one to be picked; the first is ticked.
+    properties: Vec<Row>,
     name: String,
     to: String,
     email: String,
@@ -1777,6 +1779,9 @@ struct Decision {
     ask: oauth::Ask,
     #[serde(default)]
     decision: String,
+    /// The property picked, or empty for every one the account reads.
+    #[serde(default)]
+    property: String,
 }
 
 /// A request this page cannot answer to the client that sent it, said here.
@@ -1816,12 +1821,26 @@ async fn authorize(
     // Unreachable is not unpaid — but it is not worth refusing a consent
     // over either: the connector says what it needs when it is asked.
     let tier = ctx.tier().await.ok().flatten();
+    let paid = tier.is_some_and(|have| have.meets(PLAN));
+    // Their own properties once they are on the plan, and the demo either
+    // way, as the list page does. Google unreachable is not a reason to
+    // refuse: "every property" is still on offer.
+    let mut properties = Vec::new();
+    if paid {
+        if let Ok(ga) = ctx.ga() {
+            if let Ok(found) = ga.properties().await {
+                properties.extend(found.into_iter().map(|p| Row::new(p.id, p.name, p.account)));
+            }
+        }
+    }
+    properties.push(demo_row());
     page(AuthorizeView {
         shell: Shell::new("pick", here).signed(email.as_deref(), tier),
+        properties,
         name: asked.name,
         to: asked.to,
         email: email.unwrap_or_else(|| "your Google account".into()),
-        paid: tier.is_some_and(|have| have.meets(PLAN)),
+        paid,
         ask,
     })
 }
@@ -1832,7 +1851,11 @@ async fn authorize(
 async fn authorize_decide(
     State(app): State<Arc<App>>,
     headers: HeaderMap,
-    Form(Decision { ask, decision }): Form<Decision>,
+    Form(Decision {
+        ask,
+        decision,
+        property,
+    }): Form<Decision>,
 ) -> Response {
     let Some(Ctx::Session(session)) = hosted::signed_in(&app, &headers) else {
         return Redirect::to("/signin").into_response();
@@ -1851,7 +1874,10 @@ async fn authorize_decide(
         .and_then(|h| h.grants.as_ref())
         .expect("check() found the grant store");
     match grants.has(&session.account).await {
-        Ok(true) => oauth::allow(&app, &session.account, &ask, &asked),
+        // Not checked against the list: the token reads with this account's
+        // own Google access, which answers for itself about a property it
+        // cannot see.
+        Ok(true) => oauth::allow(&app, &session.account, &ask, &asked, &bare(&property)),
         Ok(false) => unasked(
             "anacraft has no stored Google access for this account yet — sign out, sign in \
              again, and then connect from your app once more."

@@ -790,15 +790,16 @@ pub(super) async fn mcp(
             .into_response()
         }
     };
-    // An OAuth access token names the account and no property, like a link
-    // that dropped its own: the assistant picks one with `list_properties`.
-    // It is cached by account rather than by token, since the token changes
-    // every hour and the server it would build does not.
+    // An OAuth access token names the account and the property picked on
+    // the consent page — or none, for "all of them", and then the assistant
+    // picks with `list_properties`. It is cached by account rather than by
+    // token, since the token changes every hour and the server it would
+    // build does not; the property is on the end of the key either way.
     let (holder, id) = match super::oauth::access(grants, &token) {
-        Some(super::oauth::Access::Live { sub }) => (
+        Some(super::oauth::Access::Live { sub, property }) => (
             super::grants::Holder::Account {
                 sub: sub.clone(),
-                property: String::new(),
+                property,
             },
             format!("oauth:{}", hex(&digest(&sub))),
         ),

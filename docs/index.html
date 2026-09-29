@@ -375,7 +375,9 @@
     padding: 13px 18px; text-decoration: none; transition: filter .15s;
   }
   .go:hover { filter: brightness(1.08); }
-  .feat-say .also { font-size: 13.5px; color: var(--dim); }
+  .feat-say .also, .hero-say .also { font-size: 13.5px; color: var(--dim); }
+  .hero-say .also { margin-top: 18px; }
+  .hero-say .also a { color: var(--jade); }
   /* The Lovable panel is the two marks in squares, the way the Lovable
      page draws them: what you build with, times what reads it. Sized to the
      width the other panels take, so the sections' right columns line up. */
@@ -666,10 +668,12 @@
       Ask Claude, or any AI tool, how your site is doing. The answer comes from your own GA4.
     </p>
     <div class="cta">
+      <a class="go" href="https://app.anacraft.dev">Configure your MCP <span aria-hidden="true">→</span></a>
       <div class="flow">
         <span class="n">Your AI</span><span class="a">→</span><span class="n on">anacraft MCP</span><span class="a">→</span><span class="n">GA4</span>
       </div>
     </div>
+    <p class="also"><a href="/mcp.html">The MCP server</a> — connecting Claude, ChatGPT or Cursor, and what it can answer.</p>
    </div>
    <div class="hero-art" aria-hidden="true"><pre id="ask" class="pnl"></pre></div>
   </div>

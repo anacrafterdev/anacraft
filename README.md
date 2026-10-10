@@ -18,6 +18,10 @@
 </p>
 
 <p align="center">
+  <a href="https://glama.ai/mcp/connectors/dev.anacraft.app/anacraft"><img alt="Anacraft — Google Analytics 4 (GA4) MCP connector – tool definition quality and endpoint health on Glama" src="https://glama.ai/mcp/connectors/dev.anacraft.app/anacraft/badges/score.svg"></a>
+</p>
+
+<p align="center">
   <img src="docs/dash.png" alt="The anacraft dashboard: seven panels showing GA4 metrics in a terminal" width="960">
 </p>
 

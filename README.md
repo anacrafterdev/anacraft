@@ -421,6 +421,9 @@ reflows to fill the terminal.
 | Key | Action |
 |-----|--------|
 | `1`–`7` | Toggle a panel — `e` `l` `m` `p` `v` `g` `d` do the same |
+| arrows | Pick out a pane — it wears a heavy gold border |
+| `shift`+arrows | Carry the picked pane across the board, trading places with its neighbour |
+| `z` | Zoom the picked pane to fill the dashboard, and back — arrows flip through panes while zoomed |
 | `tab` | Next property, when more than one is configured |
 | `shift`+`D` | Forget the property on screen — drops it from the rotation, leaves it in Google |
 | `t` | Cycle the palette, and save it |
@@ -428,7 +431,7 @@ reflows to fill the terminal.
 | `s` | Demo only — preview the Anacrafter look |
 | `r` | Rebuild — force a refetch now |
 | `?` / `h` | Help overlay |
-| `q` / `Esc` | Quit |
+| `q` / `Esc` | Quit — `Esc` steps out of a zoom, then off the picked pane, first |
 
 ## Palettes
 

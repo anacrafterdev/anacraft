@@ -245,6 +245,11 @@ rest rather than leaving a hole.
 | `6` `g` | TOP COUNTRIES | Ranked countries |
 | `7` `d` | DAILY USERS | User trend across the period |
 
+The arrow keys pick out a pane · `shift`+arrows carry it across the board,
+trading places with the pane that way · `z` zooms it to fill the dashboard and
+back (arrows flip panes while zoomed) · `Esc` steps out of the zoom, then off
+the pane, before it quits.
+
 `t` cycles the palette and saves it · `r` forces a refetch · `tab` switches
 property · `?` or `h` for help · `q` or `Esc` quits · `s` previews the
 Anacrafter look, demo only.

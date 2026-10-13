@@ -2444,10 +2444,29 @@ fn body(frame: &mut Frame, dash: &Dash, area: Rect, narrow: bool, wide: bool) {
     // taller body earns a third row. Only a body more than twice as tall as
     // it is wide falls back to the columns, where tiles would be too narrow
     // to read.
-    if area.height as u32 > (area.width as u32) * 2 {
-        columns(frame, dash, area, narrow);
+    let placed = if area.height as u32 > (area.width as u32) * 2 {
+        columns(dash, area, narrow)
     } else {
-        grid(frame, dash, area, wide);
+        grid(dash, area, wide)
+    };
+    for (tile, cell) in placed {
+        render_tile(frame, dash, tile, cell);
+    }
+}
+
+/// Draws one panel into the cell the layout gave it.
+fn render_tile(frame: &mut Frame, dash: &Dash, tile: Tile, cell: Rect) {
+    match tile {
+        Tile::Events => frame.render_widget(events_panel(dash, cell.width), cell),
+        Tile::Live => frame.render_widget(live_panel(dash, cell.width), cell),
+        Tile::Map => frame.render_widget(map_panel(dash, cell.width, cell.height), cell),
+        Tile::Chunks => frame.render_widget(pages_panel(dash, cell.width, cell.height), cell),
+        Tile::Vitals => frame.render_widget(metrics_panel(dash, cell.width, cell.height), cell),
+        Tile::RealmsRanked => {
+            frame.render_widget(realms_ranked_panel(dash, cell.width, cell.height), cell)
+        }
+        Tile::Trend => frame.render_widget(trend_panel(dash, cell.width), cell),
+        Tile::Portals => frame.render_widget(portals_panel(dash, cell.width, cell.height), cell),
     }
 }
 
@@ -2573,7 +2592,7 @@ impl Tile {
 /// then the lists and the chart. A row grows only as far as *every* tile in
 /// it can spend the extra row; the least-fillable tile sets its ceiling, so
 /// a row's height does not swing when a neighbour joins it.
-fn grid(frame: &mut Frame, dash: &Dash, area: Rect, wide: bool) {
+fn grid(dash: &Dash, area: Rect, wide: bool) -> Vec<(Tile, Rect)> {
     // The terminal sets the ceiling on a row's width: at most three across
     // when it is half again as wide as it is tall, two when it is squarer.
     // How many of those a row actually takes is the tile count's call, below.
@@ -2621,7 +2640,7 @@ fn grid(frame: &mut Frame, dash: &Dash, area: Rect, wide: bool) {
     // rather than shuffling into the middle and moving everything after it.
     on.sort_by_key(|tile| dash.joined[tile.index()]);
     if on.is_empty() {
-        return;
+        return Vec::new();
     }
 
     // `most` is the widest a row may be, not the width every row must be. The
@@ -2666,7 +2685,7 @@ fn grid(frame: &mut Frame, dash: &Dash, area: Rect, wide: bool) {
             row_min[last] = rows[last].iter().map(Tile::min_rows).max().unwrap_or(0);
         }
         if rows.is_empty() {
-            return;
+            return Vec::new();
         }
     }
 
@@ -2735,6 +2754,7 @@ fn grid(frame: &mut Frame, dash: &Dash, area: Rect, wide: bool) {
         .spacing(1)
         .split(area);
 
+    let mut placed = Vec::with_capacity(on.len());
     for (row, rect) in rows.iter().zip(row_rects.iter()) {
         // The chart and the map take the wider share of their row — but only
         // where the row can pay for it. The extra a wide tile gains comes off
@@ -2762,31 +2782,14 @@ fn grid(frame: &mut Frame, dash: &Dash, area: Rect, wide: bool) {
             .spacing(1)
             .split(*rect);
 
-        for (tile, cell) in row.iter().zip(cols.iter()) {
-            match tile {
-                Tile::Events => frame.render_widget(events_panel(dash, cell.width), *cell),
-                Tile::Live => frame.render_widget(live_panel(dash, cell.width), *cell),
-                Tile::Map => frame.render_widget(map_panel(dash, cell.width, cell.height), *cell),
-                Tile::Chunks => {
-                    frame.render_widget(pages_panel(dash, cell.width, cell.height), *cell)
-                }
-                Tile::Vitals => {
-                    frame.render_widget(metrics_panel(dash, cell.width, cell.height), *cell)
-                }
-                Tile::RealmsRanked => {
-                    frame.render_widget(realms_ranked_panel(dash, cell.width, cell.height), *cell)
-                }
-                Tile::Trend => frame.render_widget(trend_panel(dash, cell.width), *cell),
-                Tile::Portals => {
-                    frame.render_widget(portals_panel(dash, cell.width, cell.height), *cell)
-                }
-            }
-        }
+        placed.extend(row.iter().copied().zip(cols.iter().copied()));
     }
+    placed
 }
 
 /// The two stacked columns, for terminals too narrow for a tile grid.
-fn columns(frame: &mut Frame, dash: &Dash, area: Rect, narrow: bool) {
+fn columns(dash: &Dash, area: Rect, narrow: bool) -> Vec<(Tile, Rect)> {
+    let mut placed = Vec::new();
     // Each column is drawn if anything in it is on, and whichever is alone
     // takes the whole body. Hiding a panel hides that panel: the ones left in
     // its column take the rows it was using, in the order they sit in.
@@ -2854,18 +2857,15 @@ fn columns(frame: &mut Frame, dash: &Dash, area: Rect, narrow: bool) {
             .spacing(1)
             .split(rect);
 
-        for ((panel, _), area) in stack.into_iter().zip(rows.iter()) {
-            match panel {
-                Stack::Map => frame.render_widget(map_panel(dash, area.width, area.height), *area),
-                Stack::Events => frame.render_widget(events_panel(dash, area.width), *area),
-                Stack::Vitals => {
-                    frame.render_widget(metrics_panel(dash, area.width, area.height), *area)
-                }
-            }
-        }
+        placed.extend(
+            stack
+                .iter()
+                .map(|(panel, _)| panel.tile())
+                .zip(rows.iter().copied()),
+        );
     }
 
-    let Some(rect) = right else { return };
+    let Some(rect) = right else { return placed };
 
     // The right column stacks whichever of its three panels are on, daily chart
     // at the bottom. Rows are handed out in priority order and a panel that
@@ -2895,7 +2895,7 @@ fn columns(frame: &mut Frame, dash: &Dash, area: Rect, narrow: bool) {
         }
     }
     if panels.is_empty() {
-        return;
+        return placed;
     }
 
     // Leftover rows go to the chunk list or realms ranked, which are the panels
@@ -2921,18 +2921,13 @@ fn columns(frame: &mut Frame, dash: &Dash, area: Rect, narrow: bool) {
         .constraints(constraints)
         .spacing(1)
         .split(rect);
-    let panels: Vec<Column> = panels.into_iter().map(|(column, _)| column).collect();
-
-    for (panel, area) in panels.into_iter().zip(rows.iter()) {
-        let widget = match panel {
-            Column::Live => live_panel(dash, area.width),
-            Column::Chunks => pages_panel(dash, area.width, area.height),
-            Column::RealmsRanked => realms_ranked_panel(dash, area.width, area.height),
-            Column::Portals => portals_panel(dash, area.width, area.height),
-            Column::Trend => trend_panel(dash, area.width),
-        };
-        frame.render_widget(widget, *area);
-    }
+    placed.extend(
+        panels
+            .iter()
+            .map(|(column, _)| column.tile())
+            .zip(rows.iter().copied()),
+    );
+    placed
 }
 
 /// The key list, centered over whatever is on screen.
@@ -3926,6 +3921,16 @@ enum Stack {
     Vitals,
 }
 
+impl Stack {
+    fn tile(&self) -> Tile {
+        match self {
+            Stack::Map => Tile::Map,
+            Stack::Events => Tile::Events,
+            Stack::Vitals => Tile::Vitals,
+        }
+    }
+}
+
 /// Which panel occupies a slot in the right-hand column.
 enum Column {
     Live,
@@ -3933,6 +3938,18 @@ enum Column {
     RealmsRanked,
     Portals,
     Trend,
+}
+
+impl Column {
+    fn tile(&self) -> Tile {
+        match self {
+            Column::Live => Tile::Live,
+            Column::Chunks => Tile::Chunks,
+            Column::RealmsRanked => Tile::RealmsRanked,
+            Column::Portals => Tile::Portals,
+            Column::Trend => Tile::Trend,
+        }
+    }
 }
 
 /// Events per day, this period drawn over the last one.
@@ -5659,7 +5676,11 @@ mod tests {
         let column = |height: u16| -> Vec<String> {
             let mut terminal = Terminal::new(TestBackend::new(88, height)).unwrap();
             terminal
-                .draw(|frame| columns(frame, &dash, Rect::new(0, 0, 88, height), false))
+                .draw(|frame| {
+                    for (tile, cell) in columns(&dash, Rect::new(0, 0, 88, height), false) {
+                        render_tile(frame, &dash, tile, cell);
+                    }
+                })
                 .unwrap();
             let buffer = terminal.backend().buffer().clone();
             (0..height)

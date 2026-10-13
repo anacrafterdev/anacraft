@@ -14,7 +14,7 @@
 //! here because ratatui needs styled spans, so the block-drawing helpers are
 //! reimplemented against `Line`/`Span`.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -511,6 +511,9 @@ struct Dash {
     /// as they are drawn, not as the key order lists them, so they read the
     /// board back from here rather than working the layout out again.
     placed: RefCell<Vec<(Tile, Rect)>>,
+    /// The last frame drew the stacked columns rather than the grid. Their
+    /// order is fixed, so there is nothing for Shift+arrow to rearrange.
+    stacked: Cell<bool>,
 }
 
 impl Dash {
@@ -551,6 +554,27 @@ impl Dash {
         self.focus = Some(next);
     }
 
+    /// Carries the picked pane one place over: it trades places on the board
+    /// with the pane that way, and the highlight goes with it. Nothing picked
+    /// yet, it picks — the same first press the bare arrow makes.
+    ///
+    /// A trade of places in the join order, which is what the grid fills
+    /// from, so the pair swap cells and nothing else on the board moves. The
+    /// stacked columns a very tall terminal falls back to keep their own
+    /// order, and there the pane stays put.
+    fn move_focus(&mut self, toward: Toward) {
+        let Some(from) = self.focus else {
+            return self.step_focus(toward);
+        };
+        if self.stacked.get() {
+            return;
+        }
+        let Some(to) = neighbour(&self.placed.borrow(), from, toward) else {
+            return;
+        };
+        self.joined.swap(from.index(), to.index());
+    }
+
     fn new(
         title: String,
         days: u32,
@@ -566,6 +590,7 @@ impl Dash {
             next_join: 8,
             focus: None,
             placed: RefCell::new(Vec::new()),
+            stacked: Cell::new(false),
             title,
             days,
             metrics: Vec::new(),
@@ -1665,6 +1690,19 @@ async fn event_loop(
                         // The arrows walk the panes. Bare arrows were free —
                         // nothing on the board scrolls — so they cost no key
                         // anybody already had.
+                        // Shift carries the picked pane along with the arrow.
+                        KeyCode::Left if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                            dash.move_focus(Toward::Left)
+                        }
+                        KeyCode::Right if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                            dash.move_focus(Toward::Right)
+                        }
+                        KeyCode::Up if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                            dash.move_focus(Toward::Up)
+                        }
+                        KeyCode::Down if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                            dash.move_focus(Toward::Down)
+                        }
                         KeyCode::Left => dash.step_focus(Toward::Left),
                         KeyCode::Right => dash.step_focus(Toward::Right),
                         KeyCode::Up => dash.step_focus(Toward::Up),
@@ -2487,7 +2525,9 @@ fn body(frame: &mut Frame, dash: &Dash, area: Rect, narrow: bool, wide: bool) {
     // taller body earns a third row. Only a body more than twice as tall as
     // it is wide falls back to the columns, where tiles would be too narrow
     // to read.
-    let placed = if area.height as u32 > (area.width as u32) * 2 {
+    let stacked = area.height as u32 > (area.width as u32) * 2;
+    dash.stacked.set(stacked);
+    let placed = if stacked {
         columns(dash, area, narrow)
     } else {
         grid(dash, area, wide)
@@ -7260,6 +7300,11 @@ mod wired_tests {
         let pieces = wrapped(&long, 10);
         assert_eq!(pieces, vec!["a".repeat(10), "a".repeat(10), "a".repeat(5)]);
     }
+}
+
+#[cfg(test)]
+mod arrange_tests {
+    use super::*;
 
     /// Lays the board out at 132×38 — the five panels it opens on, three
     /// over two — and hands back what was drawn.
@@ -7344,5 +7389,48 @@ mod wired_tests {
         dash.focus = Some(Tile::Map);
         dash.toggle(Tile::Map);
         assert_eq!(dash.focus, None);
+    }
+
+    #[test]
+    fn shift_carries_the_picked_pane_and_leaves_the_rest_alone() {
+        // The map trades places with the vitals under it; events, right now
+        // and the pages keep the cells they had.
+        let mut dash = capture_dash();
+        let board = |dash: &Dash| -> Vec<Tile> {
+            arranged(dash);
+            dash.placed.borrow().iter().map(|(tile, _)| *tile).collect()
+        };
+        use Tile::*;
+        assert_eq!(board(&dash), [Events, Live, Map, Chunks, Vitals]);
+
+        dash.focus = Some(Map);
+        dash.move_focus(Toward::Down);
+
+        assert_eq!(board(&dash), [Events, Live, Vitals, Chunks, Map]);
+        assert_eq!(dash.focus, Some(Map), "the highlight stayed behind");
+
+        // And at the edge of the board there is nowhere to carry it.
+        let joined = dash.joined;
+        dash.move_focus(Toward::Down);
+        assert_eq!(dash.joined, joined);
+    }
+
+    #[test]
+    fn shift_leaves_the_order_alone_in_the_stacked_columns() {
+        // The columns ignore the join order, so a swap there would only
+        // turn up later, as a grid rearranged by moves nobody saw.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let mut dash = capture_dash();
+        let mut terminal = Terminal::new(TestBackend::new(40, 100)).unwrap();
+        terminal
+            .draw(|frame| body(frame, &dash, Rect::new(0, 0, 40, 100), true, false))
+            .unwrap();
+        assert!(dash.stacked.get());
+
+        dash.focus = Some(Tile::Map);
+        let joined = dash.joined;
+        dash.move_focus(Toward::Down);
+        assert_eq!(dash.joined, joined);
     }
 }

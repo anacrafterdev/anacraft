@@ -14,6 +14,7 @@
 //! here because ratatui needs styled spans, so the block-drawing helpers are
 //! reimplemented against `Line`/`Span`.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -502,6 +503,14 @@ struct Dash {
     joined: [u32; 8],
     /// The next place at the back of the board.
     next_join: u32,
+    /// The pane the arrow keys have picked out, if they have picked one. It
+    /// is what Shift+arrow moves and what `z` zooms; nothing is picked until
+    /// an arrow is pressed, so a board nobody is arranging wears no highlight.
+    focus: Option<Tile>,
+    /// Where each tile sat on the last frame. The arrows move between panes
+    /// as they are drawn, not as the key order lists them, so they read the
+    /// board back from here rather than working the layout out again.
+    placed: RefCell<Vec<(Tile, Rect)>>,
 }
 
 impl Dash {
@@ -517,7 +526,29 @@ impl Dash {
         if *switch {
             self.joined[tile.index()] = self.next_join;
             self.next_join += 1;
+        } else if self.focus == Some(tile) {
+            // The highlight goes with the pane rather than jumping to
+            // whichever tile slid into its cell.
+            self.focus = None;
         }
+    }
+
+    /// Moves the highlight one pane over. The first press picks out the
+    /// first pane on the board, wherever it was pointed — there is nothing
+    /// to be left or right of yet.
+    fn step_focus(&mut self, toward: Toward) {
+        let placed = self.placed.borrow();
+        let next = match self.focus {
+            Some(from) if placed.iter().any(|(tile, _)| *tile == from) => {
+                neighbour(&placed, from, toward).unwrap_or(from)
+            }
+            _ => match placed.first() {
+                Some((tile, _)) => *tile,
+                None => return,
+            },
+        };
+        drop(placed);
+        self.focus = Some(next);
     }
 
     fn new(
@@ -533,6 +564,8 @@ impl Dash {
             // Nothing has been pressed yet, so the board opens in key order.
             joined: [0, 1, 2, 3, 4, 5, 6, 7],
             next_join: 8,
+            focus: None,
+            placed: RefCell::new(Vec::new()),
             title,
             days,
             metrics: Vec::new(),
@@ -1620,12 +1653,22 @@ async fn event_loop(
                         // Esc closes the help overlay first, so it isn't a
                         // surprise exit for anyone who opened it to look.
                         KeyCode::Esc if dash.help => dash.help = false,
+                        // And then the highlight: somebody arranging the board
+                        // presses Esc to be done arranging, not to leave.
+                        KeyCode::Esc if dash.focus.is_some() => dash.focus = None,
                         KeyCode::Esc => return Ok(landed(rotation, index)),
                         KeyCode::Char('r') => {
                             dash.last_report = now - dash.report_every;
                             last_live = now - dash.live_every;
                         }
                         KeyCode::Char('?') | KeyCode::Char('h') => dash.help = !dash.help,
+                        // The arrows walk the panes. Bare arrows were free —
+                        // nothing on the board scrolls — so they cost no key
+                        // anybody already had.
+                        KeyCode::Left => dash.step_focus(Toward::Left),
+                        KeyCode::Right => dash.step_focus(Toward::Right),
+                        KeyCode::Up => dash.step_focus(Toward::Up),
+                        KeyCode::Down => dash.step_focus(Toward::Down),
                         // The property in front of somebody is the one an
                         // assistant should be reading, so `c` copies that
                         // one's connector rather than the config's default.
@@ -2449,8 +2492,86 @@ fn body(frame: &mut Frame, dash: &Dash, area: Rect, narrow: bool, wide: bool) {
     } else {
         grid(dash, area, wide)
     };
-    for (tile, cell) in placed {
-        render_tile(frame, dash, tile, cell);
+    for (tile, cell) in &placed {
+        render_tile(frame, dash, *tile, *cell);
+        if dash.focus == Some(*tile) {
+            highlight(frame.buffer_mut(), *cell);
+        }
+    }
+    *dash.placed.borrow_mut() = placed;
+}
+
+/// Which way an arrow points.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Toward {
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
+/// The pane an arrow lands on from `from`: the nearest one wholly past its
+/// edge that way, and among those the one most nearly in line with it — so
+/// Down from the right-hand tile of a pair goes to whatever sits under it,
+/// not to the first tile of the row below. Nothing that way is `None`; the
+/// arrow stops at the edge of the board rather than wrapping round it.
+fn neighbour(placed: &[(Tile, Rect)], from: Tile, toward: Toward) -> Option<Tile> {
+    let (_, here) = placed.iter().find(|(tile, _)| *tile == from)?;
+    // Doubled centres, so a tile an odd number of cells across has one.
+    let centre = |r: &Rect| {
+        (
+            2 * r.x as i32 + r.width as i32,
+            2 * r.y as i32 + r.height as i32,
+        )
+    };
+    let (hx, hy) = centre(here);
+    placed
+        .iter()
+        .filter(|(tile, _)| *tile != from)
+        .filter_map(|(tile, r)| {
+            let (cx, cy) = centre(r);
+            let (gap, off) = match toward {
+                Toward::Left if r.right() <= here.left() => (here.left() - r.right(), cy - hy),
+                Toward::Right if r.left() >= here.right() => (r.left() - here.right(), cy - hy),
+                Toward::Up if r.bottom() <= here.top() => (here.top() - r.bottom(), cx - hx),
+                Toward::Down if r.top() >= here.bottom() => (r.top() - here.bottom(), cx - hx),
+                _ => return None,
+            };
+            Some((gap, off.abs(), *tile))
+        })
+        .min_by_key(|(gap, off, _)| (*gap, *off))
+        .map(|(_, _, tile)| tile)
+}
+
+/// Picks out the pane the arrows are on: its border goes heavy and gold, the
+/// way a tiling manager marks the window that has the keyboard. Drawn over
+/// the panel's own border rather than threaded through every panel, and only
+/// over the line itself — the title sitting in the top edge keeps its colors.
+fn highlight(buffer: &mut Buffer, cell: Rect) {
+    let cell = cell.intersection(buffer.area);
+    if cell.is_empty() {
+        return;
+    }
+    let heavy = |light: &str| -> Option<&'static str> {
+        Some(match light {
+            "─" => "━",
+            "│" => "┃",
+            "┌" => "┏",
+            "┐" => "┓",
+            "└" => "┗",
+            "┘" => "┛",
+            _ => return None,
+        })
+    };
+    let edge = (cell.left()..cell.right())
+        .flat_map(|x| [(x, cell.top()), (x, cell.bottom() - 1)])
+        .chain((cell.top()..cell.bottom()).flat_map(|y| [(cell.left(), y), (cell.right() - 1, y)]));
+    for at in edge {
+        let glyph = &mut buffer[at];
+        if let Some(thick) = heavy(glyph.symbol()) {
+            glyph.set_symbol(thick);
+            glyph.set_fg(ore::gold());
+        }
     }
 }
 
@@ -2475,7 +2596,7 @@ fn render_tile(frame: &mut Frame, dash: &Dash, tile: Tile, cell: Rect) {
 /// grid in that same order, so the dashboard reads the way the keys list it:
 /// the first handful of switched-on panels up front, then the rest of the
 /// queue waiting behind them.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Tile {
     Events,
     Live,
@@ -7138,5 +7259,90 @@ mod wired_tests {
         let long = "a".repeat(25);
         let pieces = wrapped(&long, 10);
         assert_eq!(pieces, vec!["a".repeat(10), "a".repeat(10), "a".repeat(5)]);
+    }
+
+    /// Lays the board out at 132×38 — the five panels it opens on, three
+    /// over two — and hands back what was drawn.
+    fn arranged(dash: &Dash) -> Vec<String> {
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let mut terminal = Terminal::new(TestBackend::new(132, 38)).unwrap();
+        terminal
+            .draw(|frame| body(frame, dash, Rect::new(0, 0, 132, 38), false, true))
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        (0..38)
+            .map(|y| {
+                (0..132)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_arrows_walk_the_board_as_it_is_drawn() {
+        // Three over two: events, right now, the map; then pages and the
+        // vitals. Down from the map lands on what is under it, not on the
+        // first tile of the row below, and the edges stop the arrow.
+        let mut dash = capture_dash();
+        arranged(&dash);
+
+        dash.step_focus(Toward::Right);
+        assert_eq!(
+            dash.focus,
+            Some(Tile::Events),
+            "the first press picks a pane"
+        );
+        dash.step_focus(Toward::Left);
+        assert_eq!(
+            dash.focus,
+            Some(Tile::Events),
+            "the arrow wrapped the board"
+        );
+        dash.step_focus(Toward::Right);
+        dash.step_focus(Toward::Right);
+        assert_eq!(dash.focus, Some(Tile::Map));
+        dash.step_focus(Toward::Down);
+        assert_eq!(
+            dash.focus,
+            Some(Tile::Vitals),
+            "down did not go straight down"
+        );
+        dash.step_focus(Toward::Left);
+        assert_eq!(dash.focus, Some(Tile::Chunks));
+        dash.step_focus(Toward::Up);
+        assert_eq!(dash.focus, Some(Tile::Events));
+    }
+
+    #[test]
+    fn the_picked_pane_wears_a_heavy_border_and_no_other_does() {
+        let mut dash = capture_dash();
+        assert!(
+            !arranged(&dash).concat().contains('┏'),
+            "a board nobody is arranging wears a highlight"
+        );
+
+        dash.focus = Some(Tile::Map);
+        let rows = arranged(&dash);
+        let corners = rows.concat().matches('┏').count();
+        assert_eq!(corners, 1, "one pane is picked, so one heavy corner");
+        let top = rows
+            .iter()
+            .find(|row| row.contains("^3 COUNTRIES"))
+            .unwrap();
+        assert!(
+            top.contains('┏') && top.contains('━'),
+            "the map is not the one lit"
+        );
+        assert!(top.contains("^3 COUNTRIES"), "the highlight ate the title");
+    }
+
+    #[test]
+    fn hiding_the_picked_pane_lets_go_of_it() {
+        let mut dash = capture_dash();
+        dash.focus = Some(Tile::Map);
+        dash.toggle(Tile::Map);
+        assert_eq!(dash.focus, None);
     }
 }

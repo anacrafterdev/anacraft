@@ -507,6 +507,10 @@ struct Dash {
     /// is what Shift+arrow moves and what `z` zooms; nothing is picked until
     /// an arrow is pressed, so a board nobody is arranging wears no highlight.
     focus: Option<Tile>,
+    /// The picked pane has the whole body to itself. The board behind it is
+    /// still laid out, so the arrows go on walking it — each press brings the
+    /// next pane up full size — and `z` again puts the board back as it was.
+    zoomed: bool,
     /// Where each tile sat on the last frame. The arrows move between panes
     /// as they are drawn, not as the key order lists them, so they read the
     /// board back from here rather than working the layout out again.
@@ -531,8 +535,10 @@ impl Dash {
             self.next_join += 1;
         } else if self.focus == Some(tile) {
             // The highlight goes with the pane rather than jumping to
-            // whichever tile slid into its cell.
+            // whichever tile slid into its cell, and a zoom with nothing to
+            // show is no zoom.
             self.focus = None;
+            self.zoomed = false;
         }
     }
 
@@ -554,6 +560,27 @@ impl Dash {
         self.focus = Some(next);
     }
 
+    /// Whether the picked pane is on screen. A short terminal drops panes
+    /// from the grid, and the pick can be one of them.
+    fn pick_shown(&self) -> bool {
+        self.focus.is_some_and(|picked| {
+            self.zoomed || self.placed.borrow().iter().any(|(tile, _)| *tile == picked)
+        })
+    }
+
+    /// Blows the picked pane up to fill the body, or puts it back. Nothing
+    /// picked yet, it zooms the first pane on the board and picks that.
+    fn toggle_zoom(&mut self) {
+        if self.zoomed {
+            self.zoomed = false;
+            return;
+        }
+        if self.focus.is_none() {
+            self.focus = self.placed.borrow().first().map(|(tile, _)| *tile);
+        }
+        self.zoomed = self.focus.is_some();
+    }
+
     /// Carries the picked pane one place over: it trades places on the board
     /// with the pane that way, and the highlight goes with it. Nothing picked
     /// yet, it picks — the same first press the bare arrow makes.
@@ -566,7 +593,9 @@ impl Dash {
         let Some(from) = self.focus else {
             return self.step_focus(toward);
         };
-        if self.stacked.get() {
+        // Zoomed, the board is out of sight, so a move there could not be
+        // seen until the zoom came off.
+        if self.stacked.get() || self.zoomed {
             return;
         }
         let Some(to) = neighbour(&self.placed.borrow(), from, toward) else {
@@ -589,6 +618,7 @@ impl Dash {
             joined: [0, 1, 2, 3, 4, 5, 6, 7],
             next_join: 8,
             focus: None,
+            zoomed: false,
             placed: RefCell::new(Vec::new()),
             stacked: Cell::new(false),
             title,
@@ -1680,7 +1710,9 @@ async fn event_loop(
                         KeyCode::Esc if dash.help => dash.help = false,
                         // And then the highlight: somebody arranging the board
                         // presses Esc to be done arranging, not to leave.
-                        KeyCode::Esc if dash.focus.is_some() => dash.focus = None,
+                        // Out of the zoom first, then off the pane.
+                        KeyCode::Esc if dash.zoomed => dash.zoomed = false,
+                        KeyCode::Esc if dash.pick_shown() => dash.focus = None,
                         KeyCode::Esc => return Ok(landed(rotation, index)),
                         KeyCode::Char('r') => {
                             dash.last_report = now - dash.report_every;
@@ -1703,6 +1735,7 @@ async fn event_loop(
                         KeyCode::Down if key.modifiers.contains(KeyModifiers::SHIFT) => {
                             dash.move_focus(Toward::Down)
                         }
+                        KeyCode::Char('z') | KeyCode::Char('Z') => dash.toggle_zoom(),
                         KeyCode::Left => dash.step_focus(Toward::Left),
                         KeyCode::Right => dash.step_focus(Toward::Right),
                         KeyCode::Up => dash.step_focus(Toward::Up),
@@ -2532,10 +2565,20 @@ fn body(frame: &mut Frame, dash: &Dash, area: Rect, narrow: bool, wide: bool) {
     } else {
         grid(dash, area, wide)
     };
-    for (tile, cell) in &placed {
-        render_tile(frame, dash, *tile, *cell);
-        if dash.focus == Some(*tile) {
-            highlight(frame.buffer_mut(), *cell);
+    match dash.focus {
+        // Still heavy-bordered, so a zoomed pane says it is one rather than
+        // passing for a board with a single panel switched on.
+        Some(tile) if dash.zoomed => {
+            render_tile(frame, dash, tile, area);
+            highlight(frame.buffer_mut(), area);
+        }
+        _ => {
+            for (tile, cell) in &placed {
+                render_tile(frame, dash, *tile, *cell);
+                if dash.focus == Some(*tile) {
+                    highlight(frame.buffer_mut(), *cell);
+                }
+            }
         }
     }
     *dash.placed.borrow_mut() = placed;
@@ -7384,6 +7427,51 @@ mod arrange_tests {
     }
 
     #[test]
+    fn a_pick_the_grid_dropped_is_not_shown() {
+        // A short body has no cell for every pane. Esc reads this to decide
+        // whether it has a highlight to clear or should quit.
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let mut dash = capture_dash();
+        dash.panels = Panels {
+            vitals: true,
+            live: true,
+            chunks: true,
+            realms_ranked: true,
+            portals: true,
+            trend: true,
+            map: true,
+            events: true,
+        };
+        let mut terminal = Terminal::new(TestBackend::new(132, 16)).unwrap();
+        terminal
+            .draw(|frame| body(frame, &dash, Rect::new(0, 0, 132, 16), false, true))
+            .unwrap();
+        let placed: Vec<Tile> = dash.placed.borrow().iter().map(|(tile, _)| *tile).collect();
+        use Tile::*;
+        let dropped = [
+            Events,
+            Live,
+            Map,
+            Chunks,
+            Vitals,
+            RealmsRanked,
+            Trend,
+            Portals,
+        ]
+        .into_iter()
+        .find(|tile| !placed.contains(tile))
+        .expect("every pane found a cell");
+
+        dash.focus = Some(placed[0]);
+        assert!(dash.pick_shown());
+        dash.focus = Some(dropped);
+        assert!(!dash.pick_shown());
+        dash.zoomed = true;
+        assert!(dash.pick_shown(), "a zoomed pick fills the body");
+    }
+
+    #[test]
     fn hiding_the_picked_pane_lets_go_of_it() {
         let mut dash = capture_dash();
         dash.focus = Some(Tile::Map);
@@ -7432,5 +7520,71 @@ mod arrange_tests {
         let joined = dash.joined;
         dash.move_focus(Toward::Down);
         assert_eq!(dash.joined, joined);
+    }
+
+    #[test]
+    fn shift_leaves_the_board_alone_while_zoomed() {
+        let mut dash = capture_dash();
+        arranged(&dash);
+        dash.focus = Some(Tile::Map);
+        dash.zoomed = true;
+
+        let joined = dash.joined;
+        dash.move_focus(Toward::Down);
+        assert_eq!(dash.joined, joined, "the board moved behind the zoom");
+    }
+
+    #[test]
+    fn z_gives_the_picked_pane_the_whole_body_and_takes_it_back() {
+        let mut dash = capture_dash();
+        let board = arranged(&dash);
+
+        // Nothing picked: z picks the first pane and zooms it.
+        dash.toggle_zoom();
+        assert_eq!((dash.focus, dash.zoomed), (Some(Tile::Events), true));
+        let zoomed = arranged(&dash);
+        assert!(zoomed[0].starts_with('┏') && zoomed[0].ends_with('┓'));
+        assert!(
+            zoomed[37].starts_with('┗'),
+            "the zoom stops short of the body"
+        );
+        assert!(
+            !zoomed.concat().contains("RIGHT NOW"),
+            "the board shows round it"
+        );
+
+        // The arrows walk the board behind it, bringing each pane up in turn.
+        dash.step_focus(Toward::Right);
+        assert!(arranged(&dash)[0].contains("^2 RIGHT NOW"));
+
+        // And z again puts the board back, with the pane still picked.
+        dash.step_focus(Toward::Left);
+        dash.toggle_zoom();
+        assert!(!dash.zoomed);
+        assert_eq!(dash.focus, Some(Tile::Events));
+        let back = arranged(&dash);
+        assert_eq!(back.len(), board.len());
+        assert!(back.concat().contains("RIGHT NOW"));
+    }
+
+    #[test]
+    fn every_pane_can_be_zoomed() {
+        // A panel built for a third of the board has to hold up at all of it.
+        let mut dash = capture_dash();
+        for tile in [
+            Tile::Events,
+            Tile::Live,
+            Tile::Map,
+            Tile::Chunks,
+            Tile::Vitals,
+            Tile::RealmsRanked,
+            Tile::Trend,
+            Tile::Portals,
+        ] {
+            dash.focus = Some(tile);
+            dash.zoomed = true;
+            let rows = arranged(&dash);
+            assert!(rows[0].starts_with('┏'), "{tile:?} did not fill the body");
+        }
     }
 }

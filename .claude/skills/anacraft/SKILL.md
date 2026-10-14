@@ -248,7 +248,7 @@ rest rather than leaving a hole.
 The arrow keys pick out a pane · `shift`+arrows carry it across the board,
 trading places with the pane that way · `z` zooms it to fill the dashboard and
 back (arrows flip panes while zoomed) · `Esc` steps out of the zoom, then off
-the pane, before it quits.
+the pane, before it quits · `0` resets the board — every panel on, in key order — after a `y` to confirm.
 
 `t` cycles the palette and saves it · `r` forces a refetch · `tab` switches
 property · `?` or `h` for help · `q` or `Esc` quits · `s` previews the

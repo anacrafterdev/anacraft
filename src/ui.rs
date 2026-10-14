@@ -89,8 +89,12 @@ const VITALS_TIGHT_ROWS: u16 = (OVERVIEW.len() as u16) * 2 + 2;
 /// metric, the bars given up. This is all the column reserves for it, so the
 /// map is never the panel that pays for a tall table.
 const VITALS_MIN_ROWS: u16 = OVERVIEW.len() as u16 + 2;
-/// The daily chart's box: three rows of bars, a caption, and borders.
-const TREND_ROWS: u16 = 3 + 1 + 2;
+/// The fewest rows the daily bars are drawn in: three of bar and one over the
+/// tallest for its count.
+const TREND_BAR_ROWS: u16 = 3 + 1;
+/// The daily chart's box: its bars, a row of day labels, a caption, and
+/// borders.
+const TREND_ROWS: u16 = TREND_BAR_ROWS + 1 + 1 + 2;
 /// What the live panel needs before it is worth drawing: the count, its
 /// caption, the meter, the graph and the feed's full field, plus borders.
 const LIVE_ROWS: u16 = 8 + FEED_ROWS as u16;
@@ -246,7 +250,8 @@ fn event_ores() -> [Color; EVENT_NAME_LINES] {
 struct Snapshot {
     current: Vec<f64>,
     previous: Vec<f64>,
-    daily: Vec<f64>,
+    /// Users per day, oldest first, each with its `YYYYMMDD` date.
+    daily: Vec<(String, f64)>,
     pages: Vec<(String, f64)>,
     realms: Vec<(String, f64)>,
     /// Where the sessions arrived from, ranked. Source and medium together, so
@@ -266,7 +271,7 @@ enum Update {
         current: Vec<f64>,
         previous: Vec<f64>,
     },
-    Trend(Vec<f64>),
+    Trend(Vec<(String, f64)>),
     Pages(Vec<(String, f64)>),
     /// Event counts per day, for the period and the one before it.
     Events(EventCounts),
@@ -472,7 +477,8 @@ struct Dash {
     title: String,
     days: u32,
     metrics: Vec<MetricRow>,
-    daily: Vec<f64>,
+    /// Users per day, oldest first, each with its `YYYYMMDD` date.
+    daily: Vec<(String, f64)>,
     pages: Vec<PageRow>,
     /// Events per day, this period against the last.
     events: EventTrend,
@@ -789,7 +795,7 @@ impl Dash {
         self.error = None;
     }
 
-    fn apply_trend(&mut self, daily: Vec<f64>) {
+    fn apply_trend(&mut self, daily: Vec<(String, f64)>) {
         self.daily = daily;
         self.updated = stamp();
         self.error = None;
@@ -953,7 +959,7 @@ async fn fetch_totals(client: &Ga, property: &str, days: u32) -> Result<(Vec<f64
     ))
 }
 
-async fn fetch_trend(client: &Ga, property: &str, days: u32) -> Result<Vec<f64>> {
+async fn fetch_trend(client: &Ga, property: &str, days: u32) -> Result<Vec<(String, f64)>> {
     let trend = client
         .report(
             property,
@@ -963,10 +969,14 @@ async fn fetch_trend(client: &Ga, property: &str, days: u32) -> Result<Vec<f64>>
         )
         .await?;
 
-    // GA returns date rows unordered; the sparkline needs them chronological.
+    // GA returns date rows unordered; the chart needs them chronological. The
+    // date goes along with the count — it is what the bar is labelled with.
     let mut rows = trend.rows.clone();
     rows.sort_by(|a, b| a.dimension(0).cmp(b.dimension(0)));
-    Ok(rows.iter().map(|r| r.metric(0)).collect())
+    Ok(rows
+        .iter()
+        .map(|r| (r.dimension(0).to_string(), r.metric(0)))
+        .collect())
 }
 
 /// Users by country over the period — the map's base layer.
@@ -1891,7 +1901,7 @@ async fn event_loop(
 struct Synthetic {
     current: Vec<f64>,
     previous: Vec<f64>,
-    daily: Vec<f64>,
+    daily: Vec<(String, f64)>,
     live: f64,
 }
 
@@ -1900,7 +1910,18 @@ impl Synthetic {
         Synthetic {
             current: vec![12_481.0, 18_203.0, 41_776.0, 312.0, 0.412, 214.0],
             previous: vec![11_450.0, 17_004.0, 39_210.0, 258.0, 0.478, 191.0],
-            daily: vec![1402.0, 1288.0, 1531.0, 1495.0, 1760.0, 1834.0, 1971.0],
+            // The week that ended yesterday, as a real report's would.
+            daily: {
+                let today = chrono::Local::now().date_naive();
+                [1402.0, 1288.0, 1531.0, 1495.0, 1760.0, 1834.0, 1971.0]
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, users)| {
+                        let date = today - chrono::Days::new(7 - i as u64);
+                        (date.format("%Y%m%d").to_string(), users)
+                    })
+                    .collect()
+            },
             live: 128.0,
         }
     }
@@ -1910,8 +1931,8 @@ impl Synthetic {
         for (i, value) in self.current.iter_mut().enumerate() {
             *value *= 1.0 + rng.gen_range(-0.004..0.012) * if i == 4 { 0.4 } else { 1.0 };
         }
-        if let Some(today) = self.daily.last_mut() {
-            *today *= 1.0 + rng.gen_range(-0.02..0.05);
+        if let Some((_, latest)) = self.daily.last_mut() {
+            *latest *= 1.0 + rng.gen_range(-0.02..0.05);
         }
 
         let mut snapshot = Snapshot {
@@ -3862,18 +3883,26 @@ fn moved_span(moved: Option<i64>) -> Span<'static> {
 /// Daily villagers, as bars rather than a seven-character sparkline: the panel
 /// is wide, so the days may as well be readable.
 ///
-/// The bars take every row the box has under its caption. They were three
-/// rows whatever the box, which left a tall cell — and a zoomed one most of
-/// all — as a strip of chart over a field of nothing; every row they gain is
-/// eight more steps of height to tell one day from the next.
+/// The bars take every row the box has between the title and the day labels.
+/// They were three rows whatever the box, which left a tall cell — and a
+/// zoomed one most of all — as a strip of chart over a field of nothing; every
+/// row they gain is eight more steps of height to tell one day from the next.
+///
+/// And it says what it is showing. The bars were bare — no dates, no counts,
+/// a peak in the caption and nothing else — so the panel said "a week went
+/// roughly like this" and no more. Each bar now wears its date beneath it and
+/// its count above it where the bar is wide enough to hold one, and the
+/// caption carries the period's users against the period before, the way
+/// every other figure on the board is read.
 fn trend_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
     let inner = width.saturating_sub(2) as usize;
-    let caption = trend_caption(&dash.daily, inner);
-    let rows = height
-        .saturating_sub(2 + u16::from(caption.is_some()))
-        .max(TREND_ROWS - 3) as usize;
-    let mut lines = if dash.daily.len() > 1 {
-        daily_chart(&dash.daily, inner, rows)
+    let lines = if dash.daily.len() > 1 {
+        // Borders, the day labels and the caption; the bars get the rest.
+        let rows = height.saturating_sub(4).max(TREND_BAR_ROWS) as usize;
+        let chart = daily_chart(&dash.daily, inner, rows);
+        let mut lines = chart.lines;
+        lines.push(trend_caption(dash, inner, chart.counted));
+        lines
     } else {
         vec![Line::from(Span::styled(
             "  not enough days yet",
@@ -3881,38 +3910,78 @@ fn trend_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
         ))]
     };
 
-    if let Some(caption) = caption {
-        lines.push(Line::from(Span::styled(
-            caption,
-            Style::default().fg(theme::fade(theme::sage(), 0.2)),
-        )));
-    }
-
     Paragraph::new(lines).block(framed("DAILY USERS", "7", ore::grass()))
 }
 
-/// The line under the bars: how many days are drawn, and the tallest of them.
-/// There is nothing to say before the first day's numbers arrive.
-fn trend_caption(daily: &[f64], inner: usize) -> Option<String> {
-    if daily.is_empty() {
-        return None;
-    }
-
+/// The line under the daily chart: how many days, the period's users and
+/// which way they went against the period before. The users are the vitals'
+/// figure rather than the bars added up — a person who came back on three
+/// days is one user, not three, and the sum of the bars would say three.
+///
+/// The peak is named only when the bars could not carry their own counts;
+/// with the counts on, the tallest bar already says it.
+fn trend_caption(dash: &Dash, inner: usize, counted: bool) -> Line<'static> {
+    let daily = &dash.daily;
     let shown = visible_days(inner, daily.len());
-    let peak = daily[daily.len() - shown..]
-        .iter()
-        .cloned()
-        .fold(0.0_f64, f64::max);
-    Some(if shown < daily.len() {
-        format!(
-            "  last {} of {} days · peak {}",
-            shown,
-            daily.len(),
-            commas(peak)
-        )
+    let quiet = Style::default().fg(theme::fade(theme::sage(), 0.2));
+
+    let mut spans = vec![Span::styled(
+        if shown < daily.len() {
+            format!("  last {shown} of {} days", daily.len())
+        } else {
+            format!("  {shown} days")
+        },
+        quiet,
+    )];
+    if let Some(users) = dash.metrics.first() {
+        spans.push(Span::styled(" · ", quiet));
+        spans.push(Span::styled(
+            format!("{} users ", commas(users.value.shown.round())),
+            Style::default().fg(theme::fg()),
+        ));
+        spans.push(delta_span(users.value.target, users.previous, false));
+    }
+    if !counted {
+        let peak = daily[daily.len() - shown..]
+            .iter()
+            .map(|(_, users)| *users)
+            .fold(0.0_f64, f64::max);
+        spans.push(Span::styled(format!(" · peak {}", commas(peak)), quiet));
+    }
+    Line::from(fits(spans, inner, 1))
+}
+
+/// The daily chart, drawn: bar rows with any counts in them, then the row of
+/// day labels.
+struct DailyChart {
+    lines: Vec<Line<'static>>,
+    /// Whether the bars carry their counts. When they do not, the caption
+    /// names the peak instead so the chart still has a scale.
+    counted: bool,
+}
+
+/// A count short enough to sit over a narrow bar: `940`, `2.1k`, `18k`, `1.2M`.
+fn compact(value: f64) -> String {
+    let value = value.round();
+    if value < 1_000.0 {
+        format!("{value:.0}")
+    } else if value < 10_000.0 {
+        format!("{:.1}k", value / 1_000.0)
+    } else if value < 1_000_000.0 {
+        format!("{:.0}k", value / 1_000.0)
     } else {
-        format!("  {shown} days · peak {}", commas(peak))
-    })
+        format!("{:.1}M", value / 1_000_000.0)
+    }
+}
+
+/// What a day's bar is labelled with: the weekday and the date where the bars
+/// are wide enough for it, the date alone where they are not.
+fn day_label(date: &str, long: bool) -> String {
+    match chrono::NaiveDate::parse_from_str(date, "%Y%m%d") {
+        Ok(day) if long => day.format("%a %-d").to_string(),
+        Ok(day) => day.format("%-d").to_string(),
+        Err(_) => day_of_month(date),
+    }
 }
 
 /// How many days a panel this wide can draw, at one column per day minimum.
@@ -3920,63 +3989,162 @@ fn visible_days(width: usize, total: usize) -> usize {
     total.min(width.saturating_sub(2).max(1)).max(1)
 }
 
-/// A column chart `rows` tall. Each day gets as many columns as the width
-/// allows, and the eighth-height blocks give each bar eight times the vertical
-/// resolution of the row it ends in.
-fn daily_chart(values: &[f64], width: usize, rows: usize) -> Vec<Line<'static>> {
+/// A column chart: `rows` of bars, then a row of day labels. Each day gets as
+/// many columns as the width allows, and the eighth-height blocks give each
+/// bar eight times the vertical resolution of the row it ends in.
+///
+/// Where every bar is wide enough for its count, the count sits on top of it,
+/// and the bars are scaled one row short so the tallest has a row to wear its
+/// count in. The labels under the bars are placed from the latest day back
+/// at an even stride — on a month of one-column bars that reads as a date
+/// every few days, and the latest is always there.
+fn daily_chart(days: &[(String, f64)], width: usize, rows: usize) -> DailyChart {
     // A narrow panel can't hold a bar per day; it shows the most recent ones
     // rather than squeezing every day into nothing.
-    let days = visible_days(width, values.len());
-    let values = &values[values.len() - days..];
-    let peak = values.iter().cloned().fold(f64::MIN, f64::max).max(1.0);
+    let shown = visible_days(width, days.len());
+    let days = &days[days.len() - shown..];
+    let peak = days
+        .iter()
+        .map(|(_, users)| *users)
+        .fold(f64::MIN, f64::max)
+        .max(1.0);
 
+    // The width has to hold `shown` bars, the gaps between them and the
+    // indent, or the last bar runs under the border. As wide as that lets
+    // them be: they stopped at eight columns, which on a wide or zoomed panel
+    // drew a week into the left half and left the right half bare.
+    let indent = 2;
+    let available = width.saturating_sub(indent);
+    let gap = usize::from(available >= shown * 3);
+    let bar = (available.saturating_sub(gap * (shown - 1)) / shown).max(1);
+    // Bars come in whole columns, so the few the division leaves over are
+    // split either side rather than all piled up against the right border.
+    let spare = available.saturating_sub(shown * bar + gap * (shown - 1));
+    let left = |i: usize| indent + spare / 2 + i * (bar + gap);
+
+    // Counts: in full where every bar can hold its own, shortened where every
+    // bar can hold that, and not at all otherwise — half the bars labelled
+    // would read as the other half having no count.
+    let counts: Option<Vec<String>> = [commas, compact].into_iter().find_map(|format| {
+        let texts: Vec<String> = days.iter().map(|(_, users)| format(*users)).collect();
+        texts
+            .iter()
+            .all(|text| text.chars().count() <= bar)
+            .then_some(texts)
+    });
+    let counts = counts.filter(|_| rows >= 2);
     // Bars are measured from zero: for a count, a truncated axis would turn a
     // quiet week into a dramatic one.
-    //
-    // The width has to hold `days` bars, the gaps between them and the indent,
-    // or the last bar runs under the border.
-    let available = width.saturating_sub(2);
-    let gap = usize::from(available >= days * 3);
-    // As wide as the panel lets them be. They stopped at eight columns, which
-    // on a wide or zoomed panel drew a week into the left half and left the
-    // right half bare.
-    let bar = (available.saturating_sub(gap * (days - 1)) / days).max(1);
+    let scale = if counts.is_some() { rows - 1 } else { rows } as f64;
 
-    (0..rows)
-        .map(|row| {
+    let mut cells: Vec<Vec<(char, Option<Color>)>> = vec![vec![(' ', None); width]; rows + 1];
+    for (i, (_, users)) in days.iter().enumerate() {
+        // The latest day is the one people look for, so it is lit.
+        let color = if i + 1 == days.len() {
+            theme::bright()
+        } else {
+            theme::mix(
+                theme::accent_deep(),
+                ore::grass(),
+                i as f64 / days.len() as f64,
+            )
+        };
+        let height = users / peak * scale;
+        for (row, line) in cells.iter_mut().take(rows).enumerate() {
             // Row 0 is the top of the chart.
-            let floor = (rows - row - 1) as f64;
-            let mut spans = vec![Span::raw("  ")];
-            for (i, value) in values.iter().enumerate() {
-                let height = value / peak * rows as f64 - floor;
-                let glyph = if height >= 1.0 {
-                    glyph::FULL
-                } else if height <= 0.0 {
-                    ' '
-                } else {
-                    glyph::SPARK[((height * 8.0).ceil() as usize).clamp(1, 8) - 1]
-                };
-                // The latest day is the one people look for, so it is lit.
-                let color = if i + 1 == values.len() {
-                    theme::bright()
-                } else {
-                    theme::mix(
-                        theme::accent_deep(),
-                        ore::grass(),
-                        i as f64 / values.len() as f64,
-                    )
-                };
-                spans.push(Span::styled(
-                    glyph.to_string().repeat(bar),
-                    Style::default().fg(color),
-                ));
-                if i + 1 < values.len() {
-                    spans.push(Span::raw(" ".repeat(gap)));
+            let fill = height - (rows - row - 1) as f64;
+            let glyph = if fill >= 1.0 {
+                glyph::FULL
+            } else if fill <= 0.0 {
+                continue;
+            } else {
+                glyph::SPARK[((fill * 8.0).ceil() as usize).clamp(1, 8) - 1]
+            };
+            for cell in line.iter_mut().skip(left(i)).take(bar) {
+                *cell = (glyph, Some(color));
+            }
+        }
+
+        // The count sits in the row above the top of its bar.
+        if let Some(counts) = &counts {
+            let text = &counts[i];
+            let top = rows - (height.ceil() as usize).min(rows);
+            let row = top.saturating_sub(1).min(rows - 1);
+            let count = if i + 1 == days.len() {
+                theme::bright()
+            } else {
+                theme::sage()
+            };
+            let start = left(i) + (bar - text.chars().count()) / 2;
+            for (x, ch) in (start..).zip(text.chars()) {
+                if x < width {
+                    cells[row][x] = (ch, Some(count));
                 }
+            }
+        }
+    }
+
+    // Day labels, every `stride`th day counting back from the latest, so they
+    // fall evenly and the latest always has one. The stride is the fewest
+    // bars that leave a cell between the widest two labels.
+    let long = days
+        .iter()
+        .all(|(date, _)| day_label(date, true).chars().count() <= bar);
+    let widest = days
+        .iter()
+        .map(|(date, _)| day_label(date, long).chars().count())
+        .max()
+        .unwrap_or(1);
+    let stride = (widest + 1).div_ceil(bar + gap);
+    let mut room = width;
+    for (i, (date, _)) in days.iter().enumerate().rev() {
+        if (days.len() - 1 - i) % stride != 0 {
+            continue;
+        }
+        let text = day_label(date, long);
+        let len = text.chars().count();
+        let centre = left(i) + bar / 2;
+        let start = centre.saturating_sub(len / 2).max(indent);
+        if start + len > room.min(width) {
+            continue;
+        }
+        let color = if i + 1 == days.len() {
+            theme::bright()
+        } else {
+            ore::stone()
+        };
+        for (x, ch) in (start..).zip(text.chars()) {
+            cells[rows][x] = (ch, Some(color));
+        }
+        // One cell of space before the next label in.
+        room = start.saturating_sub(1);
+    }
+
+    let lines = cells
+        .into_iter()
+        .map(|row| {
+            let mut spans = Vec::new();
+            let mut run = String::new();
+            let mut color = None;
+            for (ch, cell) in row {
+                if cell != color && !run.is_empty() {
+                    spans.push(styled_run(&run, color));
+                    run.clear();
+                }
+                color = cell;
+                run.push(ch);
+            }
+            if !run.is_empty() {
+                spans.push(styled_run(run.trim_end(), color));
             }
             Line::from(spans)
         })
-        .collect()
+        .collect();
+
+    DailyChart {
+        lines,
+        counted: counts.is_some(),
+    }
 }
 
 /// A very rough world, one `#` per land cell: 60 columns of longitude by 12
@@ -7152,28 +7320,123 @@ mod tests {
     }
 
     #[test]
-    fn the_trend_caption_waits_for_the_first_day() {
+    fn daily_users_waits_for_a_second_day() {
         // `visible_days` never returns zero, so an empty history used to slice
         // from behind the front of the vec and take the whole dashboard down.
-        assert_eq!(trend_caption(&[], 40), None);
-        assert!(trend_caption(&[12.0], 40).unwrap().contains("1 days"));
+        // With one day or none there is no chart, and nothing to caption.
+        let mut dash = capture_dash();
+        for daily in [vec![], vec![("20261012".to_string(), 12.0)]] {
+            dash.daily = daily;
+            let drawn = rendered(40, TREND_ROWS, trend_panel(&dash, 40, TREND_ROWS)).join("\n");
+            assert!(drawn.contains("not enough days yet"), "{drawn}");
+        }
     }
 
     #[test]
     fn the_daily_chart_fits_its_panel() {
-        for width in 12..=60 {
+        for width in 12..=140 {
             for days in [2, 7, 14, 30] {
-                let values: Vec<f64> = (0..days).map(|d| 100.0 + d as f64).collect();
-                for line in daily_chart(&values, width, 3) {
-                    let drawn: usize = line
-                        .spans
-                        .iter()
-                        .map(|span| span.content.chars().count())
-                        .sum();
-                    assert!(drawn <= width, "width {width}, {days} days: drew {drawn}");
+                let values: Vec<(String, f64)> = (0..days)
+                    .map(|d| (format!("202609{:02}", d + 1), 100.0 + d as f64))
+                    .collect();
+                for rows in [4, 9] {
+                    let chart = daily_chart(&values, width, rows);
+                    assert_eq!(chart.lines.len(), rows + 1, "bars and a label row");
+                    for line in chart.lines {
+                        let drawn: usize = line
+                            .spans
+                            .iter()
+                            .map(|span| span.content.chars().count())
+                            .sum();
+                        assert!(drawn <= width, "width {width}, {days} days: drew {drawn}");
+                    }
                 }
             }
         }
+    }
+
+    #[test]
+    fn every_daily_bar_says_its_day_and_its_count() {
+        // The panel at the size it opens at on the full board: a week of bars
+        // wide enough to carry their counts, each with its weekday and date.
+        let days: Vec<(String, f64)> = [
+            ("20261006", 1402.0),
+            ("20261007", 1288.0),
+            ("20261008", 1531.0),
+            ("20261009", 1495.0),
+            ("20261010", 1760.0),
+            ("20261011", 1834.0),
+            ("20261012", 2055.0),
+        ]
+        .into_iter()
+        .map(|(date, users)| (date.to_string(), users))
+        .collect();
+        let chart = daily_chart(&days, 64, 5);
+        let text: Vec<String> = chart
+            .lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect()
+            })
+            .collect();
+        let all = text.join("\n");
+
+        assert!(chart.counted);
+        for count in [
+            "1,402", "1,288", "1,531", "1,495", "1,760", "1,834", "2,055",
+        ] {
+            assert!(all.contains(count), "{count} missing:\n{all}");
+        }
+        // The peak's count sits in the top row, over its bar.
+        assert!(text[0].contains("2,055"), "{all}");
+        let labels = text.last().unwrap();
+        for day in [
+            "Tue 6", "Wed 7", "Thu 8", "Fri 9", "Sat 10", "Sun 11", "Mon 12",
+        ] {
+            assert!(labels.contains(day), "{day} missing from {labels:?}");
+        }
+    }
+
+    #[test]
+    fn a_month_of_thin_bars_keeps_its_latest_date_and_drops_its_counts() {
+        let days: Vec<(String, f64)> = (1..=30)
+            .map(|d| (format!("202609{d:02}"), 500.0 + d as f64 * 7.0))
+            .collect();
+        let chart = daily_chart(&days, 40, 4);
+        let labels: String = chart
+            .lines
+            .last()
+            .unwrap()
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+
+        assert!(!chart.counted, "counts on one-column bars");
+        assert!(labels.trim_end().ends_with("30"), "{labels:?}");
+        // Some dates, spaced: never two run together.
+        assert!(labels.split_whitespace().count() > 3, "{labels:?}");
+        assert!(
+            labels.split_whitespace().all(|label| label.len() <= 2),
+            "{labels:?}"
+        );
+    }
+
+    #[test]
+    fn the_daily_caption_reads_users_against_the_period_before() {
+        // The vitals' users, not the bars summed: a returning visitor is one
+        // user however many days they came back on.
+        let dash = capture_dash();
+        let drawn = rendered(64, 12, trend_panel(&dash, 64, 12)).join("\n");
+        let users = commas(dash.metrics[0].value.shown.round());
+        assert!(drawn.contains(&format!("{users} users")), "{drawn}");
+        assert!(
+            drawn.contains('▲') || drawn.contains('▼') || drawn.contains("flat"),
+            "{drawn}"
+        );
     }
 }
 
@@ -7815,26 +8078,25 @@ mod arrange_tests {
         let rows = arranged(&dash);
 
         let barred = |row: &String| row.contains(glyph::FULL);
-        // The tallest day reaches the top row, under the title.
+        let all = rows.join("\n");
+        // The tallest day's count is the top row, its bar straight under it.
+        assert!(rows[1].contains("2,0") || rows[1].contains("1,9"), "{all}");
+        assert!(barred(&rows[2]), "the bars stop short of the top:\n{all}");
+        // Bars down to the day labels, then the caption on the last row.
         assert!(
-            barred(&rows[1]),
-            "the bars stop short of the top:\n{}",
-            rows.join("\n")
+            barred(&rows[34]),
+            "the bars stop short of the labels:\n{all}"
         );
-        assert!(
-            barred(&rows[35]),
-            "the bars stop short of the caption:\n{}",
-            rows.join("\n")
-        );
+        assert!(!barred(&rows[35]), "no row of day labels:\n{all}");
         assert!(
             rows[36].contains("days"),
             "the caption is not on the last row"
         );
-        let last_bar = rows[35].rfind(glyph::FULL).unwrap();
+        let last_bar = rows[34].rfind(glyph::FULL).unwrap();
         assert!(
-            rows[35][..last_bar].chars().count() > 100,
+            rows[34][..last_bar].chars().count() > 100,
             "the bars stop short of the right edge:\n{}",
-            rows[35]
+            rows[34]
         );
     }
 }

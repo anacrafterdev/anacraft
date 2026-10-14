@@ -421,6 +421,7 @@ reflows to fill the terminal.
 | Key | Action |
 |-----|--------|
 | `1`–`7` | Toggle a panel — `e` `l` `m` `p` `v` `g` `d` do the same |
+| `0` | Reset the board — every panel on, in key order, nothing picked or zoomed. Asks first; `y` confirms |
 | arrows | Pick out a pane — it wears a heavy gold border |
 | `shift`+arrows | Carry the picked pane across the board, trading places with its neighbour |
 | `z` | Zoom the picked pane to fill the dashboard, and back — arrows flip through panes while zoomed |

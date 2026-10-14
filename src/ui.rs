@@ -321,6 +321,7 @@ struct EventTrend {
 /// Which panels are on screen. Hidden panels give their rows and columns back
 /// to whatever is left, so hiding one is a layout change rather than a blank
 /// rectangle.
+#[derive(PartialEq)]
 struct Panels {
     vitals: bool,
     live: bool,
@@ -333,6 +334,41 @@ struct Panels {
 }
 
 impl Panels {
+    /// The board opens on the first five keys and holds 6, 7 and 8 in
+    /// reserve. All eight used to be on, which meant the dashboard opened at
+    /// its most crowded and every key a newcomer pressed took something away
+    /// — the wrong direction for a first move. Five is the board at a
+    /// glance: the chart, the realtime panel, the map, the pages and the
+    /// figures, three across over two, every tile at a size worth reading.
+    /// What is left is a panel you go and get, and the number that fetches
+    /// it is the number in its title.
+    fn opening() -> Panels {
+        Panels {
+            events: true,
+            live: true,
+            map: true,
+            chunks: true,
+            vitals: true,
+            realms_ranked: false,
+            trend: false,
+            portals: false,
+        }
+    }
+
+    /// Every panel on — the whole board, for `0` to put back.
+    fn all() -> Panels {
+        Panels {
+            events: true,
+            live: true,
+            map: true,
+            chunks: true,
+            vitals: true,
+            realms_ranked: true,
+            trend: true,
+            portals: true,
+        }
+    }
+
     fn any(&self) -> bool {
         self.vitals
             || self.live
@@ -511,6 +547,10 @@ struct Dash {
     /// still laid out, so the arrows go on walking it — each press brings the
     /// next pane up full size — and `z` again puts the board back as it was.
     zoomed: bool,
+    /// `0` is asking whether to throw the arrangement away. It sits beside
+    /// the panel keys somebody arranging the board is pressing, and there is
+    /// no undo, so a stray press asks first.
+    resetting: bool,
     /// Where each tile sat on the last frame. The arrows move between panes
     /// as they are drawn, not as the key order lists them, so they read the
     /// board back from here rather than working the layout out again.
@@ -520,7 +560,35 @@ struct Dash {
     stacked: Cell<bool>,
 }
 
+/// Where the tiles stand on a board nobody has touched: key order.
+const OPENING_ORDER: [u32; 8] = [0, 1, 2, 3, 4, 5, 6, 7];
+
 impl Dash {
+    /// Resets the board outright: every panel on, in key order, nothing
+    /// picked and nothing zoomed. Not the five it opens on — a reset is the
+    /// whole board laid out as the keys list it, and from there any panel is
+    /// one key away from going rather than one key away from being fetched.
+    /// What `0` does: asks before throwing an arrangement away, and does not
+    /// bother asking when the board is already every pane in key order —
+    /// there is nothing to lose, so it just lets go of the pick and the zoom.
+    fn ask_reset(&mut self) {
+        let laid_out =
+            self.panels == Panels::all() && self.joined.windows(2).all(|pair| pair[0] < pair[1]);
+        if laid_out {
+            self.reset_board();
+        } else {
+            self.resetting = true;
+        }
+    }
+
+    fn reset_board(&mut self) {
+        self.panels = Panels::all();
+        self.joined = OPENING_ORDER;
+        self.next_join = OPENING_ORDER.len() as u32;
+        self.focus = None;
+        self.zoomed = false;
+    }
+
     /// Flips a panel, and when it comes on puts it at the back of the board.
     ///
     /// Every toggle goes through here, so the order the tiles are drawn in is
@@ -615,10 +683,11 @@ impl Dash {
     ) -> Dash {
         let mut dash = Dash {
             // Nothing has been pressed yet, so the board opens in key order.
-            joined: [0, 1, 2, 3, 4, 5, 6, 7],
-            next_join: 8,
+            joined: OPENING_ORDER,
+            next_join: OPENING_ORDER.len() as u32,
             focus: None,
             zoomed: false,
+            resetting: false,
             placed: RefCell::new(Vec::new()),
             stacked: Cell::new(false),
             title,
@@ -638,25 +707,7 @@ impl Dash {
             error: None,
             in_flight: 0,
             live_fetching: false,
-            // The board opens on the first five keys and holds 6, 7 and 8 in
-            // reserve. All eight used to be on, which meant the dashboard
-            // opened at its most crowded and every key a newcomer pressed
-            // took something away — the wrong direction for a first move.
-            // Five is the board at a glance: the chart, the realtime panel,
-            // the map, the pages and the figures, three across over two,
-            // every tile at a size worth reading. What is left is a panel
-            // you go and get, and the number that fetches it is the number
-            // in its title.
-            panels: Panels {
-                events: true,
-                live: true,
-                map: true,
-                chunks: true,
-                vitals: true,
-                realms_ranked: false,
-                trend: false,
-                portals: false,
-            },
+            panels: Panels::opening(),
             help: false,
             forget: None,
             wired: None,
@@ -1700,6 +1751,13 @@ async fn event_loop(
                             );
                         }
                         _ if dash.forget.is_some() => dash.forget = None,
+                        // The reset asks the same way: `y` throws the
+                        // arrangement away, anything else keeps it.
+                        KeyCode::Char('y') | KeyCode::Char('Y') if dash.resetting => {
+                            dash.resetting = false;
+                            dash.reset_board();
+                        }
+                        _ if dash.resetting => dash.resetting = false,
                         // Same rule for the connector: it is up to be read
                         // and copied from, so the next key puts it away
                         // rather than toggling a panel behind it.
@@ -1751,6 +1809,9 @@ async fn event_loop(
                         // Ctrl+digit and the bare digit do the same thing: the
                         // titles advertise Ctrl, but not every terminal can
                         // send it.
+                        // Zero, beside the keys that took the board apart —
+                        // Ctrl+0 or the bare digit, like the panel keys.
+                        KeyCode::Char('0') => dash.ask_reset(),
                         KeyCode::Char('1') | KeyCode::Char('e') => dash.toggle(Tile::Events),
                         KeyCode::Char('2') | KeyCode::Char('l') => dash.toggle(Tile::Live),
                         KeyCode::Char('3') | KeyCode::Char('m') => dash.toggle(Tile::Map),
@@ -2529,6 +2590,8 @@ fn draw(frame: &mut Frame, dash: &Dash) {
     // on an answer and the help is not.
     if let Some(target) = &dash.forget {
         forget_overlay(frame, area, target);
+    } else if dash.resetting {
+        reset_overlay(frame, area);
     } else if let Some(wired) = &dash.wired {
         wired_overlay(frame, area, wired);
     } else if dash.help {
@@ -3234,6 +3297,7 @@ fn help_overlay(frame: &mut Frame, area: Rect, demo: bool) {
             "^8 / 8",
             theme::say("portals — who sent them", "traffic sources"),
         ),
+        ("^0 / 0", "reset: all panes, in order"),
         ("arrows", "pick a pane"),
         ("shift+arr", "move the pane"),
         ("z", "zoom the pane"),
@@ -3276,6 +3340,50 @@ fn help_overlay(frame: &mut Frame, area: Rect, demo: bool) {
     frame.render_widget(Clear, rect);
     frame.render_widget(
         Paragraph::new(lines).block(framed("KEYS", "", ore::gold())),
+        rect,
+    );
+}
+
+/// `0`'s question. Says what the board becomes, not just that it changes, so
+/// the answer is a choice between two layouts somebody can picture.
+fn reset_overlay(frame: &mut Frame, area: Rect) {
+    let key = Style::default()
+        .fg(ore::gold())
+        .add_modifier(Modifier::BOLD);
+    let lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "  Revert pane layout to default?",
+            Style::default()
+                .fg(theme::fg())
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            "  all eight panes, in key order",
+            Style::default().fg(theme::sage()),
+        )),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  y", key),
+            Span::styled(" reset    ", Style::default().fg(theme::fg())),
+            Span::styled("esc", key),
+            Span::styled(" keep it", Style::default().fg(theme::fg())),
+        ]),
+        Line::from(""),
+    ];
+
+    let width = 38.min(area.width.saturating_sub(4));
+    let height = (lines.len() as u16 + 2).min(area.height.saturating_sub(2));
+    let rect = Rect {
+        x: area.x + (area.width.saturating_sub(width)) / 2,
+        y: area.y + (area.height.saturating_sub(height)) / 2,
+        width,
+        height,
+    };
+
+    frame.render_widget(Clear, rect);
+    frame.render_widget(
+        Paragraph::new(lines).block(framed("RESET LAYOUT", "", ore::gold())),
         rect,
     );
 }
@@ -7588,6 +7696,97 @@ mod arrange_tests {
             dash.zoomed = true;
             let rows = arranged(&dash);
             assert!(rows[0].starts_with('┏'), "{tile:?} did not fill the body");
+        }
+    }
+
+    #[test]
+    fn zero_resets_to_every_pane_in_key_order() {
+        // Shuffle the board, swap panels about, and zoom what is left.
+        let mut dash = capture_dash();
+        arranged(&dash);
+        dash.focus = Some(Tile::Map);
+        dash.move_focus(Toward::Down);
+        dash.toggle(Tile::Events);
+        dash.toggle(Tile::Events);
+        dash.toggle(Tile::Chunks);
+        dash.toggle_zoom();
+
+        dash.reset_board();
+        assert_eq!((dash.focus, dash.zoomed), (None, false));
+        arranged(&dash);
+        let board: Vec<Tile> = dash.placed.borrow().iter().map(|(tile, _)| *tile).collect();
+        use Tile::*;
+        assert_eq!(
+            board,
+            [
+                Events,
+                Live,
+                Map,
+                Chunks,
+                Vitals,
+                RealmsRanked,
+                Trend,
+                Portals
+            ],
+            "not every pane, or not in key order"
+        );
+    }
+
+    #[test]
+    fn zero_asks_before_throwing_an_arrangement_away() {
+        let mut dash = capture_dash();
+        arranged(&dash);
+        dash.focus = Some(Tile::Map);
+        dash.move_focus(Toward::Down);
+        let joined = dash.joined;
+
+        dash.ask_reset();
+        assert!(dash.resetting, "a stray 0 threw the board away unasked");
+        assert_eq!(dash.joined, joined, "the board moved before the answer");
+    }
+
+    #[test]
+    fn zero_does_not_ask_when_there_is_nothing_to_lose() {
+        // Every pane, in key order: the reset would change nothing, so it
+        // just lets go of the pick and the zoom.
+        let mut dash = capture_dash();
+        dash.reset_board();
+        arranged(&dash);
+        dash.toggle_zoom();
+
+        dash.ask_reset();
+        assert!(!dash.resetting);
+        assert_eq!((dash.focus, dash.zoomed), (None, false));
+    }
+
+    #[test]
+    fn the_reset_question_says_what_the_board_becomes_and_fits() {
+        use ratatui::{backend::TestBackend, Terminal};
+
+        for (w, h) in [(24, 8), (40, 12), (120, 40)] {
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            terminal
+                .draw(|frame| {
+                    let area = frame.area();
+                    reset_overlay(frame, area);
+                })
+                .unwrap();
+            let buffer = terminal.backend().buffer().clone();
+            let drawn: Vec<String> = (0..h)
+                .map(|y| (0..w).map(|x| buffer[(x, y)].symbol()).collect::<String>())
+                .collect();
+            for line in &drawn {
+                assert_eq!(line.chars().count(), w as usize, "{w}x{h} drew ragged");
+            }
+            if w >= 40 {
+                let drawn = drawn.join("\n");
+                assert!(drawn.contains("Revert pane layout to default?"), "{drawn}");
+                assert!(drawn.contains("all eight panes"), "{drawn}");
+                assert!(
+                    drawn.contains("reset") && drawn.contains("keep it"),
+                    "{drawn}"
+                );
+            }
         }
     }
 }

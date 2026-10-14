@@ -3993,9 +3993,12 @@ fn visible_days(width: usize, total: usize) -> usize {
 /// many columns as the width allows, and the eighth-height blocks give each
 /// bar eight times the vertical resolution of the row it ends in.
 ///
-/// Where every bar is wide enough for its count, the count sits on top of it,
-/// and the bars are scaled one row short so the tallest has a row to wear its
-/// count in. The labels under the bars are placed from the latest day back
+/// Where every bar is wide enough for its count, the count is cut out of the
+/// bar's top full row — the ground's color on the bar's — so it touches its
+/// bar whatever the bar's height. Above the bar it could only ever sit on a
+/// row boundary, and the bar tops fall between them: over a top cell an eighth
+/// full the count floated most of a row clear. A bar too short to have a full
+/// row wears its count just above it instead. The labels under the bars are placed from the latest day back
 /// at an even stride — on a month of one-column bars that reads as a date
 /// every few days, and the latest is always there.
 fn daily_chart(days: &[(String, f64)], width: usize, rows: usize) -> DailyChart {
@@ -4035,9 +4038,10 @@ fn daily_chart(days: &[(String, f64)], width: usize, rows: usize) -> DailyChart 
     let counts = counts.filter(|_| rows >= 2);
     // Bars are measured from zero: for a count, a truncated axis would turn a
     // quiet week into a dramatic one.
-    let scale = if counts.is_some() { rows - 1 } else { rows } as f64;
+    let scale = rows as f64;
 
-    let mut cells: Vec<Vec<(char, Option<Color>)>> = vec![vec![(' ', None); width]; rows + 1];
+    let blank = Style::default();
+    let mut cells: Vec<Vec<(char, Style)>> = vec![vec![(' ', blank); width]; rows + 1];
     for (i, (_, users)) in days.iter().enumerate() {
         // The latest day is the one people look for, so it is lit.
         let color = if i + 1 == days.len() {
@@ -4061,24 +4065,41 @@ fn daily_chart(days: &[(String, f64)], width: usize, rows: usize) -> DailyChart 
                 glyph::SPARK[((fill * 8.0).ceil() as usize).clamp(1, 8) - 1]
             };
             for cell in line.iter_mut().skip(left(i)).take(bar) {
-                *cell = (glyph, Some(color));
+                *cell = (glyph, Style::default().fg(color));
             }
         }
 
-        // The count sits in the row above the top of its bar.
         if let Some(counts) = &counts {
             let text = &counts[i];
-            let top = rows - (height.ceil() as usize).min(rows);
-            let row = top.saturating_sub(1).min(rows - 1);
-            let count = if i + 1 == days.len() {
-                theme::bright()
+            // Rows drawn as solid, which counts a top cell more than seven
+            // eighths full: it rounds up to a full block on screen.
+            let whole = ((height * 8.0).ceil() as usize / 8).min(rows);
+            let (row, style) = if whole > 0 {
+                // Inside: the bar's top full row, in the panel's ground on
+                // the bar's own color.
+                (
+                    rows - whole,
+                    Style::default()
+                        .fg(theme::bg())
+                        .bg(color)
+                        .add_modifier(Modifier::BOLD),
+                )
             } else {
-                theme::sage()
+                // A sliver of a bar: just above it, where there is room.
+                let above = rows - (height.ceil() as usize).min(rows);
+                (
+                    above.saturating_sub(1).min(rows - 1),
+                    Style::default().fg(if i + 1 == days.len() {
+                        theme::bright()
+                    } else {
+                        theme::sage()
+                    }),
+                )
             };
             let start = left(i) + (bar - text.chars().count()) / 2;
             for (x, ch) in (start..).zip(text.chars()) {
                 if x < width {
-                    cells[row][x] = (ch, Some(count));
+                    cells[row][x] = (ch, style);
                 }
             }
         }
@@ -4114,7 +4135,7 @@ fn daily_chart(days: &[(String, f64)], width: usize, rows: usize) -> DailyChart 
             ore::stone()
         };
         for (x, ch) in (start..).zip(text.chars()) {
-            cells[rows][x] = (ch, Some(color));
+            cells[rows][x] = (ch, Style::default().fg(color));
         }
         // One cell of space before the next label in.
         room = start.saturating_sub(1);
@@ -4125,17 +4146,21 @@ fn daily_chart(days: &[(String, f64)], width: usize, rows: usize) -> DailyChart 
         .map(|row| {
             let mut spans = Vec::new();
             let mut run = String::new();
-            let mut color = None;
+            let mut style = blank;
             for (ch, cell) in row {
-                if cell != color && !run.is_empty() {
-                    spans.push(styled_run(&run, color));
-                    run.clear();
+                if cell != style && !run.is_empty() {
+                    spans.push(Span::styled(std::mem::take(&mut run), style));
                 }
-                color = cell;
+                style = cell;
                 run.push(ch);
             }
+            // Trailing ground is left off, so a line is no wider than what is
+            // drawn on it.
+            if style == blank {
+                run.truncate(run.trim_end().len());
+            }
             if !run.is_empty() {
-                spans.push(styled_run(run.trim_end(), color));
+                spans.push(Span::styled(run, style));
             }
             Line::from(spans)
         })
@@ -8098,5 +8123,66 @@ mod arrange_tests {
             "the bars stop short of the right edge:\n{}",
             rows[34]
         );
+    }
+
+    #[test]
+    fn the_counts_are_cut_out_of_the_bars() {
+        // Each count sits in its bar's top full row, ground on bar color, so
+        // nothing floats between a count and the bar it belongs to.
+        let days: Vec<(String, f64)> = [1402.0, 1288.0, 1531.0, 1495.0, 1760.0, 1834.0, 2055.0]
+            .into_iter()
+            .enumerate()
+            .map(|(i, users)| (format!("202610{:02}", i + 6), users))
+            .collect();
+        let chart = daily_chart(&days, 64, 6);
+        for count in ["1,402", "1,760", "2,055"] {
+            let (row, span) = chart
+                .lines
+                .iter()
+                .enumerate()
+                .find_map(|(row, line)| {
+                    line.spans
+                        .iter()
+                        .find(|span| span.content.contains(count))
+                        .map(|span| (row, span))
+                })
+                .unwrap_or_else(|| panic!("{count} was not drawn"));
+            assert!(span.style.bg.is_some(), "{count} is not inside its bar");
+            // The row under it is bar all the way, or the bar's foot.
+            let under: String = chart.lines[row + 1]
+                .spans
+                .iter()
+                .map(|span| span.content.as_ref())
+                .collect();
+            assert!(
+                row + 1 == 6 || under.contains(glyph::FULL),
+                "{count} is not at the top of a full bar"
+            );
+        }
+        // The tallest bar runs to the top row with its count in it.
+        let top: String = chart.lines[0]
+            .spans
+            .iter()
+            .map(|s| s.content.as_ref())
+            .collect();
+        assert!(top.contains("2,055"), "{top}");
+    }
+
+    #[test]
+    fn a_sliver_of_a_bar_wears_its_count_above_it() {
+        // No full row to cut the count from: it goes over the bar instead,
+        // in plain text.
+        let days = vec![
+            ("20261012".to_string(), 30.0),
+            ("20261013".to_string(), 2000.0),
+        ];
+        let chart = daily_chart(&days, 40, 6);
+        let span = chart
+            .lines
+            .iter()
+            .flat_map(|line| line.spans.iter())
+            .find(|span| span.content.trim() == "30")
+            .expect("the small count was not drawn");
+        assert!(span.style.bg.is_none());
     }
 }

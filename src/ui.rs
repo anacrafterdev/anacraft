@@ -998,6 +998,12 @@ async fn fetch_realms(client: &Ga, property: &str, days: u32) -> Result<Vec<(Str
         .collect())
 }
 
+/// How deep the ranked lists are fetched. More than any of them shows on the
+/// board, which is the point: a list given more room — a tall column, or the
+/// pane zoomed — shows more of the ranking rather than the same eight rows
+/// with ground under them. One request either way.
+const LIST_DEPTH: i32 = 25;
+
 async fn fetch_pages(client: &Ga, property: &str, days: u32) -> Result<Vec<(String, f64)>> {
     let pages = client
         .report(
@@ -1005,7 +1011,7 @@ async fn fetch_pages(client: &Ga, property: &str, days: u32) -> Result<Vec<(Stri
             ReportRequest::new(&["screenPageViews"])
                 .by(&["pagePath"])
                 .range(DateRange::last_days(days))
-                .top("screenPageViews", 8),
+                .top("screenPageViews", LIST_DEPTH),
         )
         .await?;
 
@@ -1020,8 +1026,8 @@ async fn fetch_pages(client: &Ga, property: &str, days: u32) -> Result<Vec<(Stri
 ///
 /// `sessionSourceMedium` rather than `sessionSource`: the same site can be both
 /// a link somebody wrote and an ad somebody bought, and a panel that answers
-/// "who is mentioning us" has to keep those apart. Eight rows, the depth the
-/// panel can draw.
+/// "who is mentioning us" has to keep those apart. As deep as the other lists,
+/// so a tall or zoomed panel has the rest of the ranking to show.
 async fn fetch_portals(client: &Ga, property: &str, days: u32) -> Result<Vec<(String, f64)>> {
     let portals = client
         .report(
@@ -1029,7 +1035,7 @@ async fn fetch_portals(client: &Ga, property: &str, days: u32) -> Result<Vec<(St
             ReportRequest::new(&["sessions"])
                 .by(&["sessionSourceMedium"])
                 .range(DateRange::last_days(days))
-                .top("sessions", 8),
+                .top("sessions", LIST_DEPTH),
         )
         .await?;
 
@@ -1953,6 +1959,14 @@ impl Synthetic {
                 "/docs/api",
                 "/about",
                 "/login",
+                "/blog/realtime-dashboards",
+                "/docs/mcp",
+                "/blog/ga4-in-the-terminal",
+                "/docs/themes",
+                "/signup",
+                "/blog/why-a-tui",
+                "/docs/config",
+                "/status",
             ]
             .iter()
             .enumerate()
@@ -1996,6 +2010,12 @@ impl Synthetic {
                 ("bing / organic", 0.05),
                 ("t.co / referral", 0.04),
                 ("lobste.rs / referral", 0.03),
+                ("duckduckgo / organic", 0.02),
+                ("newsletter / email", 0.02),
+                ("linkedin.com / referral", 0.01),
+                ("dev.to / referral", 0.01),
+                ("mastodon.social / referral", 0.01),
+                ("google / cpc", 0.01),
             ]
             .iter()
             .map(|(name, share)| {
@@ -4980,7 +5000,10 @@ fn realms_ranked_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'stati
         )));
     }
 
-    for (i, (country, count)) in sorted.iter().take(whole_rows(height).min(8)).enumerate() {
+    // As many as the box has rows for. It stopped at eight, which in a tall
+    // or zoomed box drew the top of the ranking over empty ground while the
+    // rest of the forty fetched for the map went unread.
+    for (i, (country, count)) in sorted.iter().take(whole_rows(height)).enumerate() {
         let color = theme::ramp(i);
         let label: String = country.chars().take(label_cells).collect();
         let (ore_badge, ore_color) = tier(i);
@@ -5043,7 +5066,7 @@ fn portals_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
         )));
     }
 
-    for (i, (portal, count)) in sorted.iter().take(whole_rows(height).min(8)).enumerate() {
+    for (i, (portal, count)) in sorted.iter().take(whole_rows(height)).enumerate() {
         let color = theme::ramp(i);
         let (ore_badge, ore_color) = tier(i);
         let frac = if peak > 0.0 { *count / peak } else { 0.0 };
@@ -8186,5 +8209,30 @@ mod arrange_tests {
             .find(|span| span.content.trim() == "30")
             .expect("the small count was not drawn");
         assert!(span.style.bg.is_none());
+    }
+
+    #[test]
+    fn a_zoomed_list_shows_more_of_the_ranking() {
+        // Zoomed, a list has rows for far more than the eight it shows on the
+        // board, and spends them on the rest of the ranking.
+        let mut dash = capture_dash();
+        dash.reset_board();
+        arranged(&dash);
+        for (tile, deeper) in [
+            (Tile::Chunks, "/docs/config"),
+            (Tile::RealmsRanked, "Mexico"),
+            (Tile::Portals, "mastodon.social"),
+        ] {
+            assert!(
+                !arranged(&dash).concat().contains(deeper),
+                "{tile:?} showed {deeper} before it was zoomed"
+            );
+            dash.focus = Some(tile);
+            dash.zoomed = true;
+            let zoomed = arranged(&dash).join("\n");
+            assert!(zoomed.contains(deeper), "{tile:?} zoomed:\n{zoomed}");
+            dash.zoomed = false;
+            dash.focus = None;
+        }
     }
 }

@@ -2732,7 +2732,7 @@ fn render_tile(frame: &mut Frame, dash: &Dash, tile: Tile, cell: Rect) {
         Tile::RealmsRanked => {
             frame.render_widget(realms_ranked_panel(dash, cell.width, cell.height), cell)
         }
-        Tile::Trend => frame.render_widget(trend_panel(dash, cell.width), cell),
+        Tile::Trend => frame.render_widget(trend_panel(dash, cell.width, cell.height), cell),
         Tile::Portals => frame.render_widget(portals_panel(dash, cell.width, cell.height), cell),
     }
 }
@@ -2826,7 +2826,9 @@ impl Tile {
         match self {
             Tile::Map => MAP_MAX_ROWS,
             Tile::Vitals => VITALS_ROWS,
-            Tile::Events | Tile::Chunks | Tile::RealmsRanked | Tile::Portals => u16::MAX,
+            Tile::Events | Tile::Chunks | Tile::RealmsRanked | Tile::Portals | Tile::Trend => {
+                u16::MAX
+            }
             _ => self.min_rows(),
         }
     }
@@ -3859,10 +3861,19 @@ fn moved_span(moved: Option<i64>) -> Span<'static> {
 
 /// Daily villagers, as bars rather than a seven-character sparkline: the panel
 /// is wide, so the days may as well be readable.
-fn trend_panel(dash: &Dash, width: u16) -> Paragraph<'static> {
+///
+/// The bars take every row the box has under its caption. They were three
+/// rows whatever the box, which left a tall cell — and a zoomed one most of
+/// all — as a strip of chart over a field of nothing; every row they gain is
+/// eight more steps of height to tell one day from the next.
+fn trend_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
     let inner = width.saturating_sub(2) as usize;
+    let caption = trend_caption(&dash.daily, inner);
+    let rows = height
+        .saturating_sub(2 + u16::from(caption.is_some()))
+        .max(TREND_ROWS - 3) as usize;
     let mut lines = if dash.daily.len() > 1 {
-        daily_chart(&dash.daily, inner, 3)
+        daily_chart(&dash.daily, inner, rows)
     } else {
         vec![Line::from(Span::styled(
             "  not enough days yet",
@@ -3870,7 +3881,7 @@ fn trend_panel(dash: &Dash, width: u16) -> Paragraph<'static> {
         ))]
     };
 
-    if let Some(caption) = trend_caption(&dash.daily, inner) {
+    if let Some(caption) = caption {
         lines.push(Line::from(Span::styled(
             caption,
             Style::default().fg(theme::fade(theme::sage(), 0.2)),
@@ -3926,7 +3937,10 @@ fn daily_chart(values: &[f64], width: usize, rows: usize) -> Vec<Line<'static>> 
     // or the last bar runs under the border.
     let available = width.saturating_sub(2);
     let gap = usize::from(available >= days * 3);
-    let bar = (available.saturating_sub(gap * (days - 1)) / days).clamp(1, 8);
+    // As wide as the panel lets them be. They stopped at eight columns, which
+    // on a wide or zoomed panel drew a week into the left half and left the
+    // right half bare.
+    let bar = (available.saturating_sub(gap * (days - 1)) / days).max(1);
 
     (0..rows)
         .map(|row| {
@@ -7788,5 +7802,39 @@ mod arrange_tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn daily_users_fills_its_pane() {
+        // Zoomed to the whole body, the bars reach from under the title to
+        // the caption and across the width, rather than three rows of chart
+        // in the top-left corner of an empty box.
+        let mut dash = capture_dash();
+        dash.focus = Some(Tile::Trend);
+        dash.zoomed = true;
+        let rows = arranged(&dash);
+
+        let barred = |row: &String| row.contains(glyph::FULL);
+        // The tallest day reaches the top row, under the title.
+        assert!(
+            barred(&rows[1]),
+            "the bars stop short of the top:\n{}",
+            rows.join("\n")
+        );
+        assert!(
+            barred(&rows[35]),
+            "the bars stop short of the caption:\n{}",
+            rows.join("\n")
+        );
+        assert!(
+            rows[36].contains("days"),
+            "the caption is not on the last row"
+        );
+        let last_bar = rows[35].rfind(glyph::FULL).unwrap();
+        assert!(
+            rows[35][..last_bar].chars().count() > 100,
+            "the bars stop short of the right edge:\n{}",
+            rows[35]
+        );
     }
 }

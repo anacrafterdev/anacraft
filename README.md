@@ -414,7 +414,7 @@ reflows to fill the terminal.
 | `4` | **TOP PAGES** | Most-visited pages with view bars and rank movement |
 | `5` | **VITALS** | Users, sessions, views, conversions, bounce rate, avg. session |
 | `6` | **TOP COUNTRIES** | Ranked countries with tier markers |
-| `7` | **DAILY USERS** | User trend across the period |
+| `7` | **DAILY USERS** | Users per day, each bar dated and counted, with the period's users against the one before |
 
 ### Controls
 

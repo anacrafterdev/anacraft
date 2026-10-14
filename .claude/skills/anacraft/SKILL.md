@@ -243,7 +243,7 @@ rest rather than leaving a hole.
 | `4` `p` | TOP PAGES | Pages with view bars and rank movement |
 | `5` `v` | VITALS | Users, sessions, views, key events, bounce, avg. session |
 | `6` `g` | TOP COUNTRIES | Ranked countries |
-| `7` `d` | DAILY USERS | User trend across the period |
+| `7` `d` | DAILY USERS | Users per day, each bar dated and counted; the caption has the period's users and change |
 
 The arrow keys pick out a pane · `shift`+arrows carry it across the board,
 trading places with the pane that way · `z` zooms it to fill the dashboard and

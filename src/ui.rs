@@ -2768,7 +2768,7 @@ fn highlight(buffer: &mut Buffer, cell: Rect) {
 fn render_tile(frame: &mut Frame, dash: &Dash, tile: Tile, cell: Rect) {
     match tile {
         Tile::Events => frame.render_widget(events_panel(dash, cell.width), cell),
-        Tile::Live => frame.render_widget(live_panel(dash, cell.width), cell),
+        Tile::Live => frame.render_widget(live_panel(dash, cell.width, cell.height), cell),
         Tile::Map => frame.render_widget(map_panel(dash, cell.width, cell.height), cell),
         Tile::Chunks => frame.render_widget(pages_panel(dash, cell.width, cell.height), cell),
         Tile::Vitals => frame.render_widget(metrics_panel(dash, cell.width, cell.height), cell),
@@ -2864,15 +2864,18 @@ impl Tile {
     }
 
     /// The most rows a tile can put to use. `u16::MAX` marks a panel that
-    /// grows — the lists show longer lists, the chart just gets taller.
+    /// grows — the lists show longer lists, the charts and the realtime
+    /// graph just get taller.
     fn max_rows(&self) -> u16 {
         match self {
             Tile::Map => MAP_MAX_ROWS,
             Tile::Vitals => VITALS_ROWS,
-            Tile::Events | Tile::Chunks | Tile::RealmsRanked | Tile::Portals | Tile::Trend => {
-                u16::MAX
-            }
-            _ => self.min_rows(),
+            Tile::Events
+            | Tile::Live
+            | Tile::Chunks
+            | Tile::RealmsRanked
+            | Tile::Portals
+            | Tile::Trend => u16::MAX,
         }
     }
 }
@@ -4754,8 +4757,16 @@ fn styled_run(run: &str, color: Option<Color>) -> Span<'static> {
     }
 }
 
-fn live_panel(dash: &Dash, width: u16) -> Paragraph<'static> {
+/// The realtime panel. Given more rows than `LIVE_ROWS`, a third of the extra
+/// goes to the feed — which keeps ninety seconds of changes and showed six of
+/// them — and the rest to the graph, which was three rows whatever the box. A
+/// fixed share rather than whatever the feed holds, so the graph does not
+/// jump each time an entry arrives or ages out.
+fn live_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
     let phase = dash.phase();
+    let extra = height.saturating_sub(LIVE_ROWS) as usize;
+    let feed_field = FEED_ROWS + extra / 3;
+    let graph_rows = LIVE_GRAPH_ROWS + extra - extra / 3;
     let breath = (phase * 2.2).sin() * 0.5 + 0.5;
 
     let mut lines = vec![
@@ -4789,13 +4800,14 @@ fn live_panel(dash: &Dash, width: u16) -> Paragraph<'static> {
 
     // The graph goes in the three rows `LIVE_ROWS` already budgeted and the
     // content never used, so nothing else on the column gives up height for
-    // it. It also does the separating that the blank line used to.
-    lines.extend(live_graph(&dash.history, width, LIVE_GRAPH_ROWS));
+    // it — and in whatever the box has past that. It also does the
+    // separating that the blank line used to.
+    lines.extend(live_graph(&dash.history, width, graph_rows));
     lines.push(Line::from(""));
 
     // Event feed — recent arrivals and departures.
     //
-    // Always FEED_ROWS tall. Anything not lit is drawn as unlit cells, so the
+    // Always `feed_field` tall. Anything not lit is drawn as unlit cells, so the
     // field is the same size whether six things just happened or nothing has.
     let mut feed_rows = 0usize;
     if dash.feed.is_empty() {
@@ -4814,7 +4826,7 @@ fn live_panel(dash: &Dash, width: u16) -> Paragraph<'static> {
         // on a terminal with no colour at all. The panel's own hue comes from
         // the palette, so each theme lights its screen its own way.
         let lit = theme::accent();
-        for entry in dash.feed.iter().take(6) {
+        for entry in dash.feed.iter().take(feed_field) {
             let age = entry.at.elapsed().as_secs_f64() / FEED_TTL.as_secs_f64();
             let rising = entry.delta > 0.0;
             let time_ago = entry.at.elapsed().as_secs();
@@ -4876,7 +4888,7 @@ fn live_panel(dash: &Dash, width: u16) -> Paragraph<'static> {
     let dark: String = std::iter::repeat(glyph::UNLIT)
         .take((width as usize).saturating_sub(5))
         .collect();
-    for _ in feed_rows..FEED_ROWS {
+    for _ in feed_rows..feed_field {
         lines.push(Line::from(Span::styled(
             format!("  {dark}"),
             Style::default().fg(theme::fade(theme::accent(), 0.93)),
@@ -8359,5 +8371,39 @@ mod arrange_tests {
                     .collect::<String>()
             })
             .collect()
+    }
+
+    #[test]
+    fn right_now_spends_a_tall_box_on_its_graph_and_its_feed() {
+        let mut dash = capture_dash();
+        let now = Instant::now();
+        dash.feed = (0..12)
+            .map(|i| FeedEvent {
+                delta: if i % 2 == 0 { 3.0 } else { -2.0 },
+                at: now,
+            })
+            .collect();
+        let graph = |rows: &[String]| {
+            rows.iter()
+                .filter(|row| row.contains(glyph::FULL) && !row.contains("online"))
+                .count()
+        };
+        let feed = |rows: &[String]| {
+            rows.iter()
+                .filter(|row| row.contains("spawned in") || row.contains("wandered off"))
+                .count()
+        };
+
+        let small = rendered_tile(&dash, Tile::Live, 60, LIVE_ROWS);
+        assert_eq!((graph(&small), feed(&small)), (LIVE_GRAPH_ROWS, FEED_ROWS));
+
+        let tall = rendered_tile(&dash, Tile::Live, 60, LIVE_ROWS + 18);
+        assert_eq!(
+            feed(&tall),
+            12,
+            "the feed held back entries it had room for"
+        );
+        assert_eq!(graph(&tall), LIVE_GRAPH_ROWS + 12, "the graph did not grow");
+        assert!(tall.last().unwrap().starts_with('└'));
     }
 }

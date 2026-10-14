@@ -3808,7 +3808,9 @@ fn metrics_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
     // Shed whole, never cut: `averageSessionDur…` is not a field anybody can
     // type into GA4.
     let subtitle = inner > NAME_COLUMN + sub_column + VALUE_COLUMN + DELTA_COLUMN;
-    let bar_cells = inner.saturating_sub(2).min(30);
+    // As wide as the box. It stopped at thirty cells, which in a wide or
+    // zoomed box left the bars in its left third.
+    let bar_cells = inner.saturating_sub(2);
     let mut lines: Vec<Line> = Vec::new();
 
     for (i, metric) in OVERVIEW.iter().enumerate() {
@@ -4895,19 +4897,82 @@ fn whole_rows(height: u16) -> usize {
     (height.saturating_sub(2) / 2) as usize
 }
 
+/// From this many cells inside its border, a ranked list puts each entry on
+/// one line — name, bar, count — rather than the name over the bar. About the
+/// width of a lone tile in a full-width row, and of every zoomed list.
+const WIDE_LIST: usize = 90;
+
+/// How a ranked list lays its entries out in the box it was given.
+///
+/// Narrow, each entry is two lines: the name over its bar. Wide, it is one —
+/// the name in a column, the bar and the figures beside it — which fits twice
+/// the entries in the same height. Either way the bar takes whatever width the
+/// name and the figures leave: it stopped at twenty cells, which in a wide box
+/// drew every bar in the left quarter and nothing in the rest.
+struct ListShape {
+    wide: bool,
+    /// Cells for the entry's name, not counting its badge or the moved marker.
+    label: usize,
+    bar: usize,
+    /// Cells before the bar on its line.
+    indent: usize,
+    /// Entries the box has room for.
+    rows: usize,
+}
+
+impl ListShape {
+    /// `figures` is the width of what follows the bar: the count, and the
+    /// share where the list has one.
+    fn new(width: u16, height: u16, figures: usize) -> ListShape {
+        let inner = width.saturating_sub(2) as usize;
+        if inner >= WIDE_LIST {
+            // Two fifths of the line for the name: paths and referrers run
+            // long, and the bar reads as well at sixty cells as at eighty.
+            let label = (inner * 2 / 5).min(56);
+            // The last cell keeps the figures off the right border.
+            let used = 2 + label + MOVED_COLUMN + 1 + figures + 1;
+            ListShape {
+                wide: true,
+                label,
+                bar: inner.saturating_sub(used).max(4),
+                indent: 1,
+                rows: height.saturating_sub(2) as usize,
+            }
+        } else {
+            ListShape {
+                wide: false,
+                label: inner.saturating_sub(4 + MOVED_COLUMN),
+                bar: inner.saturating_sub(3 + figures + 1).max(4),
+                indent: 3,
+                rows: whole_rows(height),
+            }
+        }
+    }
+
+    /// Lays one entry out: on the heading's line when wide, under it when not.
+    fn entry(
+        &self,
+        mut heading: Vec<Span<'static>>,
+        bar: Vec<Span<'static>>,
+    ) -> Vec<Line<'static>> {
+        if self.wide {
+            heading.extend(bar);
+            vec![Line::from(heading)]
+        } else {
+            vec![Line::from(heading), Line::from(bar)]
+        }
+    }
+}
+
 fn pages_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
     let phase = dash.phase();
     let mut lines: Vec<Line> = Vec::new();
 
-    // Row shape is `   <bar>  <views> <share>`, so the bar gets whatever the
-    // indent, the gaps and the two number columns leave — otherwise they run
-    // under the border on an 80-column terminal.
-    let inner = width.saturating_sub(2) as usize;
-    let cells = inner
-        .saturating_sub(3 + 2 + VIEWS_COLUMN + SHARE_COLUMN)
-        .clamp(4, 20);
+    // The bar gets whatever the name, the gaps and the two number columns
+    // leave — otherwise they run under the border on an 80-column terminal.
+    let shape = ListShape::new(width, height, 2 + VIEWS_COLUMN + SHARE_COLUMN);
     // The label shares its line with the movement marker.
-    let label_cells = inner.saturating_sub(4 + MOVED_COLUMN);
+    let label_cells = shape.label;
 
     // Share is of *all* page views for the period, not of the eight rows shown,
     // which is why it comes from the headline metric rather than these rows.
@@ -4925,7 +4990,7 @@ fn pages_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
         )));
     }
 
-    for (i, row) in dash.pages.iter().take(whole_rows(height)).enumerate() {
+    for (i, row) in dash.pages.iter().take(shape.rows).enumerate() {
         let color = theme::ramp(i);
         let label: String = row.path.chars().take(label_cells).collect();
         let (ore, ore_color) = tier(i);
@@ -4938,16 +5003,15 @@ fn pages_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
             Span::styled(format!("{label:<label_cells$}"), Style::default().fg(color)),
         ];
         heading.push(moved_span(row.moved));
-        lines.push(Line::from(heading));
 
         let mut spans = bar_spans(
             row.frac.shown,
-            cells,
+            shape.bar,
             glyph::FULL,
             color,
             phase,
             row.frac.moving(),
-            3,
+            shape.indent,
         );
         spans.push(Span::styled(
             format!(
@@ -4971,7 +5035,7 @@ fn pages_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
             },
             Style::default().fg(ore::stone()),
         ));
-        lines.push(Line::from(spans));
+        lines.extend(shape.entry(heading, spans));
     }
 
     Paragraph::new(lines).block(framed("TOP PAGES", "4", ore::copper()))
@@ -4979,9 +5043,8 @@ fn pages_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
 
 fn realms_ranked_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
     let phase = dash.phase();
-    let inner = width.saturating_sub(2) as usize;
-    let cells = inner.saturating_sub(3 + 2 + VIEWS_COLUMN).clamp(4, 20);
-    let label_cells = inner.saturating_sub(4 + MOVED_COLUMN);
+    let shape = ListShape::new(width, height, 2 + VIEWS_COLUMN);
+    let label_cells = shape.label;
 
     let peak = dash.realms.iter().map(|(_, v)| *v).fold(0.0_f64, f64::max);
 
@@ -5003,29 +5066,37 @@ fn realms_ranked_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'stati
     // As many as the box has rows for. It stopped at eight, which in a tall
     // or zoomed box drew the top of the ranking over empty ground while the
     // rest of the forty fetched for the map went unread.
-    for (i, (country, count)) in sorted.iter().take(whole_rows(height)).enumerate() {
+    for (i, (country, count)) in sorted.iter().take(shape.rows).enumerate() {
         let color = theme::ramp(i);
         let label: String = country.chars().take(label_cells).collect();
         let (ore_badge, ore_color) = tier(i);
         let frac = if peak > 0.0 { *count / peak } else { 0.0 };
 
-        lines.push(Line::from(vec![
+        let heading = vec![
             Span::styled(
                 format!("{ore_badge} "),
                 Style::default().fg(ore_color).add_modifier(Modifier::BOLD),
             ),
             Span::styled(format!("{label:<label_cells$}"), Style::default().fg(color)),
             Span::raw(" ".repeat(MOVED_COLUMN)),
-        ]));
+        ];
 
-        let mut spans = bar_spans(frac, cells, glyph::FULL, color, phase, false, 3);
+        let mut spans = bar_spans(
+            frac,
+            shape.bar,
+            glyph::FULL,
+            color,
+            phase,
+            false,
+            shape.indent,
+        );
         spans.push(Span::styled(
             format!("  {:>width$}", commas(*count), width = VIEWS_COLUMN),
             Style::default()
                 .fg(theme::fg())
                 .add_modifier(Modifier::BOLD),
         ));
-        lines.push(Line::from(spans));
+        lines.extend(shape.entry(heading, spans));
     }
 
     Paragraph::new(lines).block(framed("TOP COUNTRIES", "6", ore::lapis()))
@@ -5045,9 +5116,8 @@ fn realms_ranked_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'stati
 /// it up as one would be the panel telling a small lie in its own vocabulary.
 fn portals_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
     let phase = dash.phase();
-    let inner = width.saturating_sub(2) as usize;
-    let cells = inner.saturating_sub(3 + 2 + VIEWS_COLUMN).clamp(4, 20);
-    let label_cells = inner.saturating_sub(4 + MOVED_COLUMN);
+    let shape = ListShape::new(width, height, 2 + VIEWS_COLUMN);
+    let label_cells = shape.label;
 
     let peak = dash.portals.iter().map(|(_, v)| *v).fold(0.0_f64, f64::max);
 
@@ -5066,7 +5136,7 @@ fn portals_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
         )));
     }
 
-    for (i, (portal, count)) in sorted.iter().take(whole_rows(height)).enumerate() {
+    for (i, (portal, count)) in sorted.iter().take(shape.rows).enumerate() {
         let color = theme::ramp(i);
         let (ore_badge, ore_color) = tier(i);
         let frac = if peak > 0.0 { *count / peak } else { 0.0 };
@@ -5092,7 +5162,7 @@ fn portals_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
             _ => String::new(),
         };
 
-        lines.push(Line::from(vec![
+        let heading = vec![
             Span::styled(
                 format!("{ore_badge} "),
                 Style::default().fg(ore_color).add_modifier(Modifier::BOLD),
@@ -5103,16 +5173,24 @@ fn portals_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
                 Style::default().fg(ore::stone()),
             ),
             Span::raw(" ".repeat(MOVED_COLUMN)),
-        ]));
+        ];
 
-        let mut spans = bar_spans(frac, cells, glyph::FULL, color, phase, false, 3);
+        let mut spans = bar_spans(
+            frac,
+            shape.bar,
+            glyph::FULL,
+            color,
+            phase,
+            false,
+            shape.indent,
+        );
         spans.push(Span::styled(
             format!("  {:>width$}", commas(*count), width = VIEWS_COLUMN),
             Style::default()
                 .fg(theme::fg())
                 .add_modifier(Modifier::BOLD),
         ));
-        lines.push(Line::from(spans));
+        lines.extend(shape.entry(heading, spans));
     }
 
     Paragraph::new(lines).block(framed(
@@ -8234,5 +8312,52 @@ mod arrange_tests {
             dash.zoomed = false;
             dash.focus = None;
         }
+    }
+
+    #[test]
+    fn a_wide_list_puts_each_entry_on_one_line() {
+        // Name, bar and count on one line, so the box holds twice the
+        // entries — and the bar runs to the figures rather than stopping in
+        // the left quarter.
+        let dash = capture_dash();
+        let rows = rendered_tile(&dash, Tile::Chunks, 132, 38);
+        let top = rows.iter().find(|row| row.contains("/pricing")).unwrap();
+        assert!(top.contains(glyph::FULL) && top.contains('%'), "{top}");
+        assert!(
+            top.ends_with("% │"),
+            "the figures do not end one cell in: {top}"
+        );
+
+        // Narrow, the name keeps its own line, and the figures still stop a
+        // cell short of the border.
+        let rows = rendered_tile(&dash, Tile::Chunks, 44, 12);
+        let name = rows
+            .iter()
+            .position(|row| row.contains("/pricing"))
+            .unwrap();
+        assert!(!rows[name].contains(glyph::FULL));
+        assert!(rows[name + 1].contains(glyph::FULL));
+        assert!(
+            rows[name + 1].chars().rev().nth(1) == Some(' '),
+            "{}",
+            rows[name + 1]
+        );
+    }
+
+    fn rendered_tile(dash: &Dash, tile: Tile, width: u16, height: u16) -> Vec<String> {
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal
+            .draw(|frame| render_tile(frame, dash, tile, Rect::new(0, 0, width, height)))
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        (0..height)
+            .map(|y| {
+                (0..width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect()
     }
 }

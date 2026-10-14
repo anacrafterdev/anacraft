@@ -1896,6 +1896,13 @@ async fn event_loop(
 
 // -------------------------------------------------------------- synthetic ---
 
+/// The last day of the demo's week. A fixed date, not today's: the site's
+/// captures embed the day labels, and a moving window would rewrite them on
+/// every regeneration.
+fn demo_anchor() -> chrono::NaiveDate {
+    chrono::NaiveDate::from_ymd_opt(2026, 8, 19).unwrap()
+}
+
 /// A small site having a good week, drifting on every poll so the demo shows
 /// motion rather than a frozen frame.
 struct Synthetic {
@@ -1910,18 +1917,16 @@ impl Synthetic {
         Synthetic {
             current: vec![12_481.0, 18_203.0, 41_776.0, 312.0, 0.412, 214.0],
             previous: vec![11_450.0, 17_004.0, 39_210.0, 258.0, 0.478, 191.0],
-            // The week that ended yesterday, as a real report's would.
-            daily: {
-                let today = chrono::Local::now().date_naive();
-                [1402.0, 1288.0, 1531.0, 1495.0, 1760.0, 1834.0, 1971.0]
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, users)| {
-                        let date = today - chrono::Days::new(7 - i as u64);
-                        (date.format("%Y%m%d").to_string(), users)
-                    })
-                    .collect()
-            },
+            // The same week the events chart draws, so the two panels' days
+            // agree — and fixed for the same reason it is.
+            daily: [1402.0, 1288.0, 1531.0, 1495.0, 1760.0, 1834.0, 1971.0]
+                .into_iter()
+                .enumerate()
+                .map(|(i, users)| {
+                    let date = demo_anchor() - chrono::Duration::days(6 - i as i64);
+                    (date.format("%Y%m%d").to_string(), users)
+                })
+                .collect(),
             live: 128.0,
         }
     }
@@ -2003,10 +2008,7 @@ impl Synthetic {
             })
             .collect(),
             events: {
-                // A fixed anchor date, not today's: the site's captures embed
-                // these day labels, and a moving window would rewrite them on
-                // every regeneration.
-                let anchor = chrono::NaiveDate::from_ymd_opt(2026, 8, 19).unwrap();
+                let anchor = demo_anchor();
                 // A week that sags at the weekend and climbs into Monday. Shaped
                 // rather than random, so the two periods cross somewhere and the
                 // comparison has something to show.

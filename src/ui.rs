@@ -59,10 +59,7 @@ const FEED_TTL: Duration = Duration::from_secs(90);
 /// Width is one readable tile and the border around it: the grid drops to a
 /// single stacked column rather than squeezing tiles under `MIN_TILE_COLS`,
 /// and the header gives up its day span and its badge to match, so a phone-
-/// sized terminal gets the dashboard instead of a notice. It used to be 80 —
-/// the width the vitals rows needed before they learned to size their bars to
-/// the panel and drop the subtitle — which is why the site's own narrow
-/// capture, taken at 74 columns for phones, was an error card.
+/// sized terminal gets the dashboard instead of a notice.
 ///
 /// Height is what the frame itself costs — a 3-row header, the supporter box,
 /// the footer, the gutters between them, and the 10 rows the body is never
@@ -340,13 +337,7 @@ struct Panels {
 
 impl Panels {
     /// The board opens on the first five keys and holds 6, 7 and 8 in
-    /// reserve. All eight used to be on, which meant the dashboard opened at
-    /// its most crowded and every key a newcomer pressed took something away
-    /// — the wrong direction for a first move. Five is the board at a
-    /// glance: the chart, the realtime panel, the map, the pages and the
-    /// figures, three across over two, every tile at a size worth reading.
-    /// What is left is a panel you go and get, and the number that fetches
-    /// it is the number in its title.
+    /// reserve: three across over two, every tile at a size worth reading.
     fn opening() -> Panels {
         Panels {
             events: true,
@@ -387,10 +378,7 @@ impl Panels {
 
     /// Panels that live in the left-hand column, top to bottom.
     ///
-    /// Three of them, and the column is there for any one of them. It used to
-    /// be there for the vitals alone, which meant `5` did not hide a panel so
-    /// much as close half the dashboard — the chart and the map went with it,
-    /// and the only way to get them back was to turn the figures on again.
+    /// Three of them, and the column is there for any one of them.
     fn left_any(&self) -> bool {
         self.vitals || self.map || self.events
     }
@@ -570,13 +558,9 @@ struct Dash {
 const OPENING_ORDER: [u32; 8] = [0, 1, 2, 3, 4, 5, 6, 7];
 
 impl Dash {
-    /// Resets the board outright: every panel on, in key order, nothing
-    /// picked and nothing zoomed. Not the five it opens on — a reset is the
-    /// whole board laid out as the keys list it, and from there any panel is
-    /// one key away from going rather than one key away from being fetched.
-    /// What `0` does: asks before throwing an arrangement away, and does not
-    /// bother asking when the board is already every pane in key order —
-    /// there is nothing to lose, so it just lets go of the pick and the zoom.
+    /// What `0` does: asks before resetting the board, unless it is already
+    /// every pane in key order — then there is nothing to lose, so it resets
+    /// straight away, which lets go of the pick and the zoom.
     fn ask_reset(&mut self) {
         let laid_out =
             self.panels == Panels::all() && self.joined.windows(2).all(|pair| pair[0] < pair[1]);
@@ -587,6 +571,7 @@ impl Dash {
         }
     }
 
+    /// Every panel on, in key order, nothing picked and nothing zoomed.
     fn reset_board(&mut self) {
         self.panels = Panels::all();
         self.joined = OPENING_ORDER;
@@ -1572,13 +1557,8 @@ async fn drive(
     // Persist what the session settled on, so the next launch starts there.
     //
     // Both halves of this are about the property the dashboard *ended* on
-    // rather than the one it opened on. Tab used to move the view and nothing
-    // else, so a person who tabbed to another property and quit found every
-    // later command — `craft overview`, a cron'd `craft watch` — still reading
-    // the one they had left, while the config comment told them Tab was how
-    // properties are switched. The theme had the same fault from the other
-    // side: pressing `t` after tabbing wrote the palette onto the property no
-    // longer on screen.
+    // rather than the one it opened on: Tab switches the property for later
+    // commands too, and `t` writes the palette onto the property on screen.
     //
     // Landing is what commits it, not passing through. Tabbing along the
     // rotation to look at each property in turn costs nothing until you quit
@@ -1793,10 +1773,8 @@ async fn event_loop(
                             last_live = now - dash.live_every;
                         }
                         KeyCode::Char('?') | KeyCode::Char('h') => dash.help = !dash.help,
-                        // The arrows walk the panes. Bare arrows were free —
-                        // nothing on the board scrolls — so they cost no key
-                        // anybody already had.
-                        // Shift carries the picked pane along with the arrow.
+                        // The arrows walk the panes; Shift carries the picked
+                        // pane along with the arrow.
                         KeyCode::Left if key.modifiers.contains(KeyModifiers::SHIFT) => {
                             dash.move_focus(Toward::Left)
                         }
@@ -1825,8 +1803,6 @@ async fn event_loop(
                         // Ctrl+digit and the bare digit do the same thing: the
                         // titles advertise Ctrl, but not every terminal can
                         // send it.
-                        // Zero, beside the keys that took the board apart —
-                        // Ctrl+0 or the bare digit, like the panel keys.
                         KeyCode::Char('0') => dash.ask_reset(),
                         KeyCode::Char('1') | KeyCode::Char('e') => dash.toggle(Tile::Events),
                         KeyCode::Char('2') | KeyCode::Char('l') => dash.toggle(Tile::Live),
@@ -2252,10 +2228,8 @@ fn escape(text: &str, pin_wide: bool) -> String {
 }
 
 /// Renders the demo dashboard for every palette, at both captures, as the
-/// two-plate HTML `docs/index.html` embeds between its capture markers.
-///
-/// The site used to carry these by hand, which is how it came to advertise a
-/// panel the dashboard had stopped drawing and a palette it never shipped.
+/// two-plate HTML `docs/index.html` embeds between its capture markers, so
+/// the site always shows what the dashboard actually draws.
 pub fn capture() -> Result<String> {
     use ratatui::backend::TestBackend;
 
@@ -2929,11 +2903,9 @@ fn grid(dash: &Dash, area: Rect, wide: bool) -> Vec<(Tile, Rect)> {
     // cells that stay left spread across their row's width, so an empty cell
     // widens its neighbours instead of leaving a hole.
     //
-    // Every panel that is on gets a cell. There used to be a ceiling of six,
-    // which is why pressing 8 on a full board did nothing at all: the panel
-    // came on and found nowhere to be drawn. A tile makes room for itself
-    // instead — the board takes another row and everything already on it
-    // gives up the height to pay for it. Only a body with no room left for
+    // Every panel that is on gets a cell. A tile makes room for itself — the
+    // board takes another row and everything already on it gives up the
+    // height to pay for it. Only a body with no room left for
     // the tile's own borders drops one, from the bottom row up.
     let order = [
         Tile::Events,
@@ -2959,11 +2931,8 @@ fn grid(dash: &Dash, area: Rect, wide: bool) -> Vec<(Tile, Rect)> {
     }
 
     // `most` is the widest a row may be, not the width every row must be. The
-    // board used to take it as the target, which is why three panels on a
-    // wide terminal came out as three narrow strips across the top instead of
-    // a pair over a full-width row. It splits to the count instead — the
-    // smallest square that holds every tile — and the terminal's ceiling caps
-    // that. Three panels ask for two and get a pair over a full-width row;
+    // board splits to the count — the smallest square that holds every tile —
+    // and the terminal's ceiling caps that. Three panels ask for two and get a pair over a full-width row;
     // four fill the 2×2; five ask for three and get it where the body is wide
     // enough. The rows then carry within one tile of each other, the fuller
     // ones first, the way a tiling window manager splits its space.
@@ -3135,12 +3104,8 @@ fn columns(dash: &Dash, area: Rect, narrow: bool) -> Vec<(Tile, Rect)> {
         // else is pinned to the height it asked for — sharing the slack out
         // would stretch every box a little instead.
         //
-        // Which box gets it is the question. It used to be whichever sat at
-        // the bottom, which is the vitals when they fit and the *map* when
-        // they do not — and the map cannot spend a row past `MAP_MAX_ROWS`,
-        // so on a terminal too short for the vitals the slack went to the one
-        // box guaranteed to draw nothing with it. So it goes to a panel that
-        // grows: the vitals first, which turn spare rows into bars and then
+        // It goes to a panel that grows, not to the map, which cannot spend a
+        // row past `MAP_MAX_ROWS`: the vitals first, which turn spare rows into bars and then
         // into gaps between them, and the chart second, which just gets
         // taller. The map takes it only when it is the whole column, and even
         // then no further than it can draw.
@@ -3392,8 +3357,7 @@ fn help_overlay(frame: &mut Frame, area: Rect, demo: bool) {
     );
 }
 
-/// `0`'s question. Says what the board becomes, not just that it changes, so
-/// the answer is a choice between two layouts somebody can picture.
+/// `0`'s question, naming the layout a `y` resets to.
 fn reset_overlay(frame: &mut Frame, area: Rect) {
     let key = Style::default()
         .fg(ore::gold())
@@ -3647,10 +3611,9 @@ fn header(dash: &Dash, width: u16) -> Paragraph<'static> {
     let breath = (phase * 2.2).sin() * 0.5 + 0.5;
     let dot = glyph::PULSE[((breath * 2.99) as usize).min(2)];
 
-    // The bar gives its pieces up in tiers rather than running off the edge.
-    // A narrow terminal used to draw every span whatever the room and let the
-    // border crop the last one, which is how a 60-column window ended up
-    // saying "◉ 130 on". What goes first is the day span — the header below
+    // The bar gives its pieces up in tiers rather than running off the edge
+    // and letting the border crop the last one. What goes first is the day
+    // span — the header below
     // repeats the window anyway — then the property name is truncated. The
     // brand, the live dot and the count it belongs to are never cut.
     let brand = format!(" {} ANACRAFT ", glyph::PICKAXE);
@@ -3811,8 +3774,6 @@ fn metrics_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
     // Shed whole, never cut: `averageSessionDur…` is not a field anybody can
     // type into GA4.
     let subtitle = inner > NAME_COLUMN + sub_column + VALUE_COLUMN + DELTA_COLUMN;
-    // As wide as the box. It stopped at thirty cells, which in a wide or
-    // zoomed box left the bars in its left third.
     let bar_cells = inner.saturating_sub(2);
     let mut lines: Vec<Line> = Vec::new();
 
@@ -3911,16 +3872,8 @@ fn moved_span(moved: Option<i64>) -> Span<'static> {
 /// is wide, so the days may as well be readable.
 ///
 /// The bars take every row the box has between the title and the day labels.
-/// They were three rows whatever the box, which left a tall cell — and a
-/// zoomed one most of all — as a strip of chart over a field of nothing; every
-/// row they gain is eight more steps of height to tell one day from the next.
-///
-/// And it says what it is showing. The bars were bare — no dates, no counts,
-/// a peak in the caption and nothing else — so the panel said "a week went
-/// roughly like this" and no more. Each bar now wears its date beneath it and
-/// its count above it where the bar is wide enough to hold one, and the
-/// caption carries the period's users against the period before, the way
-/// every other figure on the board is read.
+/// Each bar is dated beneath and counted where it is wide enough to hold one,
+/// and the caption carries the period's users against the period before.
 fn trend_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
     let inner = width.saturating_sub(2) as usize;
     let lines = if dash.daily.len() > 1 {
@@ -4022,12 +3975,9 @@ fn visible_days(width: usize, total: usize) -> usize {
 ///
 /// Where every bar is wide enough for its count, the count is cut out of the
 /// bar's top full row — the ground's color on the bar's — so it touches its
-/// bar whatever the bar's height. Above the bar it could only ever sit on a
-/// row boundary, and the bar tops fall between them: over a top cell an eighth
-/// full the count floated most of a row clear. A bar too short to have a full
-/// row wears its count just above it instead. The labels under the bars are placed from the latest day back
-/// at an even stride — on a month of one-column bars that reads as a date
-/// every few days, and the latest is always there.
+/// bar whatever the bar's height; a bar too short to have a full row wears its
+/// count just above it instead. The labels under the bars are placed from the
+/// latest day back at an even stride, so the latest is always there.
 fn daily_chart(days: &[(String, f64)], width: usize, rows: usize) -> DailyChart {
     // A narrow panel can't hold a bar per day; it shows the most recent ones
     // rather than squeezing every day into nothing.
@@ -4040,9 +3990,8 @@ fn daily_chart(days: &[(String, f64)], width: usize, rows: usize) -> DailyChart 
         .max(1.0);
 
     // The width has to hold `shown` bars, the gaps between them and the
-    // indent, or the last bar runs under the border. As wide as that lets
-    // them be: they stopped at eight columns, which on a wide or zoomed panel
-    // drew a week into the left half and left the right half bare.
+    // indent, or the last bar runs under the border; within that they are as
+    // wide as they can be.
     let indent = 2;
     let available = width.saturating_sub(indent);
     let gap = usize::from(available >= shown * 3);
@@ -4501,13 +4450,6 @@ impl Column {
     }
 }
 
-/// Events per day, this period drawn over the last one.
-///
-/// A line chart rather than the ranked bars this replaced: the question the
-/// panel answers is "are events climbing or falling", which a per-event
-/// leaderboard cannot show at all — it ranks names, and the ranking barely
-/// moves. Both periods share one y scale, and the current one is drawn second so
-/// it sits on top where they cross.
 /// One line of the events chart.
 ///
 /// A function rather than a closure inside the panel: the `Dataset` borrows the
@@ -4566,6 +4508,11 @@ fn events_legend(dash: &Dash, width: u16) -> (Line<'static>, usize) {
     (Line::from(spans).right_aligned(), named)
 }
 
+/// Events per day, this period drawn over the last one.
+///
+/// A line chart, because the question the panel answers is "are events
+/// climbing or falling". Both periods share one y scale, and the current one
+/// is drawn second so it sits on top where they cross.
 fn events_panel(dash: &Dash, width: u16) -> Chart<'_> {
     let trend = &dash.events;
     // An empty or flat series would collapse the y axis onto a single row.
@@ -4758,10 +4705,9 @@ fn styled_run(run: &str, color: Option<Color>) -> Span<'static> {
 }
 
 /// The realtime panel. Given more rows than `LIVE_ROWS`, a third of the extra
-/// goes to the feed — which keeps ninety seconds of changes and showed six of
-/// them — and the rest to the graph, which was three rows whatever the box. A
-/// fixed share rather than whatever the feed holds, so the graph does not
-/// jump each time an entry arrives or ages out.
+/// goes to the feed and the rest to the graph. A fixed share rather than
+/// whatever the feed holds, so the graph does not jump each time an entry
+/// arrives or ages out.
 fn live_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
     let phase = dash.phase();
     let extra = height.saturating_sub(LIVE_ROWS) as usize;
@@ -4800,8 +4746,7 @@ fn live_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
 
     // The graph goes in the three rows `LIVE_ROWS` already budgeted and the
     // content never used, so nothing else on the column gives up height for
-    // it — and in whatever the box has past that. It also does the
-    // separating that the blank line used to.
+    // it — and in whatever the box has past that.
     lines.extend(live_graph(&dash.history, width, graph_rows));
     lines.push(Line::from(""));
 
@@ -4919,8 +4864,7 @@ const WIDE_LIST: usize = 90;
 /// Narrow, each entry is two lines: the name over its bar. Wide, it is one —
 /// the name in a column, the bar and the figures beside it — which fits twice
 /// the entries in the same height. Either way the bar takes whatever width the
-/// name and the figures leave: it stopped at twenty cells, which in a wide box
-/// drew every bar in the left quarter and nothing in the rest.
+/// name and the figures leave.
 struct ListShape {
     wide: bool,
     /// Cells for the entry's name, not counting its badge or the moved marker.
@@ -4986,7 +4930,7 @@ fn pages_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'static> {
     // The label shares its line with the movement marker.
     let label_cells = shape.label;
 
-    // Share is of *all* page views for the period, not of the eight rows shown,
+    // Share is of *all* page views for the period, not of the rows shown,
     // which is why it comes from the headline metric rather than these rows.
     let views_total = OVERVIEW
         .iter()
@@ -5075,9 +5019,6 @@ fn realms_ranked_panel(dash: &Dash, width: u16, height: u16) -> Paragraph<'stati
         )));
     }
 
-    // As many as the box has rows for. It stopped at eight, which in a tall
-    // or zoomed box drew the top of the ranking over empty ground while the
-    // rest of the forty fetched for the map went unread.
     for (i, (country, count)) in sorted.iter().take(shape.rows).enumerate() {
         let color = theme::ramp(i);
         let label: String = country.chars().take(label_cells).collect();
@@ -5261,9 +5202,8 @@ fn footer(dash: &Dash, width: u16) -> Paragraph<'static> {
     };
 
     // The bar is built a slot at a time so a narrow terminal can take slots
-    // off the end instead of letting the border cut one in half — the last
-    // one used to arrive as "· updated" with the clock behind the wall. What
-    // goes first is the timestamp, then the live lamp, then the vocabulary and
+    // off the end instead of letting the border cut one in half. What goes
+    // first is the timestamp, then the live lamp, then the vocabulary and
     // the palette name: the keys are the reason the bar is there and they are
     // what it keeps.
     let mut slots: Vec<Vec<Span<'static>>> = vec![vec![Span::raw(" ")]];
@@ -5870,10 +5810,8 @@ mod tests {
 
     #[test]
     fn hiding_one_panel_hides_one_panel() {
-        // `5` used to close half the dashboard: the left column was drawn only
-        // if the vitals were on, so turning the figures off took the chart and
-        // the map with them and nothing in that half could be brought back
-        // without them.
+        // Turning the vitals off leaves the rest of the left column — the
+        // chart and the map — on screen.
         let without_vitals = Panels {
             vitals: false,
             ..all_three()
@@ -6271,10 +6209,8 @@ mod tests {
     fn a_list_panel_never_leaves_a_label_with_nothing_under_it() {
         // The column hands out spare rows one at a time and these panels spend
         // them two at a time — a heading and the bar beneath it — so an odd
-        // row is the ordinary case rather than a rare one. Rendering into it
-        // used to start a fourth entry and clip it, leaving a path with no bar
-        // and no number under it, which reads as a panel that broke rather
-        // than one that ran out of room.
+        // row is the ordinary case rather than a rare one. The odd row stays
+        // blank rather than starting an entry it has no room to finish.
         let mut dash = capture_dash();
         dash.apply_pages(vec![
             ("/".to_string(), 252.0),
@@ -6326,7 +6262,7 @@ mod tests {
         };
 
         // Events, a gutter, the map, a gutter, and one row fewer than the
-        // vitals can open in — the shape that used to waste them.
+        // vitals can open in.
         let height = EVENTS_ROWS + 1 + MAP_ROWS + 1 + VITALS_MIN_ROWS - 1;
         let rows = column(height);
         let at = |needle: &str| {
@@ -6415,9 +6351,7 @@ mod tests {
     #[test]
     fn the_board_opens_on_five_tiles() {
         // The dashboard opens on the first five keys, all five drawn and none
-        // given up. It used to open on all eight, which put the board at its
-        // most crowded before anyone had pressed anything. Six, seven and
-        // eight wait behind their numbers.
+        // given up. Six, seven and eight wait behind their numbers.
         use ratatui::{backend::TestBackend, Terminal};
         // Pinned to craft mode: it finds its tiles by their craft headers.
         let _vocab = Vocab::lock();
@@ -6492,10 +6426,8 @@ mod tests {
     fn the_board_splits_rather_than_filling_the_widest_row_it_may() {
         // The first few panels split the body the way a tiling manager does.
         // One takes the whole of it, the second halves it, the third drops a
-        // full-width row beneath the pair — it used to wedge itself in as a
-        // third column, which left three panels on a wide terminal reading as
-        // three narrow strips rather than a board — and the fourth joins that
-        // row to make the 2×2.
+        // full-width row beneath the pair, and the fourth joins that row to
+        // make the 2×2.
         use ratatui::{backend::TestBackend, layout::Rect, Terminal};
         // Pinned to craft mode: it finds its tiles by their craft headers.
         let _vocab = Vocab::lock();
@@ -6751,11 +6683,8 @@ mod tests {
 
     #[test]
     fn the_grid_fills_the_body_it_was_handed() {
-        // The grid used to stop at whatever height its tiles could spend and
-        // leave the rest as bare ground — four rows of it at the size the site
-        // is captured at, sitting between the last panel and the supporter
-        // box, which reads as the dashboard having stopped drawing. The last
-        // row of tiles now ends on the body's last row, at every size.
+        // The last row of tiles ends on the body's last row, at every size,
+        // with no bare ground between it and the supporter box.
         use ratatui::{backend::TestBackend, layout::Rect, Terminal};
 
         let dash = capture_dash();
@@ -6875,9 +6804,8 @@ mod tests {
     #[test]
     fn a_phone_sized_terminal_gets_the_dashboard_not_the_notice() {
         // The site captures its narrow plate at 74 columns and the page shows
-        // it to every visitor under 860 CSS pixels. The floor used to be 80,
-        // so what phones were shown was the "too tight to work in" card — an
-        // error screen advertised as the product.
+        // it to every visitor under 860 CSS pixels, so that size has to draw
+        // the dashboard rather than the "too tight to work in" card.
         use ratatui::{backend::TestBackend, Terminal};
 
         let dash = capture_dash();
@@ -6902,12 +6830,9 @@ mod tests {
 
     #[test]
     fn the_bars_shed_whole_pieces_rather_than_letting_the_border_cut_one() {
-        // Every span used to be drawn whatever the room, and the block's
-        // border cropped whatever hung over — which is how a 60-column
-        // terminal came to say "◉ 130 on" and "· updated" with the clock
-        // behind the wall. The three full-width bars give up whole pieces
-        // instead, so what is left of one is true and none of them ends
-        // flush against the frame.
+        // The three full-width bars give up whole pieces rather than letting
+        // the border crop one, so what is left of each is true and none of
+        // them ends flush against the frame.
         use ratatui::{backend::TestBackend, Terminal};
 
         let dash = capture_dash();
@@ -6954,9 +6879,8 @@ mod tests {
     fn a_panel_brought_back_joins_the_back_of_the_board() {
         // A tile's place is when it was switched on, not what its key number
         // is. From 1, 3, 8, hiding 3 leaves 1, 8 — and pressing 3 again puts
-        // it at the back, giving 1, 8, 3. It used to shuffle back into the
-        // middle as 1, 3, 8 and move the panel after it, which is not what
-        // bringing a window back does.
+        // it at the back, giving 1, 8, 3, rather than back into the middle
+        // where it would move the panel after it.
         use ratatui::{backend::TestBackend, layout::Rect, Terminal};
         // Pinned to craft mode: it finds its tiles by `VITALS` and `PORTALS`.
         let _vocab = Vocab::lock();
@@ -7018,10 +6942,8 @@ mod tests {
 
     #[test]
     fn switching_a_panel_on_makes_room_for_itself() {
-        // Pressing 8 on a full board used to do nothing visible: the panel
-        // came on and found no cell, because the board stopped at six tiles.
-        // It pushes a row open for itself now, the way a new window does in a
-        // tiling manager, and nothing already on the board is turned away to
+        // Pressing 8 on a full board pushes a row open for the panel, the way
+        // a new window does in a tiling manager, and nothing already on the board is turned away to
         // pay for it.
         use ratatui::{backend::TestBackend, layout::Rect, Terminal};
         // Pinned to craft mode: it finds its tiles by `VITALS` and `PORTALS`.
@@ -7209,8 +7131,7 @@ mod tests {
     fn the_map_is_never_handed_rows_it_cannot_draw() {
         // `map_panel` samples the template down to the box and clamps at
         // `WORLD.len()`, so a taller box is a box with dead ground under the
-        // caption — which is what the left column used to hand it whenever the
-        // vitals did not fit. The slack goes to a panel that can spend it now,
+        // caption. The left column's slack goes to a panel that can spend it,
         // and this is the number that decision is pinned to.
         assert_eq!(MAP_MAX_ROWS, WORLD.len() as u16 + 3);
 
@@ -7449,8 +7370,7 @@ mod tests {
         let realms: usize = map.iter().map(|row| row.matches(glyph::FULL).count()).sum();
 
         // Land has to be one shade and the realms another, or the lit cells are
-        // lost in the ground they sit on — which is what the two-shade terrain
-        // this replaced did to them.
+        // lost in the ground they sit on.
         assert_ne!(LAND, glyph::FULL.to_string());
         assert!(land > 100, "expected a drawn landmass, got {land} cells");
         assert!(
@@ -7461,8 +7381,6 @@ mod tests {
 
     #[test]
     fn daily_users_waits_for_a_second_day() {
-        // `visible_days` never returns zero, so an empty history used to slice
-        // from behind the front of the vec and take the whole dashboard down.
         // With one day or none there is no chart, and nothing to caption.
         let mut dash = capture_dash();
         for daily in [vec![], vec![("20261012".to_string(), 12.0)]] {
@@ -8210,8 +8128,7 @@ mod arrange_tests {
     #[test]
     fn daily_users_fills_its_pane() {
         // Zoomed to the whole body, the bars reach from under the title to
-        // the caption and across the width, rather than three rows of chart
-        // in the top-left corner of an empty box.
+        // the caption and across the width.
         let mut dash = capture_dash();
         dash.focus = Some(Tile::Trend);
         dash.zoomed = true;
@@ -8329,8 +8246,7 @@ mod arrange_tests {
     #[test]
     fn a_wide_list_puts_each_entry_on_one_line() {
         // Name, bar and count on one line, so the box holds twice the
-        // entries — and the bar runs to the figures rather than stopping in
-        // the left quarter.
+        // entries, and the bar runs up to the figures.
         let dash = capture_dash();
         let rows = rendered_tile(&dash, Tile::Chunks, 132, 38);
         let top = rows.iter().find(|row| row.contains("/pricing")).unwrap();

@@ -9,12 +9,7 @@
 </p>
 <div class="list">
   <div class="row make">
-    {#- Unpaid, the way to a property of their own is the paywall. -#}
-    {%- if unpaid %}
-    <a class="choose" href="/unlock"><span class="nm">+  Create a new property</span></a>
-    {%- else %}
     <a class="choose" href="/properties/new"><span class="nm">+  Create a new property</span></a>
-    {%- endif %}
   </div>
   {%- for property in properties %}
   <div class="row">
@@ -40,21 +35,7 @@
     </a>
   </div>
   {%- endfor %}
-  {%- if let Some(demo) = demo %}
-  <div class="row">
-    {#- The demo has no trash: it is in nobody's Analytics account. -#}
-    <a class="choose" href="/properties/{{ demo.id }}/streams">
-      <span class="nm">{{ demo.name }}</span>
-      <span class="id">{{ demo.id }}</span>
-      <span class="ac">{{ demo.account }}</span>
-    </a>
-    <a class="bin mcp" href="/connect/{{ demo.id }}?n={{ demo.encoded }}"
-      title="Copy the MCP connector for the demo">mcp</a>
-  </div>
-  {%- endif %}
-  {%- if unpaid %}
-  <div class="empty">your own properties show here once you subscribe — the demo is free to look at</div>
-  {%- else if properties.is_empty() %}
+  {%- if properties.is_empty() %}
   <div class="empty">no GA4 properties on this account yet — make the first one above</div>
   {%- endif %}
 </div>

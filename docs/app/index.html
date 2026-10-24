@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<!-- The hosted pages, as a static site.
+
+     What app.anacraft.dev rendered on the server — sign in, pick or create a
+     property, copy its tag — rendered here in the
+     browser instead. The visitor's Google token goes from Google to this tab
+     and from this tab to Google's APIs, and there is no server of ours in
+     between.
+
+     `config.js` and `app.css` are written in at deploy time by
+     .github/workflows/pages.yml: the first from the repository's secrets,
+     the second copied from assets/serve.css so these pages and `craft serve`
+     wear the same stylesheet. -->
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>anacraft</title>
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="app.css">
+  <script>
+    // Before first paint, so a picked palette never flashes the default.
+    try {
+      var pal = localStorage.getItem('anacraft.pal');
+      if (pal && pal !== 'osaka-jade') document.documentElement.setAttribute('data-pal', pal);
+    } catch (e) {}
+  </script>
+</head>
+
+<body>
+  <div class="wrap">
+    <a class="brand" href="#/" aria-label="anacraft — home">
+      <svg class="pick" role="img" aria-label="A" width="14" height="14" viewBox="1 1 14 14"
+        shape-rendering="crispEdges" fill="currentColor">
+        <rect x="6" y="1" width="4" height="1" />
+        <rect x="5" y="2" width="6" height="1" />
+        <rect x="4" y="3" width="8" height="1" />
+        <rect x="4" y="4" width="8" height="1" />
+        <rect x="3" y="5" width="4" height="1" />
+        <rect x="9" y="5" width="4" height="1" />
+        <rect x="3" y="6" width="4" height="1" />
+        <rect x="9" y="6" width="4" height="1" />
+        <rect x="2" y="7" width="4" height="1" />
+        <rect x="10" y="7" width="4" height="1" />
+        <rect x="2" y="8" width="4" height="1" />
+        <rect x="10" y="8" width="4" height="1" />
+        <rect x="1" y="9" width="4" height="1" />
+        <rect x="11" y="9" width="4" height="1" />
+        <rect x="1" y="10" width="14" height="1" />
+        <rect x="1" y="11" width="14" height="1" />
+        <rect x="1" y="12" width="4" height="1" />
+        <rect x="11" y="12" width="4" height="1" />
+        <rect x="1" y="13" width="4" height="1" />
+        <rect x="11" y="13" width="4" height="1" />
+        <rect x="1" y="14" width="4" height="1" />
+        <rect x="11" y="14" width="4" height="1" />
+      </svg>nacraft
+    </a>
+
+    <h1>Ask GA4 in plain English.</h1>
+    <p class="lede">
+      Sign in with Google and pick or create the property for your site. Its
+      <b>mcp</b> link connects your AI tool so you can ask how the site is
+      doing, or copy the tag to start measuring. Nothing to install: paste the
+      tag into Lovable, v0 or Bolt and publish.
+    </p>
+
+    <div class="card" id="card" data-state="boot">
+      <div class="head">
+        <span class="dot" aria-hidden="true"></span>
+        <span>ga4 tag</span>
+        <span class="who" id="who"></span>
+      </div>
+      <div class="body">
+        <div class="pane on" id="pane">
+          <div class="work">loading</div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <span><a href="https://anacraft.dev">anacraft.dev</a> ·
+        <a href="https://anacraft.dev/privacy.html">privacy</a></span>
+      <div class="pals" id="pals" role="group" aria-label="Palette"></div>
+    </footer>
+  </div>
+  <noscript>These pages run in your browser and need JavaScript.</noscript>
+  <script src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+
+</html>

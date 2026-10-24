@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>anacraft × Lovable — analytics for AI-built apps</title>
   <meta name="description"
-    content="Add Google Analytics to your Lovable app with nothing to install: sign in at app.anacraft.dev, copy the tag, paste it into Lovable. Then query the data from Claude, ChatGPT, or Cursor via MCP.">
+    content="Add Google Analytics to your Lovable app with nothing to install: sign in at anacraft.dev/app, copy the tag, paste it into Lovable. Then query the data from Claude, ChatGPT, or Cursor via MCP.">
   <meta name="keywords"
     content="Lovable, Lovable MCP, Google Analytics, GA4, analytics for Lovable, Lovable analytics, MCP analytics, AI-built apps, Lovable dashboard, Lovable Google Analytics">
   <link rel="canonical" href="https://anacraft.dev/lovable.html">
@@ -803,7 +803,7 @@
       <a href="/lovable.html">Lovable</a>
       <a href="/burn.html">Badge</a>
       <a href="/pricing.html">Pricing</a>
-      <a class="nav-cta" href="https://app.anacraft.dev">Sign in</a>
+      <a class="nav-cta" href="/app/">Sign in</a>
     </div>
   </div>
 </nav>
@@ -822,7 +822,7 @@
           conversation.
         </p>
         <div class="cta">
-          <a href="https://app.anacraft.dev" class="btn fill">Get your tag — nothing to install →</a>
+          <a href="/app/" class="btn fill">Get your tag — nothing to install →</a>
           <a href="#setup" class="btn">How it works ↓</a>
         </div>
       </div>
@@ -902,7 +902,7 @@
       <div class="sec-label">Setup</div>
       <h2>Nothing to install. Your tag in the clipboard.</h2>
       <p class="sec-sub">
-        Open <a href="https://app.anacraft.dev">app.anacraft.dev</a>, sign in
+        Open <a href="/app/">anacraft.dev/app</a>, sign in
         with Google, pick or create the GA4 property for your app, and copy the
         block that goes into Lovable. Nothing to read, four things to click,
         nothing on your machine. Rather run it yourself? The same page is
@@ -914,18 +914,18 @@
         <div class="step">
           <div class="step-n">01</div>
           <div>
-            <h3>Open app.anacraft.dev and sign in</h3>
+            <h3>Open anacraft.dev/app and sign in</h3>
             <p>
               Sign in with Google. It asks for two Analytics permissions — one
               to read your numbers, one to create the property for your app —
               so leave both ticked.
             </p>
             <p style="margin-top:16px;">
-              <a href="https://app.anacraft.dev" class="btn fill">Open app.anacraft.dev →</a>
+              <a href="/app/" class="btn fill">Open anacraft.dev/app →</a>
             </p>
             <p style="margin-top:12px;">
-              Your Google sign-in is held for that session only: signing out,
-              or an hour, forgets it.
+              Your Google sign-in is held in that browser tab only: closing
+              it, or an hour, forgets it.
             </p>
           </div>
         </div>
@@ -943,7 +943,7 @@
             </p>
 
             <img class="shot" src="serve.png" width="692" height="836" loading="lazy"
-              alt="The page app.anacraft.dev shows: a measurement ID in gold, the tag written out below it, and a button that copies it.">
+              alt="The page anacraft.dev/app shows: a measurement ID in gold, the tag written out below it, and a button that copies it.">
 
             <p style="margin-top:20px;">
               It is part of
@@ -1005,23 +1005,21 @@
           <div>
             <h3>Wire it into your assistant</h3>
             <p>
-              Still nothing to install. On app.anacraft.dev, press
-              <b>mcp</b> on your app's row and copy the link. It is yours and
-              that property's, and it stays the same next week.
+              This is the one step that installs something: <code>craft</code>,
+              which serves your numbers to the assistant from your own machine.
+              Sign in, pick your app's property, and write it into Claude
+              Desktop's config.
             </p>
-            <div class="code"><span class="c"># Claude — Settings → Connectors → Add custom connector</span>
-              <span class="w">https://app.anacraft.dev/mcp?token=…&amp;property=…</span>
-
-              <span class="c"># ChatGPT — Settings → Connectors → Create, the same link</span>
+            <div class="code"><span class="w">curl -fsSL https://anacraft.dev/install.sh | bash</span>
+              <span class="w">craft login</span>
+              <span class="w">craft use &lt;property id&gt;</span>
+              <span class="w">craft mcp --install</span>
 
               <span class="c"># Claude Code</span>
-              <span class="w">claude mcp add --transport http anacraft '&lt;the link&gt;'</span></div>
+              <span class="w">claude mcp add anacraft -- craft mcp</span></div>
             <p style="margin-top:12px;">
-              Treat the link like a password: it reads that property's
-              numbers with the access you granted. One press on the same page
-              turns every link off. Prefer to keep it all on your own machine?
-              <code>craft mcp --install</code> does the same from the terminal
-              — Cursor, Windsurf, VS Code and the raw JSON are on the
+              Restart the client and ask it how the app is doing. Cursor,
+              Windsurf, VS Code and the raw JSON are on the
               <a href="/mcp.html" style="color:var(--jade);text-decoration:underline;">MCP page</a>.
             </p>
           </div>
@@ -1179,10 +1177,10 @@
       <h2>Start mining your metrics.</h2>
       <p style="margin-top:16px;max-width:48ch;margin-left:auto;margin-right:auto;font-size:15.5px;color:var(--dim);">
         Sign in, give your Lovable app its GA4 property, and ask your
-        assistant anything about your traffic. Nothing to install.
+        assistant anything about your traffic.
       </p>
       <div class="cta" style="margin-top:36px;justify-content:center;">
-        <a href="https://app.anacraft.dev" class="btn fill">Get your tag at app.anacraft.dev →</a>
+        <a href="/app/" class="btn fill">Get your tag at anacraft.dev/app →</a>
       </div>
     </div>
   </section>

@@ -17,11 +17,5 @@
         "512x512"
       ]
     }
-  ],
-  "remotes": [
-    {
-      "type": "streamable-http",
-      "url": "https://app.anacraft.dev/mcp"
-    }
   ]
 }

@@ -5,7 +5,7 @@
 <p align="center">
   Connects your assistant to Google Analytics 4 through an MCP server, so you
   can ask how your site is doing and get the answer from your own numbers. Its
-  dashboard at <a href="https://app.anacraft.dev">app.anacraft.dev</a> creates the
+  dashboard at <a href="https://anacraft.dev/app/">anacraft.dev/app</a> creates the
   property and hands you the tag; the CLI audits what it is measuring so you can
   fix what is wrong, and reads it back as a terminal dashboard.
 </p>
@@ -15,10 +15,6 @@
   <a href="https://github.com/mehfuzh/anacraft/releases">Releases</a> ·
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
   <a href="https://www.rust-lang.org/"><img alt="Rust 1.74+" src="https://img.shields.io/badge/Rust-1.74+-orange.svg"></a>
-</p>
-
-<p align="center">
-  <a href="https://glama.ai/mcp/connectors/dev.anacraft.app/anacraft"><img alt="Anacraft — Google Analytics 4 (GA4) MCP connector – tool definition quality and endpoint health on Glama" src="https://glama.ai/mcp/connectors/dev.anacraft.app/anacraft/badges/score.svg"></a>
 </p>
 
 <p align="center">
@@ -68,7 +64,7 @@ craft use 1234567  # save it as the default
 craft
 ```
 
-**No property yet?** Sign in at [app.anacraft.dev](https://app.anacraft.dev),
+**No property yet?** Sign in at [anacraft.dev/app](https://anacraft.dev/app/),
 choose **Create a new property** and give it your site's URL. It creates the
 property and its web data stream and hands you the gtag.js snippet with your
 measurement id already in it, with a copy button — nothing to install. Paste it
@@ -90,9 +86,9 @@ your Analytics account when you run it, never at sign-in; see
 
 ### The dashboard, on your own machine
 
-`craft serve` is the page at app.anacraft.dev, run locally — for when you would
-rather your Google sign-in never left your machine, or want to script against
-the same API.
+`craft serve` is the page at anacraft.dev/app, run locally — for when you would
+rather sign in with the CLI's own credentials, or want to script against the
+same API.
 
 ```sh
 craft serve          # opens a page: sign in, pick or make the property, copy the tag
@@ -579,7 +575,7 @@ people's quota consumption.
 
 ## Setting up GA4
 
-[app.anacraft.dev](https://app.anacraft.dev) is the preferred route: sign in,
+[anacraft.dev/app](https://anacraft.dev/app/) is the preferred route: sign in,
 **Create a new property**, and the property, data stream and tag are done
 without the console. `craft configure <domain>` does the same from a terminal.
 Both are part of a subscription — the dashboard on Elite, the command on

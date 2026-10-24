@@ -623,14 +623,20 @@ pub async fn sync(cfg: &Config) -> Option<Tier> {
 
     // A flag left behind by another account comes down on the way past. It is
     // the one piece of local state that outlives a sign-out, and every gate in
-    // the binary reads it, so leaving it standing while answering `None` would
-    // hand the next command the answer this one just refused.
-    if !mine {
-        if cfg.supporter {
-            let _ = set_plan(None);
-        }
-        return None;
+    // the binary reads it, so leaving it standing would hand the next command
+    // an answer about somebody else.
+    //
+    // That is all another account's record costs. The account signed in now
+    // is still asked about below: stopping here answered "not subscribed" to
+    // somebody who switched accounts, and since nothing on this path replaces
+    // the record, went on answering it until something else asked.
+    if !mine && cfg.supporter {
+        let _ = set_plan(None);
     }
+
+    // What this machine's own copy of the plan says, for when the service has
+    // nothing to add — and nothing at all when the copy is another account's.
+    let held = if mine { cfg.tier() } else { None };
 
     // A token belongs to the checkout that minted it. Offering somebody
     // else's to the lookup asks it about their subscription and writes the
@@ -695,17 +701,16 @@ pub async fn sync(cfg: &Config) -> Option<Tier> {
                 }
                 // Nothing to say — the flag and plan are the only evidence
                 // there is, and this machine's own copy of them is kept.
-                None => cfg.tier(),
+                None => held,
             }
         }
         // Unreachable. Ride on the last good answer rather than demoting
         // somebody mid-flight — but only where that answer was about this
         // account.
-        Err(_) => record
-            .within_grace(now)
+        Err(_) => (mine && record.within_grace(now))
             .then(|| record.status.tier())
             .flatten()
-            .or_else(|| cfg.tier()),
+            .or(held),
     }
 }
 

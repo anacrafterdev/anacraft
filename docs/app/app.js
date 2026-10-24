@@ -160,7 +160,7 @@ function palettes() {
       onclick: () => {
         if (name === DEFAULT_PAL) document.documentElement.removeAttribute('data-pal');
         else document.documentElement.setAttribute('data-pal', name);
-        try { localStorage.setItem('anacraft.pal', name); } catch (e) { /* this tab only */ }
+        try { localStorage.setItem('palette', name); } catch (e) { /* this tab only */ }
         palettes();
       },
     })));

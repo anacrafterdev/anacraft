@@ -22,8 +22,10 @@
   <link rel="stylesheet" href="app.css">
   <script>
     // Before first paint, so a picked palette never flashes the default.
+    // `palette` is the key the rest of anacraft.dev keeps it under, so one
+    // choice follows the visitor between the site and the app.
     try {
-      var pal = localStorage.getItem('anacraft.pal');
+      var pal = localStorage.getItem('palette');
       if (pal && pal !== 'osaka-jade') document.documentElement.setAttribute('data-pal', pal);
     } catch (e) {}
   </script>
@@ -31,7 +33,7 @@
 
 <body>
   <div class="wrap">
-    <a class="brand" href="#/" aria-label="anacraft — home">
+    <a class="brand" href="/" aria-label="anacraft.dev — home">
       <svg class="pick" role="img" aria-label="A" width="14" height="14" viewBox="1 1 14 14"
         shape-rendering="crispEdges" fill="currentColor">
         <rect x="6" y="1" width="4" height="1" />

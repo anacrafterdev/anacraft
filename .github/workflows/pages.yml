@@ -1,0 +1,65 @@
+name: pages
+
+# anacraft.dev, built from docs/ — the site as it always was, plus the app at
+# /app, which needs two files the repository does not hold:
+#
+#   docs/app/config.js  where the app finds Supabase and which Google client
+#                       it signs in with. Written from the repository's
+#                       secrets, because the project's URL and key are kept
+#                       out of the repo on purpose.
+#   docs/app/app.css    assets/serve.css, copied, so these pages and
+#                       `craft serve` cannot wear two different stylesheets.
+#
+# Needs Settings → Pages → Source set to "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "assets/serve.css"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Write the app's config and stylesheet
+        env:
+          SUPABASE_URL: ${{ secrets.ANACRAFT_SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.ANACRAFT_SUPABASE_KEY }}
+          CLIENT_ID: ${{ secrets.ANACRAFT_WEB_OAUTH_CLIENT_ID }}
+        run: |
+          for var in SUPABASE_URL SUPABASE_KEY CLIENT_ID; do
+            if [ -z "${!var}" ]; then echo "::error::$var is not set"; exit 1; fi
+          done
+          node -e '
+            const config = {
+              supabaseUrl: process.env.SUPABASE_URL,
+              supabaseKey: process.env.SUPABASE_KEY,
+              clientId: process.env.CLIENT_ID,
+            };
+            require("fs").writeFileSync("docs/app/config.js",
+              "window.ANACRAFT = " + JSON.stringify(config) + ";\n");
+          '
+          cp assets/serve.css docs/app/app.css
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4

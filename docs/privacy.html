@@ -286,7 +286,7 @@
       <a href="/lovable.html">Lovable</a>
       <a href="/burn.html">Badge</a>
       <a href="/pricing.html">Pricing</a>
-      <a class="nav-cta" href="https://app.anacraft.dev">Sign in</a>
+      <a class="nav-cta" href="/app/">Sign in</a>
     </div>
   </div>
 </nav>
@@ -331,6 +331,10 @@ client, it goes in <code>~/.anacraft/client.json</code>.</p>
 repositories, so nothing secret is kept there.</p>
 <p>That is the whole list. <b>Analytics figures are never written to disk</b>; they live in memory while
 the dashboard is open and are gone when you quit.</p>
+<p><b>In the browser.</b> <a href="/app/">anacraft.dev/app</a> does the same setup without
+installing anything, and it too runs on your own computer, in the browser tab you open it in. Your
+Google access token is kept in that tab's session storage, is sent only to Google's APIs, and is
+gone when you close the tab or after an hour. Nothing from it is stored on a server of ours.</p>
 
 <h2><span class="n">03</span>How that data is protected</h2>
 <p><b>In transit.</b> Every request anacraft makes — the authorization exchange, token refreshes, and

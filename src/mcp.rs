@@ -155,44 +155,7 @@ pub(crate) async fn build(demo: bool, property: Option<&str>) -> Result<Server> 
         source,
         property: property.map(str::to_string),
         cache: HashMap::new(),
-        hosted: false,
     })
-}
-
-/// A server for one hosted user: their GA client, their plan, the property
-/// their connector names — and nothing read from, or written to, the machine
-/// it runs on. No badge either: that is published from a machine the user
-/// owns.
-pub(crate) fn build_for(
-    cfg: Config,
-    ga: Ga,
-    tier: Option<crate::license::Tier>,
-    property: Option<&str>,
-) -> Server {
-    let source = match crate::license::gate(tier, crate::license::Tier::Elite, "the MCP connector")
-    {
-        Ok(()) => Source::Api(Box::new(ga)),
-        Err(reason) => Source::Locked(reason),
-    };
-    Server {
-        cfg,
-        source,
-        property: property.map(str::to_string),
-        cache: HashMap::new(),
-        hosted: true,
-    }
-}
-
-/// The demo, for a hosted visitor who picked it off their property list:
-/// synthetic numbers, no gate, and nothing read from the machine it runs on.
-pub(crate) fn build_demo() -> Server {
-    Server {
-        cfg: Config::default(),
-        source: Source::Demo,
-        property: Some(demo::PROPERTY.to_string()),
-        cache: HashMap::new(),
-        hosted: true,
-    }
 }
 
 /// Everything the live tools need, or the one sentence explaining what is
@@ -233,9 +196,6 @@ pub(crate) struct Server {
     /// `--property` from the command line, used when a tool call names none.
     property: Option<String>,
     cache: HashMap<String, (Instant, Value)>,
-    /// A hosted user's server: no config of theirs to fall back on, and no
-    /// terminal to send them to.
-    hosted: bool,
 }
 
 impl Server {
@@ -489,17 +449,6 @@ impl Server {
             .and_then(Value::as_str)
             .map(str::to_string)
             .or_else(|| self.property.clone());
-        // A hosted server with nothing chosen asks rather than guesses: the
-        // config's fallback is its first property, which on an account with
-        // several is a confident answer about the wrong site. And the
-        // question is the assistant's, which can answer it — not a terminal
-        // command for a person who may not have one.
-        if self.hosted && asked.is_none() {
-            anyhow::bail!(
-                "this connector names no property and the call named none — call \
-                 list_properties, then pass `property` with the id of the site asked about"
-            );
-        }
         self.cfg.resolve_property(asked.as_deref())
     }
 }
@@ -1750,7 +1699,6 @@ mod tests {
             source: Source::Demo,
             property: None,
             cache: HashMap::new(),
-            hosted: false,
         }
     }
 
@@ -2326,7 +2274,6 @@ mod tests {
             ),
             property: None,
             cache: HashMap::new(),
-            hosted: false,
         }
     }
 

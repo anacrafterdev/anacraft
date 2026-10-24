@@ -278,3 +278,18 @@ supabase functions deploy slack-oauth --no-verify-jwt
 
 No secrets to set. The function's URL goes in the Slack app's **Redirect URLs**
 and in `ANACRAFT_SLACK_REDIRECT` at build time.
+
+## The web app
+
+`anacraft.dev/app` is a static site on GitHub Pages (`docs/app/`) with no
+server of its own. Google signs the visitor in with its flow for browser apps
+and hands the access token straight to the page, which calls the Admin API
+with it. The page calls `link_account`, `subscription_status` and
+`claim_checkout` with the publishable key, exactly as the CLI does, so there
+is nothing here to deploy for it.
+
+The Pages workflow writes the page's `config.js` from the repository secrets
+`ANACRAFT_SUPABASE_URL`, `ANACRAFT_SUPABASE_KEY` and
+`ANACRAFT_WEB_OAUTH_CLIENT_ID`. The Web OAuth client needs
+`https://anacraft.dev` as an authorized JavaScript origin and
+`https://anacraft.dev/app/` as a redirect URI.

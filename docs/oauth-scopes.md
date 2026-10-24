@@ -67,6 +67,20 @@ is not the same as the surface a reviewer is told about unless both are
 written down. Every endpoint it serves is at
 [anacraft.dev/serve.html](https://anacraft.dev/serve.html).
 
+### anacraft.dev/app
+
+The `craft serve` pages, for people with nothing installed: a static site
+(`docs/app/app.js`) where somebody signs in with Google, picks or creates a
+property and copies its tag. It makes the same calls from the visitor's own
+browser, with the visitor's own access token, straight to Google:
+`accountSummaries.list`, `accounts.list`, `properties.dataStreams.list`,
+`properties.create`, `properties.dataStreams.create`, and `properties.delete`
+behind the same two-step confirmation. Report data never reaches it.
+
+There is no server behind it. Google's flow for browser apps hands the access
+token to the page, which keeps it in the tab's session storage for at most an
+hour; no refresh token is requested and nothing is stored anywhere else.
+
 ### `craft audit --fix`
 
 `craft audit` reads a property and reports what is wrong with how it measures:

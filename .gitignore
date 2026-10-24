@@ -20,3 +20,7 @@ __pycache__/
 
 # Synced down from Secret Manager by deploy/sync-secrets.sh
 helm/app/values.secrets.*.yaml
+
+# Written at deploy time by .github/workflows/pages.yml
+docs/app/config.js
+docs/app/app.css
